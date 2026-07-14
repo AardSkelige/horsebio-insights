@@ -1,0 +1,100 @@
+version: '3.8'
+
+services:
+  backend:
+    image: ghcr.io/aardskelige/horsebio-backend:latest
+    container_name: horsebio_backend
+    expose:
+      - "8000"
+    env_file:
+      - ./backend/.env.prod
+    volumes:
+      - backend_static:/app/staticfiles
+      - django_cache:/app/cache
+      - scripts_logs:/app/scripts_logs
+      # Состояние демонов МойСклад: без volume оно живёт в контейнере и стирается
+      # каждым деплоем (демоны пересканируют всю историю с START_DATE)
+      - hb_returns_data:/app/moysklad/horsebio/01_daemons/03_returns/data
+      - hb_buy_prices_data:/app/moysklad/horsebio/01_daemons/02_buy_prices/data
+      - hb_deadlines_data:/app/moysklad/horsebio/01_daemons/05_payment_deadline/data
+      - sp_cost_prices_data:/app/moysklad/starpony/01_daemons/01_cost_prices/data
+      - sp_deadlines_data:/app/moysklad/starpony/01_daemons/02_payment_deadline/data
+      # Ack-файлы health-чеков: пишутся через API (подтверждение из UI),
+      # без volume каждый деплой откатывает их к снимку из образа
+      - hb_health_data:/app/moysklad/horsebio/02_checks/01_health/data
+    depends_on:
+      db:
+        condition: service_healthy
+    networks:
+      - app-network
+    restart: unless-stopped
+
+  backend_nginx:
+    image: nginx:alpine
+    container_name: horsebio_backend_nginx
+    ports:
+      - "8001:8001"
+    volumes:
+      - ./backend/nginx:/etc/nginx/conf.d
+      - backend_static:/app/staticfiles:ro
+    depends_on:
+      - backend
+    networks:
+      - app-network
+    restart: unless-stopped
+
+  frontend:
+    image: ghcr.io/aardskelige/horsebio-frontend:latest
+    container_name: horsebio_frontend
+    ports:
+      - "80:80"
+      - "3001:80"
+    volumes:
+      - ./frontend/nginx/nginx.conf:/etc/nginx/conf.d/default.conf
+    networks:
+      - app-network
+    restart: unless-stopped
+
+  db:
+    image: postgres:17-alpine
+    container_name: horsebio_db_prod
+    environment:
+      - POSTGRES_DB=horsebio_db
+      - POSTGRES_USER=horsebio
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD}
+      - POSTGRES_MAX_CONNECTIONS=500
+    command: >
+      postgres 
+      -c max_connections=500
+      -c shared_buffers=256MB
+      -c work_mem=16MB
+      -c maintenance_work_mem=64MB
+      -c effective_io_concurrency=200
+      -c random_page_cost=1.1
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U horsebio -d horsebio_db"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+    networks:
+      - app-network
+    restart: unless-stopped
+
+
+volumes:
+  backend_static:
+  postgres_data:
+  django_cache:
+  scripts_logs:
+  hb_returns_data:
+  hb_buy_prices_data:
+  hb_deadlines_data:
+  sp_cost_prices_data:
+  sp_deadlines_data:
+  hb_health_data:
+
+networks:
+  app-network:
+    driver: bridge

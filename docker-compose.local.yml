@@ -1,0 +1,87 @@
+
+services:
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile.local
+    container_name: horsebio_frontend_local
+    ports:
+      - "3001:3001"
+    environment:
+      - NODE_ENV=development
+      - DOCKER_ENV=true
+      - VITE_DOCKER_ENV=true
+    volumes:
+      - ./frontend:/app
+      - frontend_node_modules:/app/node_modules
+    networks:
+      - app-network
+    command: npm run dev:docker
+
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: horsebio_backend_local
+    expose:
+      - "8000"
+    env_file:
+      - ./backend/.env.docker
+    volumes:
+      - ./backend:/app
+      - backend_static:/app/staticfiles
+      - django_cache:/app/cache
+      - scripts_logs:/app/scripts_logs
+    depends_on:
+      db:
+        condition: service_healthy
+    networks:
+      - app-network
+    restart: unless-stopped
+
+  backend_nginx:
+    image: nginx:alpine
+    container_name: horsebio_backend_nginx_local
+    ports:
+      - "8001:8001"
+    volumes:
+      - ./backend/nginx/nginx.local.conf:/etc/nginx/conf.d/default.conf
+      - backend_static:/app/staticfiles:ro
+    depends_on:
+      - backend
+    networks:
+      - app-network
+    restart: unless-stopped
+
+  db:
+    image: postgres:17-alpine
+    container_name: horsebio_db_local
+    environment:
+      - POSTGRES_DB=horsebio_db
+      - POSTGRES_USER=horsebio
+      - POSTGRES_PASSWORD=horsebio
+      - POSTGRES_MAX_CONNECTIONS=500  # Увеличиваем максимум соединений
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U horsebio -d horsebio_db"]  # Исправили healthcheck
+      interval: 5s
+      timeout: 5s
+      retries: 5
+    ports:
+      - "5432:5432"
+    networks:
+      - app-network
+    restart: unless-stopped
+
+
+volumes:
+  postgres_data:        # База данных PostgreSQL
+  backend_static:       # Статические файлы Django (CSS, JS, images)
+  django_cache:         # Кэш Django
+  frontend_node_modules: # NPM пакеты фронтенда
+  scripts_logs:         # Логи автоматизированных скриптов
+
+networks:
+  app-network:
+    driver: bridge

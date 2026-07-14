@@ -1,0 +1,199 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* ── Design System Tokens ────────────────────────────────── */
+:root {
+  --canvas:                #faf9f5;
+  --surface-soft:          #f5f0e8;
+  --surface-card:          #efe9de;
+  --surface-cream-strong:  #e8e0d2;
+  --surface-dark:          #181715;
+  --surface-dark-elevated: #252320;
+  --surface-dark-soft:     #1f1e1b;
+
+  --ink:          #141413;
+  --body:         #3d3d3a;
+  --muted:        #6c6a64;
+  --muted-soft:   #8e8b82;
+  --on-dark:      #faf9f5;
+  --on-dark-soft: #a09d96;
+  --on-primary:   #ffffff;
+
+  --hairline:      #e6dfd8;
+  --hairline-soft: #ebe6df;
+
+  --primary:        #cc785c;
+  --primary-active: #a9583e;
+
+  --success: #5db872;
+  --warning: #d4a017;
+  --error:   #c64545;
+
+  --serif: 'Cormorant Garamond', 'Tiempos Headline', Georgia, serif;
+  --sans:  'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  --mono:  'JetBrains Mono', 'Courier New', monospace;
+}
+
+[data-theme="dark"] {
+  --canvas:                #181715;
+  --surface-soft:          #1f1e1b;
+  --surface-card:          #252320;
+  --surface-cream-strong:  #2e2c29;
+  --surface-dark:          #252320;
+  --surface-dark-elevated: #2e2c29;
+  --surface-dark-soft:     #252320;
+
+  --ink:          #faf9f5;
+  --body:         #c8c4bc;
+  --muted:        #a09d96;
+  --muted-soft:   #6c6a64;
+  --on-dark:      #faf9f5;
+  --on-dark-soft: #a09d96;
+
+  --hairline:      #252320;
+  --hairline-soft: #2e2c29;
+
+  --primary:        #cc785c;
+  --primary-active: #a9583e;
+}
+
+/* ── Native date inputs follow app theme (fixes invisible calendar icon) ── */
+:root input[type="date"],
+:root input[type="datetime-local"] {
+  color-scheme: light;
+}
+[data-theme="dark"] input[type="date"],
+[data-theme="dark"] input[type="datetime-local"] {
+  color-scheme: dark;
+}
+
+/* ── Base ────────────────────────────────────────────────── */
+@layer base {
+  body {
+    background-color: var(--canvas);
+    color: var(--ink);
+    font-family: var(--sans);
+    transition: background-color 200ms ease, color 200ms ease;
+  }
+}
+
+@layer components {
+  .app-logo-mark {
+    background-color: currentColor;
+    display: inline-block;
+    flex: 0 0 auto;
+    height: var(--logo-mark-height, 14px);
+    mask: url('/horsebio-insights-logo.svg') center / contain no-repeat;
+    -webkit-mask: url('/horsebio-insights-logo.svg') center / contain no-repeat;
+    width: var(--logo-mark-width, 24px);
+  }
+
+  .btn {
+    @apply px-4 py-2 rounded-lg font-medium transition-colors;
+  }
+
+  .card {
+    border-radius: 12px;
+    padding: 24px;
+    background-color: var(--surface-card);
+  }
+}
+
+.route-transition {
+  animation: route-enter 180ms ease-out both;
+}
+
+@keyframes route-enter {
+  from {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes spin {
+  to { transform: rotate(360deg); }
+}
+
+/* Индетерминантная полоса загрузки (для запущенных проверок) */
+.checks-progress {
+  position: relative;
+  height: 4px;
+  border-radius: 999px;
+  background: var(--surface-cream-strong);
+  overflow: hidden;
+}
+.checks-progress::after {
+  content: '';
+  position: absolute;
+  inset: 0 auto 0 0;
+  width: 40%;
+  border-radius: 999px;
+  background: var(--primary);
+  animation: checks-indeterminate 1.2s ease-in-out infinite;
+}
+@keyframes checks-indeterminate {
+  0%   { left: -40%; }
+  100% { left: 100%; }
+}
+
+/* Сетка детальной проверки: результат + история */
+.checks-detail-grid {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 20px;
+  align-items: start;
+}
+@media (min-width: 1024px) {
+  .checks-detail-grid { grid-template-columns: minmax(0, 1fr) 300px; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .route-transition {
+    animation: none;
+  }
+}
+
+/* ── Responsive filter date range ─────────────────────────── */
+.filter-date-range {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex: 1 1 280px;
+}
+
+.filter-date-range input[type="date"] {
+  flex: 1 1 130px;
+  min-width: 0;
+}
+
+@media (max-width: 600px) {
+  .filter-date-range {
+    flex: 0 0 100%;
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .filter-date-range input[type="date"] {
+    flex: none;
+  }
+
+  .filter-date-range .filter-date-sep {
+    display: none;
+  }
+}
+
+@keyframes sidebar-tooltip-in {
+  from { opacity: 0; transform: translateY(-50%) translateX(-6px); }
+  to   { opacity: 1; transform: translateY(-50%) translateX(0); }
+}
+
+@keyframes user-menu-in {
+  from { opacity: 0; transform: translateY(8px); }
+  to   { opacity: 1; transform: translateY(0); }
+}

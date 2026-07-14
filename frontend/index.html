@@ -1,0 +1,55 @@
+<!doctype html>
+<html lang="en">
+
+<head>
+  <script>
+    (function() {
+      if (window.isSecureContext) return;
+
+      var _orig = window.crypto;
+
+      function fallbackRandomUUID() {
+        var bytes = new Uint8Array(16);
+        try { _orig.getRandomValues(bytes); } catch(e) {
+          for (var i = 0; i < 16; i++) bytes[i] = Math.floor(Math.random() * 256);
+        }
+        bytes[6] = (bytes[6] & 0x0f) | 0x40;
+        bytes[8] = (bytes[8] & 0x3f) | 0x80;
+        var hex = Array.prototype.map.call(bytes, function(b) {
+          return b.toString(16).padStart(2, '0');
+        }).join('');
+        return hex.slice(0,8)+'-'+hex.slice(8,12)+'-'+hex.slice(12,16)+'-'+hex.slice(16,20)+'-'+hex.slice(20);
+      }
+
+      var patched = Object.create(_orig);
+      patched.randomUUID = fallbackRandomUUID;
+
+      try {
+        Object.defineProperty(window, 'crypto', {
+          configurable: true,
+          get: function() { return patched; }
+        });
+      } catch(e) {}
+    })();
+  </script>
+  <meta charset="UTF-8" />
+  <link rel="icon" type="image/svg+xml" href="/horsebio-insights-logo.svg" />
+  <link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+  <meta name="apple-mobile-web-app-title" content="HorseBio" />
+  <meta name="mobile-web-app-capable" content="yes" />
+  <meta name="theme-color" content="#141413" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+  <title>HorseBio Insights</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@400;500&family=Inter:wght@400;500&display=swap" rel="stylesheet">
+</head>
+
+<body>
+  <div id="root"></div>
+  <script type="module" src="/src/main.jsx"></script>
+</body>
+
+</html>

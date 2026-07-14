@@ -1,0 +1,58 @@
+# Python
+__pycache__/
+*.py[cod]
+*.so
+
+# Virtual Environment
+venv/
+env/
+
+# Django
+*.log
+db.sqlite3
+
+# Backend generated data
+backend/analysis_plots/
+backend/analysis_results/
+backend/staticfiles/
+backend/cache/
+
+# Daemon runtime state (persisted via Docker volumes on prod)
+backend/moysklad/*/01_daemons/*/data/
+
+# Health check acks (written via API on prod, persisted via Docker volume)
+backend/moysklad/*/02_checks/*/data/
+# Environment files (use .env.example as template)
+backend/.env
+backend/.env.docker
+backend/.env.prod
+
+# React
+frontend/node_modules/
+frontend/build/
+
+# Dependencies
+/node_modules
+/.pnp
+.pnp.js
+
+# Testing
+/coverage
+
+# Production
+/build
+
+# IDE
+.vscode/
+.idea/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Debug logs
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+architecture-flows.html
