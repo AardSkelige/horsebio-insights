@@ -3,43 +3,43 @@
 [![Deploy Backend](https://github.com/AardSkelige/horsebio-insights/actions/workflows/deploy-backend.yml/badge.svg)](https://github.com/AardSkelige/horsebio-insights/actions/workflows/deploy-backend.yml)
 [![Deploy Frontend](https://github.com/AardSkelige/horsebio-insights/actions/workflows/deploy-frontend.yml/badge.svg)](https://github.com/AardSkelige/horsebio-insights/actions/workflows/deploy-frontend.yml)
 
-Производственная система бизнес-аналитики для компании в сфере ветеринарных препаратов: синхронизация с ERP МойСклад, прогнозирование спроса, оптимизация закупок и аналитика маркетплейсов. В ежедневной эксплуатации у команды закупок и руководства.
+Production business-analytics platform for a veterinary products company: MoySklad ERP synchronization, demand forecasting, purchase optimization, and marketplace analytics. Used daily by the purchasing team and management.
 
-## Возможности
+## Features
 
-- **Прогнозирование спроса** — Facebook Prophet поверх истории отгрузок: помесячные прогнозы по товарным группам с учётом сезонности и трендов
-- **ABC-анализ** — категоризация товаров и контрагентов по вкладу в выручку (принцип Парето)
-- **Оптимизация закупок** — расчёт точек заказа по прогнозу спроса, остаткам и срокам поставки материалов
-- **Сезонный анализ** — выявление сезонных паттернов спроса по группам и отдельным позициям
-- **Анализ контрагентов** — поведение клиентов, группировки, динамика отгрузок
-- **Cash flow** — отчёт о движении денежных средств по данным ERP
-- **Аналитика Ozon** — интеграция с API маркетплейса: продажи, FBO-остатки, рекламные кампании
-- **Автоматизации МойСклад** — фоновые демоны (синхронизация закупочных цен, контроль возвратов, дедлайны оплат) и проверки целостности учёта с подтверждением находок через UI
+- **Demand forecasting** — Facebook Prophet on top of shipment history: monthly forecasts per product group with seasonality and trend awareness
+- **ABC analysis** — products and counterparties categorized by revenue contribution (Pareto principle)
+- **Purchase optimization** — reorder points calculated from demand forecasts, stock levels, and material lead times
+- **Seasonality analysis** — detection of seasonal demand patterns per group and per SKU
+- **Counterparty analytics** — customer behavior, groupings, shipment dynamics
+- **Cash flow** — cash flow reporting built from ERP data
+- **Ozon marketplace analytics** — API integration: sales, FBO stock, advertising campaigns
+- **MoySklad automations** — background daemons (purchase price sync, returns monitoring, payment deadlines) and accounting integrity checks with findings acknowledged through the UI
 
-## Архитектура
+## Architecture
 
 ```
-МойСклад ERP ──┐
-               ├──> sync (парсер API) ──> PostgreSQL ──> forecasting / api ──> React SPA
+MoySklad ERP ──┐
+               ├──> sync (API parser) ──> PostgreSQL ──> forecasting / api ──> React SPA
 Ozon API ──────┘                                              │
                                                     nginx (reverse proxy)
 ```
 
-- **Backend** — Django 5 + Django REST Framework; доменные приложения: `sync` (интеграция МойСклад), `forecasting` (Prophet, ABC, сезонность, закупки), `ozon` (маркетплейс), `api` (REST-слой), `core` (доменные модели)
-- **Frontend** — React 18 + Vite, Ant Design + Tailwind CSS, графики на Recharts; компоненты организованы по бизнес-доменам (abc, purchases, seasonality, shipments, supplies, cash-flow, ozon-analytics)
-- **Данные** — PostgreSQL 17 на проде, SQLite для локальной разработки; pandas/numpy для обработки
-- **Инфраструктура** — Docker Compose, два nginx (статика фронта + прокси к Django), состояние фоновых процессов в именованных volume
+- **Backend** — Django 5 + Django REST Framework; domain apps: `sync` (MoySklad integration), `forecasting` (Prophet, ABC, seasonality, purchasing), `ozon` (marketplace), `api` (REST layer), `core` (domain models)
+- **Frontend** — React 18 + Vite, Ant Design + Tailwind CSS, Recharts for charts; components organized by business domain (abc, purchases, seasonality, shipments, supplies, cash-flow, ozon-analytics)
+- **Data** — PostgreSQL 17 in production, SQLite for local development; pandas/numpy for processing
+- **Infrastructure** — Docker Compose, two nginx instances (frontend static + Django proxy), background process state persisted in named volumes
 
 ## CI/CD
 
-GitHub Actions: пуш в `main` прогоняет тесты (backend — против PostgreSQL 17, frontend — Vitest) и только после зелёных тестов собирает Docker-образы, публикует их в GHCR и выкатывает на сервер по SSH. Секреты — только в GitHub Secrets, конфигурация — через переменные окружения (`backend/.env.example`). Pre-commit хук с gitleaks защищает от случайного коммита секретов.
+GitHub Actions: every push to `main` runs the tests (backend against PostgreSQL 17, frontend with Vitest) and only after a green test stage builds Docker images, publishes them to GHCR, and deploys to the server over SSH. Secrets live exclusively in GitHub Secrets; configuration is environment-driven (`backend/.env.example`). A pre-commit hook with gitleaks guards against accidentally committed secrets.
 
-## Быстрый старт
+## Quick Start
 
 ```bash
 # Backend
 cd backend
-cp .env.example .env        # заполнить значения
+cp .env.example .env        # fill in the values
 pip install -r requirements.txt
 python manage.py migrate
 python manage.py runserver 127.0.0.1:8001
@@ -49,17 +49,17 @@ cd frontend
 npm install
 npm run dev                 # http://localhost:3001
 
-# Либо всё сразу в Docker
+# Or everything at once in Docker
 docker-compose -f docker-compose.local.yml up --build
 ```
 
-## Тесты
+## Tests
 
 ```bash
-cd backend && python manage.py test    # 150+ тестов
+cd backend && python manage.py test    # 150+ tests
 cd frontend && npm test
 ```
 
-## Примечания
+## Notes
 
-Проект работает с реальными данными компании, поэтому в репозитории нет фикстур и дампов: рабочие данные приходят из МойСклад при синхронизации, состояние автоматизаций живёт в Docker volume на сервере.
+The project works with real company data, so the repository contains no fixtures or dumps: operational data comes from MoySklad during synchronization, and automation state lives in Docker volumes on the server.

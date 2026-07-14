@@ -13,6 +13,7 @@ concurrency:
 
 jobs:
   test:
+    name: "Stage 1 — Tests (Django + PostgreSQL)"
     runs-on: ubuntu-latest
     services:
       postgres:
@@ -57,6 +58,7 @@ jobs:
           POSTGRES_PORT: '5432'
 
   deploy:
+    name: "Stage 2 — Build & Deploy"
     needs: test
     runs-on: ubuntu-latest
     permissions:
