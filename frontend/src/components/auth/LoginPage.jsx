@@ -27,10 +27,9 @@ const LoginPage = () => {
         setIsLoading(true);
 
         try {
-            const response = await authApi.login(username, password);
-            const data = await response.json();
+            const data = await authApi.login(username, password);
 
-            if (response.ok) {
+            if (data.status === 'success') {
                 setAuthStatus({ isAuthenticated: true });
                 navigate(from, { replace: true });
             } else {

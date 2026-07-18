@@ -5,6 +5,7 @@ from django.http import JsonResponse
 from rest_framework.decorators import api_view
 
 from api.exceptions import NotFoundError, DataProcessingError
+from api.serializers import ListQuerySerializer
 from api.services.supply_service import (
     get_supply_analytics,
     get_supply_materials,
@@ -56,16 +57,24 @@ def supply_materials(request):
 
 @api_view(['GET'])
 def supply_materials_list(request):
+    params = ListQuerySerializer.from_query_params(
+        request.query_params,
+        default_sort_field='total_quantity',
+        allowed_sort_fields={
+            'name', 'code', 'group', 'total_quantity', 'average_price',
+            'total_sum', 'supplies_count', 'suppliers_count',
+        },
+    )
     try:
         data = get_materials_list(
-            page=int(request.GET.get('page', 1)),
-            page_size=int(request.GET.get('pageSize', 10)),
-            search=request.GET.get('search', '').strip(),
-            group=request.GET.get('group', '').strip(),
-            start_date=request.GET.get('startDate'),
-            end_date=request.GET.get('endDate'),
-            sort_field=request.GET.get('sortField', 'total_quantity'),
-            sort_order=request.GET.get('sortOrder', 'desc'),
+            page=params['page'],
+            page_size=params['page_size'],
+            search=params['search'].strip(),
+            group=params['group'].strip(),
+            start_date=params.get('start_date') and params['start_date'].isoformat(),
+            end_date=params.get('end_date') and params['end_date'].isoformat(),
+            sort_field=params['sort_field'],
+            sort_order=params['sort_order'],
         )
         return JsonResponse({'status': 'success', 'data': data})
     except NotFoundError:
@@ -97,15 +106,23 @@ def supply_material_details(request, material_id):
 
 @api_view(['GET'])
 def supply_suppliers_list(request):
+    params = ListQuerySerializer.from_query_params(
+        request.query_params,
+        default_sort_field='supplies_count',
+        allowed_sort_fields={
+            'name', 'supplies_count', 'total_sum',
+            'positions_count', 'last_supply',
+        },
+    )
     try:
         data = get_suppliers_list(
-            page=int(request.GET.get('page', 1)),
-            page_size=int(request.GET.get('pageSize', 10)),
-            search=request.GET.get('search', '').strip(),
-            start_date=request.GET.get('startDate'),
-            end_date=request.GET.get('endDate'),
-            sort_field=request.GET.get('sortField', 'supplies_count'),
-            sort_order=request.GET.get('sortOrder', 'desc'),
+            page=params['page'],
+            page_size=params['page_size'],
+            search=params['search'].strip(),
+            start_date=params.get('start_date') and params['start_date'].isoformat(),
+            end_date=params.get('end_date') and params['end_date'].isoformat(),
+            sort_field=params['sort_field'],
+            sort_order=params['sort_order'],
         )
         return JsonResponse({'status': 'success', 'data': data})
     except NotFoundError:

@@ -1,46 +1,31 @@
 // src/api/analysisApi.js
-import { getCsrfToken } from '../utils/api';
+import api from '../utils/api';
 
 export const analysisApi = {
     cashFlow: {
-        get: async (dateFrom, dateTo) => {
-            const csrfToken = await getCsrfToken();
-            const response = await fetch('/api/analysis/cash-flow/', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json', 'X-CSRFToken': csrfToken },
-                credentials: 'include',
-                body: JSON.stringify({
+        get: (dateFrom, dateTo) =>
+            api.post('/analysis/cash-flow/', {
                     date_from: dateFrom + 'T00:00:00.000',
                     date_to: dateTo + 'T23:59:59.999',
-                }),
-            });
-            return response;
-        },
+            }),
 
-        export: async (dateFrom, dateTo) => {
-            const csrfToken = await getCsrfToken();
-            return fetch('/api/analysis/cash-flow/export/', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json', 'X-CSRFToken': csrfToken },
-                credentials: 'include',
-                body: JSON.stringify({
+        export: (dateFrom, dateTo) =>
+            api.post('/analysis/cash-flow/export/', {
                     date_from: dateFrom + 'T00:00:00.000',
                     date_to: dateTo + 'T23:59:59.999',
-                }),
-            });
-        },
+            }, { responseType: 'blob' }),
     },
 
     fbo: {
         get: (signal) =>
-            fetch('/api/analysis/fbo/', { signal }).then(r => r.json()),
+            api.get('/analysis/fbo/', { signal }),
 
         export: () =>
-            fetch('/api/analysis/fbo/export/'),
+            api.get('/analysis/fbo/export/', { responseType: 'blob' }),
     },
 
     purchase: {
         getMaterial: (materialId, signal) =>
-            fetch(`/api/analysis/purchase/material/${materialId}/`, { signal }).then(r => r.json()),
+            api.get(`/analysis/purchase/material/${materialId}/`, { signal }),
     },
 };

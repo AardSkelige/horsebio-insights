@@ -1,23 +1,51 @@
-# ozon/views.py
-
-import os
-
+from datetime import datetime
 import logging
+import os
+import tempfile
+
+from django.http import HttpResponse
+from rest_framework.decorators import api_view, parser_classes
+from rest_framework.parsers import FormParser, MultiPartParser
+from rest_framework.response import Response
+
+from .services.fbo_converter import FboConverter
+from .services.ozon_client import OzonClient
+from .services.report_generator import ReportGenerator
+
 
 logger = logging.getLogger(__name__)
 
-from rest_framework.decorators import api_view
-from rest_framework.response import Response
-from rest_framework.parsers import MultiPartParser
-from django.http import HttpResponse
-from django.views.decorators.csrf import csrf_exempt
-from .services.ozon_client import OzonClient
-from .services.report_generator import ReportGenerator
-from .services.fbo_converter import FboConverter
-from datetime import datetime
-from rest_framework.decorators import api_view, parser_classes
-from rest_framework.parsers import MultiPartParser, FormParser
-from django.views.decorators.csrf import csrf_exempt
+
+INTERNAL_ERROR_MESSAGE = 'Внутренняя ошибка сервера'
+
+
+def _save_uploaded_file(uploaded_file, *, prefix):
+    """Persist an upload under a unique private temporary path."""
+    temp_file = tempfile.NamedTemporaryFile(
+        mode='wb', prefix=prefix, suffix='.xlsx', delete=False
+    )
+    try:
+        for chunk in uploaded_file.chunks():
+            temp_file.write(chunk)
+    except Exception:
+        temp_file.close()
+        _delete_temp_file(temp_file.name)
+        raise
+    else:
+        temp_file.close()
+        return temp_file.name
+
+
+def _delete_temp_file(path):
+    if not path:
+        return
+    try:
+        os.unlink(path)
+    except FileNotFoundError:
+        pass
+    except OSError:
+        logger.exception("Не удалось удалить временный файл %s", path)
+
 
 @api_view(['GET'])
 def export_advertising_data(request):
@@ -64,6 +92,7 @@ def export_advertising_data(request):
             'message': str(e)
         }, status=500)
 
+
 @api_view(['GET'])
 def export_sales_data(request):
     """API endpoint для экспорта данных по продажам в Excel"""
@@ -109,7 +138,7 @@ def export_sales_data(request):
             'message': str(e)
         }, status=500)
 
-@csrf_exempt
+
 @api_view(['POST'])
 @parser_classes([MultiPartParser, FormParser])
 def generate_report(request):
@@ -163,21 +192,19 @@ def generate_report(request):
         
         return response
         
-    except Exception as e:
-        logger.error(f"Error in generate_report: {e}")
+    except Exception:
+        logger.exception("Error in generate_report")
         return Response({
             'status': 'error',
-            'message': str(e)
+            'message': INTERNAL_ERROR_MESSAGE
         }, status=500)
     
 
-# ozon/views.py - добавляем новые функции
-
-@csrf_exempt
 @api_view(['POST'])
 @parser_classes([MultiPartParser, FormParser])
 def process_competitors_info(request):
     """API endpoint для обработки данных о конкурентах"""
+    temp_input_path = None
     try:
         if 'file' not in request.FILES:
             return Response({
@@ -189,11 +216,9 @@ def process_competitors_info(request):
         
         logger.info(f"Получен файл: {input_file.name}")
         
-        # Сохраняем временный файл для обработки
-        temp_input_path = f"/tmp/input_competitors_{datetime.now().strftime('%Y%m%d_%H%M%S')}.xlsx"
-        with open(temp_input_path, 'wb+') as destination:
-            for chunk in input_file.chunks():
-                destination.write(chunk)
+        temp_input_path = _save_uploaded_file(
+            input_file, prefix='input_competitors_'
+        )
         
         # Импортируем функцию из скрипта
         from .services.competitors_analyzer import process_ozon_data
@@ -216,26 +241,23 @@ def process_competitors_info(request):
         )
         response['Content-Disposition'] = f'attachment; filename="{filename}"'
         
-        # Удаляем временный файл
-        if os.path.exists(temp_input_path):
-            os.remove(temp_input_path)
-        
         return response
         
-    except Exception as e:
-        logger.error(f"Error in process_competitors_info: {e}")
-        import traceback
-        traceback.print_exc()
+    except Exception:
+        logger.exception("Error in process_competitors_info")
         return Response({
             'status': 'error',
-            'message': str(e)
+            'message': INTERNAL_ERROR_MESSAGE
         }, status=500)
+    finally:
+        _delete_temp_file(temp_input_path)
 
-@csrf_exempt
+
 @api_view(['POST'])
 @parser_classes([MultiPartParser, FormParser])
 def process_stock_availability(request):
     """API endpoint для обработки данных о доступности товаров"""
+    temp_input_path = None
     try:
         if 'file' not in request.FILES:
             return Response({
@@ -247,11 +269,9 @@ def process_stock_availability(request):
         
         logger.info(f"Получен файл: {input_file.name}")
         
-        # Сохраняем временный файл для обработки
-        temp_input_path = f"/tmp/input_stock_{datetime.now().strftime('%Y%m%d_%H%M%S')}.xlsx"
-        with open(temp_input_path, 'wb+') as destination:
-            for chunk in input_file.chunks():
-                destination.write(chunk)
+        temp_input_path = _save_uploaded_file(
+            input_file, prefix='input_stock_'
+        )
         
         # Импортируем функцию из скрипта
         from .services.stock_analyzer import process_availability_data
@@ -274,23 +294,18 @@ def process_stock_availability(request):
         )
         response['Content-Disposition'] = f'attachment; filename="{filename}"'
         
-        # Удаляем временный файл
-        if os.path.exists(temp_input_path):
-            os.remove(temp_input_path)
-        
         return response
         
-    except Exception as e:
-        logger.error(f"Error in process_stock_availability: {e}")
-        import traceback
-        traceback.print_exc()
+    except Exception:
+        logger.exception("Error in process_stock_availability")
         return Response({
             'status': 'error',
-            'message': str(e)
+            'message': INTERNAL_ERROR_MESSAGE
         }, status=500)
+    finally:
+        _delete_temp_file(temp_input_path)
 
 
-@csrf_exempt
 @api_view(['POST'])
 @parser_classes([MultiPartParser, FormParser])
 def convert_fbo_supply(request):
@@ -318,11 +333,9 @@ def convert_fbo_supply(request):
         response['Content-Disposition'] = f'attachment; filename="{filename}"'
         return response
 
-    except Exception as e:
-        logger.error(f"Error in convert_fbo_supply: {e}")
-        import traceback
-        traceback.print_exc()
+    except Exception:
+        logger.exception("Error in convert_fbo_supply")
         return Response({
             'status': 'error',
-            'message': str(e)
+            'message': INTERNAL_ERROR_MESSAGE
         }, status=500)

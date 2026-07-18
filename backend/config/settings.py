@@ -27,7 +27,6 @@ INSTALLED_APPS = [
     # Third party apps
     'rest_framework',
     'corsheaders',
-    'drf_spectacular',
     
     # Local apps
     'core',
@@ -174,74 +173,6 @@ REST_FRAMEWORK = {
     ],
     'DEFAULT_PAGINATION_CLASS': 'rest_framework.pagination.PageNumberPagination',
     'PAGE_SIZE': 100,
-    'DEFAULT_SCHEMA_CLASS': 'drf_spectacular.openapi.AutoSchema',
-}
-
-# OpenAPI documentation settings
-SPECTACULAR_SETTINGS = {
-    'TITLE': 'HorseBio Insights API',
-    'DESCRIPTION': '''
-API для аналитической системы HorseBio Insights.
-
-## Модули API
-
-### Аутентификация
-- `POST /api/auth/login/` - Вход в систему
-- `POST /api/auth/logout/` - Выход из системы
-- `GET /api/auth/check/` - Проверка статуса авторизации
-
-### Статистика
-- `GET /api/stats/` - Общая статистика
-- `GET /api/latest/` - Последние данные
-
-### Отгрузки (Shipments)
-- `GET /api/shipments/` - Список отгрузок с фильтрацией и пагинацией
-
-### Поставки (Supplies)
-- `GET /api/supplies/` - Аналитика поставок
-- `GET /api/supplies/materials/` - Материалы поставок
-- `GET /api/supplies/suppliers/` - Список поставщиков
-
-### Контрагенты (Counterparties)
-- `GET /api/counterparties/` - Список контрагентов
-- `GET /api/counterparties/{id}/` - Детали контрагента
-- `GET /api/counterparty-groups/` - Группировка контрагентов
-
-### Товары (Products)
-- `GET /api/products/` - Список товаров
-- `GET /api/products/{id}/` - Детали товара
-- `GET /api/products/export/` - Экспорт в Excel
-
-### Материалы (Materials)
-- `GET /api/materials/` - Список материалов
-- `GET /api/materials/{id}/` - Детали материала
-
-### Аналитика
-- `GET /api/analysis/abc/` - ABC анализ
-- `GET /api/analysis/seasonal/` - Сезонный анализ
-- `GET /api/analysis/purchase/` - Анализ закупок
-- `GET /api/analysis/fbo/` - FBO анализ
-- `GET /api/analysis/cash-flow/` - Отчет о движении денежных средств
-
-### Производство
-- `POST /api/production/calculate/` - Расчёт компонентов
-- `GET /api/production/products/search/` - Поиск продуктов с рецептами
-    ''',
-    'VERSION': '1.0.0',
-    'SERVE_INCLUDE_SCHEMA': False,
-    'COMPONENT_SPLIT_REQUEST': True,
-    'SCHEMA_PATH_PREFIX': r'/api/',
-    'TAGS': [
-        {'name': 'auth', 'description': 'Аутентификация'},
-        {'name': 'stats', 'description': 'Статистика'},
-        {'name': 'shipments', 'description': 'Отгрузки'},
-        {'name': 'supplies', 'description': 'Поставки'},
-        {'name': 'counterparties', 'description': 'Контрагенты'},
-        {'name': 'products', 'description': 'Товары'},
-        {'name': 'materials', 'description': 'Материалы'},
-        {'name': 'analysis', 'description': 'Аналитика'},
-        {'name': 'production', 'description': 'Производство'},
-    ],
 }
 
 # Настройки статических файлов

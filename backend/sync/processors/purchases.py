@@ -2,13 +2,14 @@
 
 import asyncio
 from decimal import Decimal
-from django.db import transaction
+from django.db import DatabaseError, transaction
 from django.utils.dateparse import parse_datetime
 from django.utils import timezone
 from asgiref.sync import sync_to_async
 from sync.models import PurchaseOrder, PurchaseOrderItem, Counterparty, RawMaterial, Supply
 from sync.logger import logger, structured_logger
 from sync.sync_task import TaskStatus
+from sync.cache import ProductDetailsFetchError
 from sync.utils import get_group_from_pathname
 
 
@@ -84,6 +85,8 @@ class PurchaseOrderStorage:
                                     f"for order {purchase_order.number}"
                                 )
                         except Exception as e:
+                            if isinstance(e, DatabaseError):
+                                raise
                             logger.error(
                                 f"Error linking order {purchase_order.number} with supply: {str(e)}"
                             )
@@ -92,6 +95,8 @@ class PurchaseOrderStorage:
 
         except Exception as e:
             logger.error(f"Error saving purchase order data: {str(e)}")
+            if isinstance(e, (DatabaseError, ProductDetailsFetchError)):
+                raise
             return None
 
     @sync_to_async
@@ -147,6 +152,8 @@ class PurchaseOrderStorage:
 
         except Exception as e:
             logger.error(f"Error saving purchase order item: {str(e)}")
+            if isinstance(e, (DatabaseError, ProductDetailsFetchError)):
+                raise
             return None
 
 
@@ -335,3 +342,4 @@ class PurchaseOrderProcessor:
                 message="Ошибка при обработке заказов поставщикам",
                 error=str(e)
             )
+            raise

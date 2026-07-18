@@ -5,6 +5,7 @@ on:
     branches: [main]
     paths:
       - 'backend/**'
+      - 'docker-compose.prod.yml'
   workflow_dispatch:
 
 concurrency:
@@ -108,13 +109,13 @@ jobs:
             printf '%s' "$BACKEND_ENV_PROD" > /root/horsebio/backend/.env.prod
             printf 'POSTGRES_PASSWORD=%s\n' "$POSTGRES_PASSWORD" > /root/horsebio/.env
 
-      - name: Copy docker-compose to server
+      - name: Copy deployment config to server
         uses: appleboy/scp-action@v0.1.7
         with:
           host: ${{ secrets.SSH_HOST }}
           username: ${{ secrets.SSH_USER }}
           key: ${{ secrets.SSH_PRIVATE_KEY }}
-          source: "docker-compose.prod.yml"
+          source: "docker-compose.prod.yml,backend/nginx/nginx.conf"
           target: "/root/horsebio"
 
       - name: Deploy to server
@@ -131,7 +132,9 @@ jobs:
             set -e
             echo "$GHCR_TOKEN" | docker login ghcr.io -u "$GHCR_USER" --password-stdin
             cd /root/horsebio
-            docker compose -f docker-compose.prod.yml pull backend
-            docker compose -f docker-compose.prod.yml up -d --force-recreate backend
+            docker compose -f docker-compose.prod.yml pull
+            docker compose -f docker-compose.prod.yml up -d --remove-orphans
+            # nginx does not notice changes inside a bind-mounted config by itself.
+            docker compose -f docker-compose.prod.yml up -d --force-recreate --no-deps backend_nginx
             docker compose -f docker-compose.prod.yml exec -T backend python manage.py migrate
             docker image prune -f

@@ -147,15 +147,7 @@ const CashFlowReport = () => {
         }, 200);
 
         try {
-            const response = await analysisApi.cashFlow.get(dateFrom, dateTo);
-
-            const contentType = response.headers.get('content-type') || '';
-            if (!contentType.includes('application/json')) {
-                await response.text();
-                throw new Error(`Некорректный ответ сервера (${response.status})`);
-            }
-
-            const result = await response.json();
+            const result = await analysisApi.cashFlow.get(dateFrom, dateTo);
             clearInterval(progressInterval);
             setProgress(100);
 
@@ -177,24 +169,16 @@ const CashFlowReport = () => {
         if (!dateFrom || !dateTo) return;
         setExporting(true);
         try {
-            const response = await analysisApi.cashFlow.export(dateFrom, dateTo);
-
-            if (response.ok) {
-                const blob = await response.blob();
-                const url = window.URL.createObjectURL(blob);
-                const a = document.createElement('a');
-                a.href = url;
-                const ts = new Date().toISOString().slice(0, 19).replaceAll('-', '').replaceAll(':', '').replace('T', '');
-                a.download = `cash_flow_report_${ts}.xlsx`;
-                document.body.appendChild(a);
-                a.click();
-                document.body.removeChild(a);
-                window.URL.revokeObjectURL(url);
-            } else {
-                const ct = response.headers.get('content-type') || '';
-                const err = ct.includes('application/json') ? await response.json() : {};
-                setError('Ошибка экспорта: ' + (err.error || err.message || 'Неизвестная ошибка'));
-            }
+            const blob = await analysisApi.cashFlow.export(dateFrom, dateTo);
+            const url = window.URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            const ts = new Date().toISOString().slice(0, 19).replaceAll('-', '').replaceAll(':', '').replace('T', '');
+            a.download = `cash_flow_report_${ts}.xlsx`;
+            document.body.appendChild(a);
+            a.click();
+            document.body.removeChild(a);
+            window.URL.revokeObjectURL(url);
         } catch (err) {
             setError('Ошибка экспорта: ' + err.message);
         } finally {

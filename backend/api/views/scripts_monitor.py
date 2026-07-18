@@ -7,6 +7,7 @@ import re
 import glob
 import hashlib
 import signal
+import secrets
 import threading
 import subprocess
 import time
@@ -15,7 +16,7 @@ from functools import wraps
 
 from django.conf import settings
 from django.http import JsonResponse
-from django.views.decorators.csrf import csrf_exempt
+from django.views.decorators.csrf import csrf_exempt, csrf_protect
 from django.views.decorators.http import require_http_methods
 
 import logging
@@ -85,17 +86,50 @@ SCRIPTS_BY_ID = {s['id']: s for s in SCRIPTS_CONFIG}
 
 # ─── Авторизация ──────────────────────────────────────────────────────────────
 
+def _has_valid_cron_secret(request):
+    """Проверить machine-to-machine секрет без утечки по времени сравнения."""
+    configured_secret = getattr(settings, 'CRON_SECRET', '')
+    supplied_secret = request.headers.get('X-Cron-Secret', '')
+    return bool(
+        configured_secret
+        and supplied_secret
+        and secrets.compare_digest(supplied_secret, configured_secret)
+    )
+
+
 def scripts_auth(view_func):
-    """Декоратор: только суперпользователь или X-Cron-Secret заголовок."""
+    """Только суперпользователь или запрос с X-Cron-Secret."""
     @wraps(view_func)
     def wrapper(request, *args, **kwargs):
         if request.user.is_authenticated and request.user.is_superuser:
             return view_func(request, *args, **kwargs)
-        cron_secret = getattr(settings, 'CRON_SECRET', '')
-        if cron_secret and request.headers.get('X-Cron-Secret') == cron_secret:
+        if _has_valid_cron_secret(request):
             return view_func(request, *args, **kwargs)
-        return JsonResponse({'status': 'error', 'message': 'Требуется авторизация'}, status=401)
+        status = 403 if request.user.is_authenticated else 401
+        return JsonResponse({'status': 'error', 'message': 'Нет доступа'}, status=status)
     return wrapper
+
+
+def scripts_mutation_auth(view_func):
+    """Авторизация изменений: cron по секрету, администратор — с CSRF.
+
+    Внешний cron не использует cookie-сессию, поэтому CSRF ему не нужен. Для
+    браузерной сессии суперпользователя CSRF остаётся обязательным.
+    """
+    csrf_protected_view = csrf_protect(view_func)
+
+    @wraps(view_func)
+    def wrapper(request, *args, **kwargs):
+        if _has_valid_cron_secret(request):
+            return view_func(request, *args, **kwargs)
+        if request.user.is_authenticated and request.user.is_superuser:
+            return csrf_protected_view(request, *args, **kwargs)
+        status = 403 if request.user.is_authenticated else 401
+        return JsonResponse({'status': 'error', 'message': 'Нет доступа'}, status=status)
+
+    # Глобальный middleware пропускает wrapper; ветка session auth выше явно
+    # прогоняется через csrf_protect, а machine-to-machine запрос — нет.
+    return csrf_exempt(wrapper)
 
 
 def scripts_auth_basic(view_func):
@@ -104,8 +138,7 @@ def scripts_auth_basic(view_func):
     def wrapper(request, *args, **kwargs):
         if request.user.is_authenticated:
             return view_func(request, *args, **kwargs)
-        cron_secret = getattr(settings, 'CRON_SECRET', '')
-        if cron_secret and request.headers.get('X-Cron-Secret') == cron_secret:
+        if _has_valid_cron_secret(request):
             return view_func(request, *args, **kwargs)
         return JsonResponse({'status': 'error', 'message': 'Требуется авторизация'}, status=401)
     return wrapper
@@ -116,8 +149,7 @@ def _starpony_access_denied(request, script_id):
     script = SCRIPTS_BY_ID.get(script_id)
     if script and script.get('account') == 'StarPony':
         is_superuser = request.user.is_authenticated and request.user.is_superuser
-        cron_secret = getattr(settings, 'CRON_SECRET', '')
-        if not is_superuser and not (cron_secret and request.headers.get('X-Cron-Secret') == cron_secret):
+        if not is_superuser and not _has_valid_cron_secret(request):
             return JsonResponse({'status': 'error', 'message': 'Нет доступа'}, status=403)
     return None
 
@@ -495,8 +527,7 @@ def script_log(request, script_id, run_id):
     })
 
 
-@csrf_exempt
-@scripts_auth_basic
+@scripts_mutation_auth
 @require_http_methods(['POST'])
 def script_stop(request, script_id):
     """POST /api/scripts/{id}/stop/ — остановить запущенный скрипт."""
@@ -547,8 +578,7 @@ def script_stop(request, script_id):
         return JsonResponse({'status': 'error', 'message': str(e)}, status=500)
 
 
-@csrf_exempt
-@scripts_auth_basic
+@scripts_mutation_auth
 @require_http_methods(['POST'])
 def script_run_delete(request, script_id, run_id):
     """POST /api/scripts/{id}/runs/{run_id}/delete/ — удалить лог запуска."""
@@ -579,8 +609,7 @@ def script_run_delete(request, script_id, run_id):
     return JsonResponse({'status': 'ok'})
 
 
-@csrf_exempt
-@scripts_auth_basic
+@scripts_mutation_auth
 @require_http_methods(['POST'])
 def script_run_now(request, script_id):
     """POST /api/scripts/{id}/run/ — запустить скрипт немедленно."""

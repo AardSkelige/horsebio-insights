@@ -52,7 +52,7 @@ class ChecksRunDeleteTests(TestCase):
         user = User.objects.create_user('user', 'user@test.ru', 'pass')
         self.client.force_login(user)
         resp = self.client.delete(self._url(self.run.run_id))
-        self.assertEqual(resp.status_code, 401)
+        self.assertEqual(resp.status_code, 403)
         self.assertTrue(CheckRunResult.objects.filter(pk=self.run.pk).exists())
 
     def test_get_method_not_allowed(self):

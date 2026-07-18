@@ -1,13 +1,13 @@
 // src/api/productsApi.js
-const json = (r) => r.json();
+import api from '../utils/api';
 
 export const productsApi = {
     getList: (params, signal) =>
-        fetch(`/api/products/?${params}`, { signal }).then(json),
+        api.get('/products/', { params, signal }),
 
     getAll: (signal) =>
-        fetch('/api/products/', { signal }).then(json),
+        api.get('/products/', { signal }),
 
     getDetails: (id, qs, signal) =>
-        fetch(`/api/products/${id}/${qs ? `?${qs}` : ''}`, { signal }).then(json),
+        api.get(`/products/${id}/`, { params: qs || undefined, signal }),
 };

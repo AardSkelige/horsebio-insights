@@ -1,26 +1,26 @@
 // src/api/suppliesApi.js
-const json = (r) => r.json();
+import api from '../utils/api';
 
 export const suppliesApi = {
     getAll: (signal) =>
-        fetch('/api/supplies/', { signal }).then(json),
+        api.get('/supplies/', { signal }),
 
     materials: {
         getList: (params, signal) =>
-            fetch(`/api/supplies/materials/list/?${params}`, { signal }).then(json),
+            api.get('/supplies/materials/list/', { params, signal }),
 
         getAll: (signal) =>
-            fetch('/api/supplies/materials/list/', { signal }).then(json),
+            api.get('/supplies/materials/list/', { signal }),
 
         getDetails: (id, qs, signal) =>
-            fetch(`/api/supplies/materials/${id}/details/${qs ? `?${qs}` : ''}`, { signal }).then(json),
+            api.get(`/supplies/materials/${id}/details/`, { params: qs || undefined, signal }),
     },
 
     suppliers: {
         getList: (params, signal) =>
-            fetch(`/api/supplies/suppliers/?${params}`, { signal }).then(json),
+            api.get('/supplies/suppliers/', { params, signal }),
 
         getDetails: (id, qs, signal) =>
-            fetch(`/api/supplies/suppliers/${id}/details/${qs ? `?${qs}` : ''}`, { signal }).then(json),
+            api.get(`/supplies/suppliers/${id}/details/`, { params: qs || undefined, signal }),
     },
 };

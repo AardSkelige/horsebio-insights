@@ -161,8 +161,10 @@ def inventory_upload_cells(request):
             inventory_name=parsed['inventory_name'] or file.name,
             defaults={
                 'run': run,
+                'month_start': month_start,
                 'inventory_date': parsed['inventory_date'],
                 'warehouse': parsed['warehouse'] or '',
+                'codes': parsed['codes'],
                 'matched_count': matched,
             },
         )
@@ -202,14 +204,14 @@ def inventory_cells_log(request):
     ?month=YYYY-MM — filter by month (default: all)
     Returns list ordered by inventory_date asc.
     """
-    from inventory_tracking.models import CellsUploadLog, InventoryRun
+    from inventory_tracking.models import CellsUploadLog
 
     month_param = request.GET.get('month', '').strip()
     month_start = _parse_month_param(month_param)
 
-    qs = CellsUploadLog.objects.select_related('run')
+    qs = CellsUploadLog.objects.all()
     if month_start:
-        qs = qs.filter(run__month_start=month_start)
+        qs = qs.filter(month_start=month_start)
 
     result = [
         {
@@ -219,7 +221,7 @@ def inventory_cells_log(request):
             'warehouse': entry.warehouse,
             'matched_count': entry.matched_count,
             'uploaded_at': entry.uploaded_at,
-            'month_start': entry.run.month_start,
+            'month_start': entry.month_start,
         }
         for entry in qs.order_by('inventory_date')
     ]

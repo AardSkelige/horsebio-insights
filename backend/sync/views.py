@@ -146,8 +146,8 @@ def stream_loading_progress(request):
                         if consecutive_empty_states >= 3:
                             if not task_manager.is_task_running():
                                 final_state = {
-                                    'status': 'completed',
-                                    'message': 'Задача завершена',
+                                    'status': 'error',
+                                    'message': 'Состояние задачи недоступно',
                                     'timestamp': timezone.now().isoformat()
                                 }
                                 yield f"data: {json.dumps(final_state)}\n\n"
@@ -172,7 +172,6 @@ def stream_loading_progress(request):
                             last_state_time = current_time
 
                             if current_state.get('status') in ['completed', 'error', 'stopped']:
-                                task_manager.cleanup_state()
                                 task_active = False
                                 break
 
@@ -202,7 +201,7 @@ def get_task_status(request):
     """Получение текущего статуса задачи"""
     try:
         is_running = task_manager.is_task_running()
-        current_state = task_manager.get_current_state() if is_running else None
+        current_state = task_manager.get_current_state()
 
         return Response({
             'is_running': is_running,

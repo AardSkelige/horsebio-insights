@@ -423,25 +423,24 @@ class FBOTests(BaseViewTestCase):
         mock_client_instance.headers = {}
         mock_client.return_value = mock_client_instance
 
-        response = self.client.get('/api/analysis/fbo/')
+        response = self.client.get('/api/analysis/fbo/', secure=True)
         # Should return 200 or handle external API error
         self.assertIn(response.status_code, [200, 500, 503])
 
     @patch('api.views.fbo.requests.get')
-    def test_fbo_export_endpoint(self, mock_get):
+    @patch('api.views.fbo._build_fbo_analysis_data')
+    def test_fbo_export_endpoint(self, mock_analysis, mock_get):
         """Test GET /api/analysis/fbo/export/ endpoint."""
-        # Mock internal FBO analysis call
-        mock_response = MagicMock()
-        mock_response.json.return_value = {
+        mock_analysis.return_value = {
             'statistics': {},
             'products': [],
             'orders': []
         }
-        mock_get.return_value = mock_response
 
-        response = self.client.get('/api/analysis/fbo/export/')
-        # Should return Excel or error
-        self.assertIn(response.status_code, [200, 500])
+        response = self.client.get('/api/analysis/fbo/export/', secure=True)
+        self.assertEqual(response.status_code, 200)
+        mock_analysis.assert_called_once_with()
+        mock_get.assert_not_called()
 
 
 class SupplyMaterialsTests(BaseViewTestCase):

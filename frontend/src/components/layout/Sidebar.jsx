@@ -9,6 +9,11 @@ import NavItem from './sidebar/NavItem';
 import UtilBtn from './sidebar/UtilBtn';
 import UserMenu from './sidebar/UserMenu';
 import NAV_GROUPS from './sidebar/navGroups';
+import {
+    HOME_PREFERENCES_EVENT,
+    MAX_PINNED_SECTIONS,
+    publishHomePreferences,
+} from '../../utils/homePreferences';
 
 const W_OPEN = 240;
 const W_CLOSED = 52;
@@ -18,10 +23,27 @@ export const Sidebar = ({ expanded, onToggle, isMobile, mobileOpen, onMobileClos
     const navigate = useNavigate();
     const { toggle: toggleDataPanel } = useDataPanel();
     const [isSuperuser, setIsSuperuser] = useState(getFreshAuthStatus().isSuperuser === true);
+    const [pinnedPaths, setPinnedPaths] = useState([]);
     // Ховер живёт на уровне сайдбара: одна layoutId-пилюля перетекает между пунктами
     const [hovPath, setHovPath] = useState(null);
 
     useEffect(() => subscribeAuth(s => setIsSuperuser(s.isSuperuser === true)), []);
+
+    useEffect(() => {
+        let active = true;
+        authApi.home()
+            .then((result) => { if (active) setPinnedPaths(result.data.pinnedPaths || []); })
+            .catch(() => {});
+
+        const handlePreferences = (event) => {
+            if (Array.isArray(event.detail?.pinnedPaths)) setPinnedPaths(event.detail.pinnedPaths);
+        };
+        window.addEventListener(HOME_PREFERENCES_EVENT, handlePreferences);
+        return () => {
+            active = false;
+            window.removeEventListener(HOME_PREFERENCES_EVENT, handlePreferences);
+        };
+    }, []);
 
     const isActive = (path) => location.pathname === path;
     const showExpanded = isMobile ? true : expanded;
@@ -42,6 +64,27 @@ export const Sidebar = ({ expanded, onToggle, isMobile, mobileOpen, onMobileClos
             clearAuthStatus();
             sessionStorage.clear();
             navigate('/login', { replace: true });
+        }
+    };
+
+    const handleTogglePin = async (path) => {
+        const previous = pinnedPaths;
+        const isPinned = previous.includes(path);
+        if (!isPinned && previous.length >= MAX_PINNED_SECTIONS) return;
+
+        const next = isPinned
+            ? previous.filter((item) => item !== path)
+            : [...previous, path];
+        setPinnedPaths(next);
+        publishHomePreferences(next);
+
+        try {
+            const result = await authApi.updateHome(next);
+            setPinnedPaths(result.data.pinnedPaths);
+            publishHomePreferences(result.data.pinnedPaths);
+        } catch {
+            setPinnedPaths(previous);
+            publishHomePreferences(previous);
         }
     };
 
@@ -161,6 +204,9 @@ export const Sidebar = ({ expanded, onToggle, isMobile, mobileOpen, onMobileClos
                                     onNavigate={mobileNavigate}
                                     hovered={hovPath === item.path}
                                     onHover={setHovPath}
+                                    pinned={pinnedPaths.includes(item.path)}
+                                    pinDisabled={!pinnedPaths.includes(item.path) && pinnedPaths.length >= MAX_PINNED_SECTIONS}
+                                    onTogglePin={item.path === '/' ? undefined : handleTogglePin}
                                 />
                             ))}
                         </div>

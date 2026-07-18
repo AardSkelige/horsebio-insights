@@ -15,16 +15,6 @@ const useDebounce = (callback, delay) => {
     }, [callback, delay]);
 };
 
-const parseJsonResponse = async (response) => {
-    const contentType = response.headers.get('content-type') || '';
-    if (!contentType.includes('application/json')) {
-        await response.text();
-        throw new Error(`Некорректный ответ сервера (${response.status})`);
-    }
-    return response.json();
-};
-
-
 const btn = (primary, disabled = false) => ({
     display: 'inline-flex', alignItems: 'center', gap: '6px',
     padding: '6px 14px', borderRadius: '8px', border: 'none',
@@ -148,9 +138,8 @@ const ProductionCalculator = () => {
         setCalculating(true);
         showNotice('loading', 'Обработка файла...');
         try {
-            const response = await productionApi.calculateFromFile(file);
-            const data = await parseJsonResponse(response);
-            if (response.ok && data.success !== false) {
+            const data = await productionApi.calculateFromFile(file);
+            if (data.success !== false) {
                 setResult(data);
                 showNotice('success', 'Расчёт завершён!');
             } else {
@@ -184,11 +173,10 @@ const ProductionCalculator = () => {
         setCalculating(true);
         showNotice('loading', 'Расчёт компонентов...');
         try {
-            const response = await productionApi.calculateFromItems(
+            const data = await productionApi.calculateFromItems(
                 validItems.map(item => ({ article: item.article, quantity: item.quantity }))
             );
-            const data = await parseJsonResponse(response);
-            if (response.ok && data.success !== false) {
+            if (data.success !== false) {
                 setResult(data);
                 showNotice('success', 'Расчёт завершён!');
             } else {
@@ -207,13 +195,7 @@ const ProductionCalculator = () => {
         setExporting(true);
         showNotice('loading', 'Формируется файл...');
         try {
-            const response = await productionApi.export(result);
-            if (!response.ok) {
-                const ct = response.headers.get('content-type') || '';
-                const err = ct.includes('application/json') ? await response.json() : {};
-                throw new Error(err.error || err.message || `Ошибка экспорта (${response.status})`);
-            }
-            const blob = await response.blob();
+            const blob = await productionApi.export(result);
             const url = window.URL.createObjectURL(blob);
             const link = document.createElement('a');
             const date = new Date().toLocaleDateString('ru-RU').replace(/\./g, '');

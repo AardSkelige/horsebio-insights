@@ -180,7 +180,7 @@ def get_materials_list(
     if search:
         search_query = Q()
         for word in search.split():
-            search_query &= Q(name__iregex=f'(?i){word}') | Q(code__iregex=f'(?i){word}')
+            search_query &= Q(name__icontains=word) | Q(code__icontains=word)
         materials_query = materials_query.filter(search_query)
 
     if group:
@@ -370,7 +370,7 @@ def get_suppliers_list(
     if search:
         search_query = Q()
         for word in search.split():
-            search_query &= Q(name__iregex=f'(?i){word}')
+            search_query &= Q(name__icontains=word)
         suppliers_query = suppliers_query.filter(search_query)
 
     supplies_filter = Q()

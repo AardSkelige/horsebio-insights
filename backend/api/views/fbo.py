@@ -17,53 +17,50 @@ logger = logging.getLogger(__name__)
 
 def get_stock_info(client, assortments):
     """Получение информации об остатках для списка товаров и модификаций"""
-    try:
-        if not assortments:
-            return {}
-            
-        stock_dict = {}
-        batch_size = 10
-        
-        for i in range(0, len(assortments), batch_size):
-            batch = list(assortments)[i:i + batch_size]
-            filter_parts = []
-            
-            for href in batch:
-                href = href.split('?')[0]
-                if '/variant/' in href:
-                    filter_parts.append(f"variant={href}")
-                else:
-                    filter_parts.append(f"product={href}")
-            
-            if not filter_parts:
-                continue
-                
-            filter_query = ";".join(filter_parts)
-            
-            url = f"{client.BASE_URL}/report/stock/all"
-            params = {
-                "filter": filter_query,
-                "groupBy": "product",
-                "stockMode": "all"
-            }
-            
-            response = requests.get(url, headers=client.headers, params=params, timeout=30)
-            response.raise_for_status()
-            data = response.json()
-
-            for item in data.get('rows', []):
-                if 'meta' in item and 'href' in item['meta']:
-                    meta_href = item['meta']['href'].split('?')[0]
-                    stock_data = {
-                        'stock': float(item.get('stock', 0)),
-                        'quantity': float(item.get('quantity', 0))
-                    }
-                    stock_dict[meta_href] = stock_data
-        
-        return stock_dict
-        
-    except Exception as e:
+    if not assortments:
         return {}
+
+    assortments = list(assortments)
+    stock_dict = {}
+    batch_size = 10
+
+    for i in range(0, len(assortments), batch_size):
+        batch = assortments[i:i + batch_size]
+        filter_parts = []
+
+        for href in batch:
+            href = href.split('?')[0]
+            if '/variant/' in href:
+                filter_parts.append(f"variant={href}")
+            else:
+                filter_parts.append(f"product={href}")
+
+        if not filter_parts:
+            continue
+
+        filter_query = ";".join(filter_parts)
+
+        url = f"{client.BASE_URL}/report/stock/all"
+        params = {
+            "filter": filter_query,
+            "groupBy": "product",
+            "stockMode": "all"
+        }
+
+        response = requests.get(url, headers=client.headers, params=params, timeout=30)
+        response.raise_for_status()
+        data = response.json()
+
+        for item in data.get('rows', []):
+            if 'meta' in item and 'href' in item['meta']:
+                meta_href = item['meta']['href'].split('?')[0]
+                stock_data = {
+                    'stock': float(item.get('stock', 0)),
+                    'quantity': float(item.get('quantity', 0))
+                }
+                stock_dict[meta_href] = stock_data
+
+    return stock_dict
 
 def get_fbo_state_href(client):
     """Href статуса «FBO» из метаданных заказов покупателей"""
@@ -75,9 +72,8 @@ def get_fbo_state_href(client):
             return state['meta']['href']
     return None
 
-@api_view(['GET'])
-def get_fbo_analysis(request):
-   """API endpoint для анализа FBO заказов"""
+def _build_fbo_analysis_data():
+   """Собрать данные FBO для API и Excel-экспорта."""
    try:
        client = MoySkladAPIClient(settings.MOYSKLAD_TOKEN)
 
@@ -235,7 +231,7 @@ def get_fbo_analysis(request):
            'orders': orders_data
        }
 
-       return JsonResponse(response_data)
+       return response_data
 
    except requests.RequestException as e:
        logger.error(f"External API error in get_fbo_analysis: {str(e)}", exc_info=True)
@@ -244,12 +240,18 @@ def get_fbo_analysis(request):
        logger.error(f"Error in get_fbo_analysis: {str(e)}", exc_info=True)
        raise DataProcessingError("Ошибка анализа FBO заказов")
 
+
+@api_view(['GET'])
+def get_fbo_analysis(request):
+    """API endpoint для анализа FBO заказов"""
+    return JsonResponse(_build_fbo_analysis_data())
+
+
 @api_view(['GET'])
 def export_fbo_excel(request):
     """API endpoint для экспорта FBO анализа в Excel"""
     try:
-        response = requests.get(request.build_absolute_uri('/api/analysis/fbo/'), timeout=30)
-        data = response.json()
+        data = _build_fbo_analysis_data()
         
         wb = Workbook()
         wb.remove(wb.active)

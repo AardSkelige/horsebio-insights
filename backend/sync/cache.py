@@ -2,8 +2,13 @@
 
 import time
 from asgiref.sync import sync_to_async
+from django.db import DatabaseError
 from .logger import logger
 from .models import ProcessingPlanProduct
+
+
+class ProductDetailsFetchError(RuntimeError):
+    """Temporary/API failure while resolving a product; safe to retry later."""
 
 
 class MaterialRegistry:
@@ -54,6 +59,8 @@ class MaterialRegistry:
                     self.product_materials[product_id] = []
             except Exception as e:
                 logger.error(f"Error getting materials for product {product_id}: {str(e)}")
+                if isinstance(e, DatabaseError):
+                    raise
                 return []
 
         return self.product_materials.get(product_id, [])
@@ -81,8 +88,9 @@ class ProductCache:
                     return None
             except Exception as e:
                 logger.error(f"Error fetching {'material' if is_material else 'product'} details: {str(e)}")
-                self.missed_products.add(product_id)
-                return None
+                # A network/API failure is not proof that the product is absent.
+                # Do not poison the negative cache and let the sync fail visibly.
+                raise ProductDetailsFetchError(str(e)) from e
 
         return self.cache.get(product_id)
 

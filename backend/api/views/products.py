@@ -15,6 +15,7 @@ from core.models import (
     RawMaterialUsage
 )
 from api.exceptions import NotFoundError, DataProcessingError
+from api.serializers import ListQuerySerializer
 
 import logging
 logger = logging.getLogger(__name__)
@@ -22,16 +23,23 @@ logger = logging.getLogger(__name__)
 @api_view(['GET'])
 def product_data(request):
     """API endpoint для получения данных по товарам с фильтрацией"""
+    params = ListQuerySerializer.from_query_params(
+        request.query_params,
+        default_sort_field='total_quantity',
+        allowed_sort_fields={
+            'name', 'subgroup', 'quantity', 'total_quantity',
+            'average_price', 'total_sum', 'shipments_count',
+        },
+    )
     try:
-        # Получаем параметры фильтрации
-        page = int(request.GET.get('page', 1))
-        page_size = int(request.GET.get('pageSize', 10))
-        search = request.GET.get('search', '').strip()
-        subgroup = request.GET.get('subgroup', '').strip()
-        start_date = request.GET.get('startDate')
-        end_date = request.GET.get('endDate')
-        sort_field = request.GET.get('sortField', 'total_quantity')
-        sort_order = request.GET.get('sortOrder', 'desc')
+        page = params['page']
+        page_size = params['page_size']
+        search = params['search'].strip()
+        subgroup = params['subgroup'].strip()
+        start_date = params.get('start_date')
+        end_date = params.get('end_date')
+        sort_field = params['sort_field']
+        sort_order = params['sort_order']
 
         # Базовый QuerySet для товаров с исключением пустых подгрупп
         products_query = Product.objects.filter(
@@ -46,8 +54,8 @@ def product_data(request):
             search_query = Q()
             for word in search_words:
                 word_query = (
-                    Q(name__iregex=f'(?i){word}') |
-                    Q(article__iregex=f'(?i){word}')
+                    Q(name__icontains=word) |
+                    Q(article__icontains=word)
                 )
                 search_query &= word_query
             products_query = products_query.filter(search_query)
@@ -59,26 +67,18 @@ def product_data(request):
         shipments_query = ShipmentItem.objects.all()
         
         if start_date:
-            try:
-                start_date = datetime.strptime(start_date, '%Y-%m-%d')
-                start_date = timezone.make_aware(start_date, timezone.get_current_timezone())
-                shipments_query = shipments_query.filter(
-                    shipment__date__gte=start_date
-                )
-            except ValueError:
-                pass
+            start_date = timezone.make_aware(
+                datetime.combine(start_date, datetime.min.time()),
+                timezone.get_current_timezone(),
+            )
+            shipments_query = shipments_query.filter(shipment__date__gte=start_date)
 
         if end_date:
-            try:
-                end_date = datetime.strptime(end_date, '%Y-%m-%d')
-                # Make end_date inclusive by adding 23:59:59
-                end_date = end_date.replace(hour=23, minute=59, second=59)
-                end_date = timezone.make_aware(end_date, timezone.get_current_timezone())
-                shipments_query = shipments_query.filter(
-                    shipment__date__lte=end_date
-                )
-            except ValueError:
-                pass
+            end_date = timezone.make_aware(
+                datetime.combine(end_date, datetime.max.time()),
+                timezone.get_current_timezone(),
+            )
+            shipments_query = shipments_query.filter(shipment__date__lte=end_date)
 
         # Аггрегируем данные по товарам
         products_data = products_query.annotate(
@@ -162,6 +162,7 @@ def product_data(request):
         else:
             sort_mapping = {
                 'quantity': 'total_quantity',
+                'total_quantity': 'total_quantity',
                 'average_price': 'average_price',
                 'total_sum': 'total_sum',
                 'shipments_count': 'shipments_count'

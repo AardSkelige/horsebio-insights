@@ -69,46 +69,58 @@ class PaginationMixin:
         offset = 0
 
         while True:
-            try:
-                # Set pagination params
-                page_params = params.copy()
-                page_params['limit'] = limit
-                page_params['offset'] = offset
+            # Set pagination params
+            page_params = params.copy()
+            page_params['limit'] = limit
+            page_params['offset'] = offset
 
-                # Use self.get() if available (with retry logic), else use requests.get
+            try:
+                # Use self.get() if available (with retry logic), else use requests.get.
                 if hasattr(self, 'get'):
                     response = self.get(url, headers=self.headers, params=page_params)
                 else:
-                    response = requests.get(url, headers=self.headers, params=page_params, timeout=60)
-                    response.raise_for_status()
+                    response = requests.get(
+                        url,
+                        headers=self.headers,
+                        params=page_params,
+                        timeout=60,
+                    )
 
+                # Keep this check even for clients whose get() normally performs it.
+                # It also makes the contract safe for alternative clients and tests.
+                response.raise_for_status()
                 data = response.json()
+                if not isinstance(data, dict):
+                    raise ValueError(f"Expected JSON object from {url}")
+
                 rows = data.get(data_key, [])
+                if not isinstance(rows, list):
+                    raise ValueError(f"Expected JSON list in '{data_key}' from {url}")
+            except Exception:
+                logger.exception(f"Error fetching data at offset {offset} from {url}")
+                # Returning all_items here would make an incomplete sync look successful.
+                raise
 
-                if not rows:
-                    break
-
-                # Apply transformation if provided
-                if transform:
-                    rows = [transform(item) for item in rows]
-
-                all_items.extend(rows)
-
-                # Check if we've reached the maximum
-                if max_items and len(all_items) >= max_items:
-                    all_items = all_items[:max_items]
-                    break
-
-                # Check if we've fetched all items
-                if len(rows) < limit:
-                    break
-
-                offset += limit
-                logger.debug(f"Retrieved {len(all_items)} items so far from {url}...")
-
-            except Exception as e:
-                logger.error(f"Error fetching data at offset {offset} from {url}: {str(e)}")
+            if not rows:
                 break
+
+            # Apply transformation if provided
+            if transform:
+                rows = [transform(item) for item in rows]
+
+            all_items.extend(rows)
+
+            # Check if we've reached the maximum
+            if max_items and len(all_items) >= max_items:
+                all_items = all_items[:max_items]
+                break
+
+            # Check if we've fetched all items
+            if len(rows) < limit:
+                break
+
+            offset += limit
+            logger.debug(f"Retrieved {len(all_items)} items so far from {url}...")
 
         return all_items
 
@@ -116,7 +128,7 @@ class PaginationMixin:
         self,
         url: str,
         params: Optional[Dict[str, Any]] = None
-    ) -> Optional[Dict[str, Any]]:
+    ) -> Dict[str, Any]:
         """
         Execute a single GET request to the MoySklad API.
 
@@ -125,19 +137,22 @@ class PaginationMixin:
             params: Query parameters
 
         Returns:
-            Response JSON or None if request fails
+            Response JSON. Transport, HTTP and JSON errors are propagated.
         """
         try:
             if hasattr(self, 'get'):
                 response = self.get(url, headers=self.headers, params=params)
             else:
                 response = requests.get(url, headers=self.headers, params=params, timeout=60)
-                response.raise_for_status()
 
-            return response.json()
-        except Exception as e:
-            logger.error(f"Error in request to {url}: {str(e)}")
-            return None
+            response.raise_for_status()
+            data = response.json()
+            if not isinstance(data, dict):
+                raise ValueError(f"Expected JSON object from {url}")
+            return data
+        except Exception:
+            logger.exception(f"Error in request to {url}")
+            raise
 
 
 def format_date_filter(start_date, end_date, field: str = 'moment') -> str:

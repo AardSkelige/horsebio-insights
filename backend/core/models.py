@@ -1,3 +1,5 @@
+import uuid
+
 from django.db import models
 
 # Определяем основные группы
@@ -387,6 +389,7 @@ class SyncLock(models.Model):
     is_locked = models.BooleanField(default=False, verbose_name='Заблокировано')
     locked_at = models.DateTimeField(null=True, blank=True, verbose_name='Время блокировки')
     locked_by = models.CharField(max_length=255, null=True, blank=True, verbose_name='Источник блокировки')
+    lock_token = models.UUIDField(null=True, blank=True, editable=False, verbose_name='Токен владельца')
 
     class Meta:
         db_table = 'parser_synclock'
@@ -401,6 +404,9 @@ class SyncLock(models.Model):
     def acquire_lock(cls, lock_type: str, locked_by: str = None, timeout_minutes: int = 60):
         """
         Атомарное получение блокировки с использованием SELECT FOR UPDATE NOWAIT.
+
+        Возвращает уникальный токен владельца или ``None``, если блокировка
+        занята. Токен необходимо передавать при продлении и освобождении lock.
         """
         from django.db import transaction
         from django.utils import timezone
@@ -417,38 +423,61 @@ class SyncLock(models.Model):
                     }
                 )
 
-                if lock.is_locked and lock.locked_at:
-                    lock_age = timezone.now() - lock.locked_at
-                    if lock_age > timedelta(minutes=timeout_minutes):
+                if lock.is_locked:
+                    lock_age = timezone.now() - lock.locked_at if lock.locked_at else None
+                    if lock_age is None or lock_age > timedelta(minutes=timeout_minutes):
                         lock.is_locked = False
 
                 if lock.is_locked:
-                    return False
+                    return None
 
+                lock_token = uuid.uuid4()
                 lock.is_locked = True
                 lock.locked_at = timezone.now()
                 lock.locked_by = locked_by
-                lock.save()
+                lock.lock_token = lock_token
+                lock.save(update_fields=['is_locked', 'locked_at', 'locked_by', 'lock_token'])
 
-                return True
+                return str(lock_token)
 
+        except Exception:
+            return None
+
+    @classmethod
+    def refresh_lock(cls, lock_type: str, lock_token: str) -> bool:
+        """Продлевает lease, только если вызывающий процесс всё ещё владелец."""
+        from django.utils import timezone
+
+        if not lock_token:
+            return False
+
+        try:
+            updated = cls.objects.filter(
+                lock_type=lock_type,
+                is_locked=True,
+                lock_token=lock_token,
+            ).update(locked_at=timezone.now())
+            return updated == 1
         except Exception:
             return False
 
     @classmethod
-    def release_lock(cls, lock_type: str):
-        """Освобождение блокировки."""
-        from django.db import transaction
+    def release_lock(cls, lock_type: str, lock_token: str) -> bool:
+        """Освобождает блокировку, только если токен принадлежит владельцу."""
+        if not lock_token:
+            return False
 
-        with transaction.atomic():
-            try:
-                lock = cls.objects.select_for_update().get(lock_type=lock_type)
-                lock.is_locked = False
-                lock.locked_at = None
-                lock.locked_by = None
-                lock.save()
-            except cls.DoesNotExist:
-                pass
+        updated = cls.objects.filter(
+            lock_type=lock_type,
+            is_locked=True,
+            lock_token=lock_token,
+        ).update(
+            is_locked=False,
+            locked_at=None,
+            locked_by=None,
+            lock_token=None,
+        )
+        return updated == 1
 
     @classmethod
     def is_lock_held(cls, lock_type: str) -> bool:

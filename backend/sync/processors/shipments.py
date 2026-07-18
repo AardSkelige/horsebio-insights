@@ -2,7 +2,7 @@
 
 import asyncio
 from decimal import Decimal
-from django.db import transaction
+from django.db import DatabaseError, transaction
 from django.utils.dateparse import parse_datetime
 from django.utils import timezone
 from asgiref.sync import sync_to_async
@@ -12,6 +12,7 @@ from sync.models import (
 )
 from sync.logger import logger, structured_logger
 from sync.sync_task import TaskStatus
+from sync.cache import ProductDetailsFetchError
 from sync.utils import get_group_from_pathname
 
 
@@ -54,6 +55,8 @@ class ShipmentStorage:
                 return shipment
         except Exception as e:
             logger.error(f"Error saving shipment: {str(e)}")
+            if isinstance(e, (DatabaseError, ProductDetailsFetchError)):
+                raise
             return None
 
     @sync_to_async
@@ -144,6 +147,8 @@ class ShipmentStorage:
 
         except Exception as e:
             logger.error(f"Error saving shipment item: {str(e)}")
+            if isinstance(e, (DatabaseError, ProductDetailsFetchError)):
+                raise
             return None
 
     @sync_to_async
@@ -166,6 +171,8 @@ class ShipmentStorage:
                 return count
         except Exception as e:
             logger.error(f"Error cleaning up orphaned items: {str(e)}")
+            if isinstance(e, DatabaseError):
+                raise
             return 0
 
 
@@ -362,20 +369,13 @@ class ShipmentProcessor:
                         for idx, shipment_data in enumerate(batch)
                     ]
 
-                    try:
-                        results = await asyncio.gather(*tasks, return_exceptions=True)
+                    results = await asyncio.gather(*tasks)
 
-                        for result in results:
-                            if isinstance(result, Exception):
-                                structured_logger.error(f"Ошибка при обработке отгрузки: {result}", indent=3)
-                            elif isinstance(result, int):
-                                total_positions_processed += result
-                                total_shipments_processed += 1
+                    for result in results:
+                        total_positions_processed += result
+                        total_shipments_processed += 1
 
-                        await asyncio.sleep(0.4)
-
-                    except Exception as e:
-                        structured_logger.error(f"Ошибка при обработке пакета отгрузок: {str(e)}", indent=3)
+                    await asyncio.sleep(0.4)
 
                 self.task_instance.update_progress(
                     message=(
@@ -400,3 +400,4 @@ class ShipmentProcessor:
                 message="Ошибка при обработке отгрузок",
                 error=str(e)
             )
+            raise

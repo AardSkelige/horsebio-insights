@@ -3,6 +3,7 @@
 import { createContext, useContext, useState, useRef, useCallback, useEffect } from 'react';
 import PropTypes from 'prop-types';
 import { parserAPI } from '../utils/api';
+import { getFreshAuthStatus, subscribeAuth } from '../utils/authSession';
 
 const LoadingContext = createContext();
 
@@ -87,23 +88,7 @@ export const LoadingProvider = ({ children }) => {
 
     const cancelLoading = useCallback(async () => {
         try {
-            const csrfResponse = await parserAPI.getCsrfToken();
-            if (!csrfResponse?.csrfToken) {
-                throw new Error('Не удалось получить CSRF токен для отмены');
-            }
-
-            const response = await fetch('/parser/stop-loading/', {
-                method: 'POST',
-                credentials: 'include',
-                headers: {
-                    'Content-Type': 'application/json',
-                    'X-CSRFToken': csrfResponse.csrfToken
-                }
-            });
-
-            if (!response.ok) {
-                throw new Error('Ошибка при остановке загрузки');
-            }
+            await parserAPI.stopLoading();
 
             resetStates();
 
@@ -221,24 +206,39 @@ export const LoadingProvider = ({ children }) => {
         };
     }, [isLoading, cleanupEventSource, handleLoadingComplete]);
 
-    // Проверка состояния при загрузке приложения
+    // Проверяем фоновую задачу только для подтверждённой пользовательской
+    // сессии. LoadingProvider также оборачивает публичную страницу входа, где
+    // запрос к защищённому /parser/task-status/ создавал лишний 401 в console.
     useEffect(() => {
+        let isMounted = true;
+        let wasAuthenticated = getFreshAuthStatus().isAuthenticated === true;
+
         const checkTaskStatus = async () => {
             try {
-                const response = await fetch('/parser/task-status/');
-                const data = await response.json();
-                
-                if (data.is_running && data.state) {
+                const data = await parserAPI.getTaskStatus();
+
+                if (isMounted && data.is_running && data.state) {
                     setIsLoading(true);
                     setLoadingProgress(data.state);
                     setLoadingKey(prev => prev + 1);
                 }
             } catch (error) {
-                console.error('Error checking task status:', error);
+                if (isMounted) console.error('Error checking task status:', error);
             }
         };
 
-        checkTaskStatus();
+        if (wasAuthenticated) checkTaskStatus();
+
+        const unsubscribe = subscribeAuth((status) => {
+            const isAuthenticated = status.isAuthenticated === true;
+            if (isAuthenticated && !wasAuthenticated) checkTaskStatus();
+            wasAuthenticated = isAuthenticated;
+        });
+
+        return () => {
+            isMounted = false;
+            unsubscribe();
+        };
     }, []);
 
     const value = {

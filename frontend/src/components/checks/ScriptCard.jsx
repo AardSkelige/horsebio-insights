@@ -5,6 +5,7 @@ import {
 } from 'lucide-react';
 import { SEV, sevOf, relTime, plural } from './checksShared';
 import InfoTip from './InfoTip';
+import './ScriptCard.css';
 
 // Что проверяем / как проверяем / подробности в «?» — по каждому скрипту
 const SCRIPT_META = {
@@ -142,7 +143,7 @@ function HealthChecksStrip({ checks }) {
 }
 HealthChecksStrip.propTypes = { checks: PropTypes.array.isRequired };
 
-export function accountBadge(account) {
+export function AccountBadge({ account }) {
     return (
         <span style={{
             fontSize: 10.5, fontWeight: 700, letterSpacing: '0.04em', color: 'var(--muted)',
@@ -151,6 +152,7 @@ export function accountBadge(account) {
         }}>{account}</span>
     );
 }
+AccountBadge.propTypes = { account: PropTypes.string.isRequired };
 
 /** Строка скрипта: иконка, название, бейдж аккаунта, «?», ниже — что и как проверяем,
  *  справа — содержательные цифры и время. Единый формат для всех строк страницы. */
@@ -165,7 +167,7 @@ export default function ScriptCard({ script, onOpen }) {
             tabIndex={0}
             onClick={() => onOpen(script.id)}
             onKeyDown={(e) => { if (e.key === 'Enter') onOpen(script.id); }}
-            className="group"
+            className="group checks-script-card"
             style={{
                 width: '100%', textAlign: 'left',
                 background: 'var(--surface-card)', border: '1px solid var(--hairline)',
@@ -175,12 +177,12 @@ export default function ScriptCard({ script, onOpen }) {
             onMouseEnter={(e) => { e.currentTarget.style.background = 'var(--surface-cream-strong)'; e.currentTarget.style.borderColor = 'var(--primary)'; }}
             onMouseLeave={(e) => { e.currentTarget.style.background = 'var(--surface-card)'; e.currentTarget.style.borderColor = 'var(--hairline)'; }}
         >
-            <div style={{ display: 'flex', alignItems: 'center', gap: 14 }}>
-                <div style={{ minWidth: 0, flex: 1 }}>
+            <div className="checks-script-card__row">
+                <div className="checks-script-card__content">
                     <div style={{ display: 'flex', alignItems: 'center', gap: 7, fontSize: 14.5, fontWeight: 600, color: 'var(--ink)', lineHeight: 1.3 }}>
                         <Icon size={16} style={{ color: 'var(--muted)', flexShrink: 0 }} />
                         {script.name}
-                        {accountBadge(script.account)}
+                        <AccountBadge account={script.account} />
                         {meta.hint && <InfoTip text={meta.hint} width={310} />}
                     </div>
                     <div style={{ fontSize: 12, color: 'var(--muted)', marginTop: 3, lineHeight: 1.45 }}>
@@ -192,12 +194,19 @@ export default function ScriptCard({ script, onOpen }) {
                         ) : script.description}
                     </div>
                 </div>
-                <StatusLine script={script} />
-                <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5, fontSize: 12, color: 'var(--muted-soft)', whiteSpace: 'nowrap', flexShrink: 0 }}>
-                    <Clock size={12} />
-                    {script.last_run ? relTime(script.last_run.finished_at) : script.schedule}
-                </span>
-                <ChevronRight size={17} style={{ color: 'var(--muted-soft)', flexShrink: 0 }} />
+                <div className="checks-script-card__meta">
+                    <div className="checks-script-card__status">
+                        <StatusLine script={script} />
+                    </div>
+                    <span
+                        className="checks-script-card__timing"
+                        aria-label={script.last_run ? 'Последний запуск' : 'Расписание'}
+                    >
+                        <Clock size={13} />
+                        {script.last_run ? relTime(script.last_run.finished_at) : script.schedule}
+                    </span>
+                </div>
+                <ChevronRight className="checks-script-card__arrow" size={17} />
             </div>
             {healthChecks && <HealthChecksStrip checks={healthChecks} />}
         </div>

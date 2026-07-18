@@ -13,13 +13,6 @@ vi.mock('../../api/productionApi', () => ({
     },
 }));
 
-// Компонент работает с сырым fetch Response — эмулируем минимально необходимое
-const jsonResponse = (data, ok = true) => ({
-    ok,
-    headers: { get: () => 'application/json' },
-    json: async () => data,
-});
-
 const PRODUCT = { article: 'HB-001', name: 'Шампунь для лошадей', has_processing_plan: true };
 
 const CALC_RESULT = {
@@ -82,7 +75,7 @@ describe('ProductionCalculator — расчёт', () => {
         await user.clear(qty);
         await user.type(qty, '3');
 
-        productionApi.calculateFromItems.mockResolvedValue(jsonResponse(CALC_RESULT));
+        productionApi.calculateFromItems.mockResolvedValue(CALC_RESULT);
         await user.click(screen.getByText('Рассчитать компоненты'));
 
         expect(productionApi.calculateFromItems).toHaveBeenCalledWith([{ article: 'HB-001', quantity: 3 }]);
@@ -96,7 +89,7 @@ describe('ProductionCalculator — расчёт', () => {
         const user = userEvent.setup();
         render(<ProductionCalculator />);
         await addProduct(user);
-        productionApi.calculateFromItems.mockResolvedValue(jsonResponse(CALC_RESULT));
+        productionApi.calculateFromItems.mockResolvedValue(CALC_RESULT);
         await user.click(screen.getByText('Рассчитать компоненты'));
 
         await user.click(await screen.findByText('ТК Шампунь'));
@@ -118,7 +111,7 @@ describe('ProductionCalculator — расчёт', () => {
         const user = userEvent.setup();
         render(<ProductionCalculator />);
         await addProduct(user);
-        productionApi.calculateFromItems.mockResolvedValue(jsonResponse({ success: false, error: 'Техкарты не найдены' }, false));
+        productionApi.calculateFromItems.mockResolvedValue({ success: false, error: 'Техкарты не найдены' });
         await user.click(screen.getByText('Рассчитать компоненты'));
         expect(await screen.findByText('Техкарты не найдены')).toBeInTheDocument();
     });

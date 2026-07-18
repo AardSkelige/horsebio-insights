@@ -1,5 +1,6 @@
-// src/api/statsApi.js
+import api from '../utils/api';
+
 export const statsApi = {
     get: (signal) =>
-        fetch('/api/stats/', { credentials: 'include', signal }).then(r => r.json()),
+        api.get('/stats/', { signal }),
 };

@@ -59,7 +59,7 @@ const TONE = {
     ok: 'var(--success)', critical: 'var(--error)', warning: '#c47d2f', neutral: 'var(--ink)',
 };
 // Цифры — по дизайн-системе: сериф (Cormorant) weight 400, отрицательный трекинг, lining-nums
-export const numStyle = (color, size = 28) => ({
+const numStyle = (color, size = 28) => ({
     fontFamily: 'var(--serif)', fontSize: size, fontWeight: 400, letterSpacing: '-0.02em',
     lineHeight: 1.15, color, fontVariantNumeric: 'lining-nums', fontFeatureSettings: '"lnum" 1',
 });

@@ -1,6 +1,6 @@
 # sync/processors/processing_plans.py
 
-from django.db import transaction
+from django.db import DatabaseError, transaction
 from django.utils.dateparse import parse_datetime
 from django.utils import timezone
 from asgiref.sync import sync_to_async
@@ -10,6 +10,7 @@ from sync.models import (
 )
 from sync.logger import logger, structured_logger
 from sync.sync_task import TaskStatus
+from sync.cache import ProductDetailsFetchError
 from sync.utils import get_group_from_pathname
 
 
@@ -38,6 +39,8 @@ class ProcessingPlanStorage:
                 return processing_plan
         except Exception as e:
             logger.error(f"Error saving processing plan: {str(e)}")
+            if isinstance(e, (DatabaseError, ProductDetailsFetchError)):
+                raise
             return None
 
     @sync_to_async
@@ -94,6 +97,8 @@ class ProcessingPlanStorage:
 
         except Exception as e:
             logger.error(f"Error saving processing plan materials: {str(e)}")
+            if isinstance(e, (DatabaseError, ProductDetailsFetchError)):
+                raise
             return 0
 
     @sync_to_async
@@ -159,6 +164,8 @@ class ProcessingPlanStorage:
 
         except Exception as e:
             logger.error(f"Error saving processing plan products: {str(e)}")
+            if isinstance(e, (DatabaseError, ProductDetailsFetchError)):
+                raise
             return 0
 
 
@@ -274,3 +281,4 @@ class ProcessingPlanProcessor:
                 message="Ошибка при обработке техкарт",
                 error=str(e)
             )
+            raise

@@ -1,27 +1,20 @@
 // src/components/ozon-analytics/api/ozonApi.js
-import axios from 'axios';
+import api, { downloadBlob } from '../../../utils/api';
 
-const BASE_URL = '/api/ozon';
-
-// File download via redirect - no API call needed
 export const exportAdvertisingData = async (startDate, endDate) => {
-    window.location.href = `${BASE_URL}/advertising/export/?startDate=${startDate}&endDate=${endDate}`;
+    const blob = await api.get('/ozon/advertising/export/', {
+        params: { startDate, endDate },
+        responseType: 'blob',
+    });
+    downloadBlob(blob, `advertising_${startDate}_${endDate}.xlsx`);
 };
 
 export const exportSalesData = async (startDate, endDate) => {
-    window.location.href = `${BASE_URL}/sales/export/?startDate=${startDate}&endDate=${endDate}`;
-};
-
-// Helper to download blob response as file
-const downloadBlob = (blob, filename) => {
-    const url = window.URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = filename;
-    document.body.appendChild(a);
-    a.click();
-    document.body.removeChild(a);
-    window.URL.revokeObjectURL(url);
+    const blob = await api.get('/ozon/sales/export/', {
+        params: { startDate, endDate },
+        responseType: 'blob',
+    });
+    downloadBlob(blob, `sales_${startDate}_${endDate}.xlsx`);
 };
 
 export const generateReport = async (adsFile, productsFile) => {
@@ -29,12 +22,11 @@ export const generateReport = async (adsFile, productsFile) => {
     formData.append('ads_file', adsFile);
     formData.append('products_file', productsFile);
 
-    const response = await axios.post(`${BASE_URL}/report/`, formData, {
+    const blob = await api.post('/ozon/report/', formData, {
         responseType: 'blob',
-        headers: { 'Content-Type': 'multipart/form-data' }
     });
 
-    downloadBlob(response.data, `DRR_отчет_эффективность_рекламы_${new Date().toISOString().slice(0, 10)}.xlsx`);
+    downloadBlob(blob, `DRR_отчет_эффективность_рекламы_${new Date().toISOString().slice(0, 10)}.xlsx`);
 };
 
 export const processCompetitorsInfo = async (file) => {
@@ -42,12 +34,11 @@ export const processCompetitorsInfo = async (file) => {
     formData.append('file', file);
 
     try {
-        const response = await axios.post(`${BASE_URL}/competitors/process/`, formData, {
+        const blob = await api.post('/ozon/competitors/process/', formData, {
             responseType: 'blob',
-            headers: { 'Content-Type': 'multipart/form-data' }
         });
 
-        downloadBlob(response.data, `competitors_info_${new Date().toISOString().slice(0, 10)}.xlsx`);
+        downloadBlob(blob, `competitors_info_${new Date().toISOString().slice(0, 10)}.xlsx`);
         return true;
     } catch (error) {
         console.error('Ошибка при обработке информации о конкурентах:', error);
@@ -60,12 +51,11 @@ export const processStockAvailability = async (file) => {
     formData.append('file', file);
 
     try {
-        const response = await axios.post(`${BASE_URL}/stock/process/`, formData, {
+        const blob = await api.post('/ozon/stock/process/', formData, {
             responseType: 'blob',
-            headers: { 'Content-Type': 'multipart/form-data' }
         });
 
-        downloadBlob(response.data, `stock_availability_${new Date().toISOString().slice(0, 10)}.xlsx`);
+        downloadBlob(blob, `stock_availability_${new Date().toISOString().slice(0, 10)}.xlsx`);
         return true;
     } catch (error) {
         console.error('Ошибка при обработке информации о доступности товаров:', error);

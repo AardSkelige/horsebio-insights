@@ -17,6 +17,7 @@ urlpatterns = [
     path('auth/check/', auth.check_auth, name='check_auth'),
     path('auth/activity/', auth.activity_view, name='activity'),
     path('auth/track/', auth.track_page_view, name='track_page_view'),
+    path('auth/home/', auth.home_preferences_view, name='home_preferences'),
     path('auth/usage/', auth.usage_view, name='usage'),
     path('auth/admin-analytics/', auth.admin_analytics_view, name='admin_analytics'),
     path('auth/sessions/', auth.sessions_view, name='sessions'),

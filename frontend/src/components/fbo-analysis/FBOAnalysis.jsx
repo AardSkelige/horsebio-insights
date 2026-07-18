@@ -54,9 +54,7 @@ const FBOAnalysis = () => {
     const handleExport = async () => {
         setIsExporting(true);
         try {
-            const response = await analysisApi.fbo.export();
-            if (!response.ok) throw new Error('Ошибка при экспорте данных');
-            const blob = await response.blob();
+            const blob = await analysisApi.fbo.export();
             const url = window.URL.createObjectURL(blob);
             const link = document.createElement('a');
             const date = new Date().toLocaleDateString('ru-RU').replace(/\./g, '');

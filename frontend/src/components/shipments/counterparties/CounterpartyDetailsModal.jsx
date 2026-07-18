@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
 import PropTypes from 'prop-types';
+import { counterpartiesApi } from '../../../api/counterpartiesApi';
 import { X, ChevronDown, Loader2, AlertCircle } from 'lucide-react';
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend } from 'recharts';
 import { CounterpartyPropTypes } from './types';
@@ -112,11 +113,7 @@ const CounterpartyDetailsModal = ({ counterparty, visible, onClose, dateRange })
             const params = new URLSearchParams();
             if (dateRange?.startDate) params.append('startDate', dateRange.startDate);
             if (dateRange?.endDate)   params.append('endDate',   dateRange.endDate);
-            const qs  = params.toString();
-            const url = `/api/counterparties/${counterparty.id}/${qs ? `?${qs}` : ''}`;
-            const res = await fetch(url);
-            if (!res.ok) throw new Error('Ошибка загрузки данных');
-            const data = await res.json();
+            const data = await counterpartiesApi.getDetails(counterparty.id, params);
             if (data.status === 'success' && data.data) setDetails(data.data);
             else throw new Error(data.message || 'Ошибка получения данных');
         } catch (err) {

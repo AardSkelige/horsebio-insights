@@ -10,12 +10,6 @@ vi.mock('../../api/analysisApi', () => ({
     },
 }));
 
-const jsonResponse = (data, ok = true) => ({
-    ok,
-    headers: { get: () => 'application/json' },
-    json: async () => data,
-});
-
 // toLocaleString('ru-RU') разделяет тысячи неразрывными пробелами
 const byMoney = (expected) => (content) => content.replace(/\u00A0/g, ' ') === expected;
 
@@ -46,7 +40,7 @@ describe('CashFlowReport', () => {
 
     it('показывает итоговые карточки с правильными суммами', async () => {
         const user = userEvent.setup();
-        analysisApi.cashFlow.get.mockResolvedValue(jsonResponse({ success: true, data: DATA }));
+        analysisApi.cashFlow.get.mockResolvedValue({ success: true, data: DATA });
         render(<CashFlowReport />);
         await fillDatesAndFetch(user);
 
@@ -60,7 +54,7 @@ describe('CashFlowReport', () => {
 
     it('каналы отсортированы по убыванию суммы, нулевые скрыты', async () => {
         const user = userEvent.setup();
-        analysisApi.cashFlow.get.mockResolvedValue(jsonResponse({ success: true, data: DATA }));
+        analysisApi.cashFlow.get.mockResolvedValue({ success: true, data: DATA });
         render(<CashFlowReport />);
         await fillDatesAndFetch(user);
 
@@ -73,7 +67,7 @@ describe('CashFlowReport', () => {
 
     it('статья расходов со ссылкой ведёт в МойСклад', async () => {
         const user = userEvent.setup();
-        analysisApi.cashFlow.get.mockResolvedValue(jsonResponse({ success: true, data: DATA }));
+        analysisApi.cashFlow.get.mockResolvedValue({ success: true, data: DATA });
         render(<CashFlowReport />);
         await fillDatesAndFetch(user);
 
@@ -84,7 +78,7 @@ describe('CashFlowReport', () => {
 
     it('ошибка от сервера показывается пользователю', async () => {
         const user = userEvent.setup();
-        analysisApi.cashFlow.get.mockResolvedValue(jsonResponse({ success: false, error: 'Период слишком большой' }));
+        analysisApi.cashFlow.get.mockResolvedValue({ success: false, error: 'Период слишком большой' });
         render(<CashFlowReport />);
         await fillDatesAndFetch(user);
         expect(await screen.findByText('Период слишком большой')).toBeInTheDocument();

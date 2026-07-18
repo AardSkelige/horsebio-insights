@@ -17,6 +17,7 @@ from django.utils import timezone
 from datetime import timedelta
 from rest_framework.response import Response
 from api.exceptions import NotFoundError, DataProcessingError, ValidationError
+from api.serializers import ListQuerySerializer
 
 import logging
 logger = logging.getLogger(__name__)
@@ -24,35 +25,39 @@ logger = logging.getLogger(__name__)
 @api_view(['GET'])
 def counterparty_data(request):
     """API endpoint для получения данных по контрагентам с фильтрацией и пагинацией"""
+    params = ListQuerySerializer.from_query_params(
+        request.query_params,
+        default_sort_field='total_sales',
+        allowed_sort_fields={
+            'name', 'total_sales', 'shipments_count',
+            'total_products', 'last_shipment',
+        },
+    )
     try:
-        # Получаем параметры фильтрации
-        page = int(request.GET.get('page', 1))
-        page_size = int(request.GET.get('pageSize', 10))
-        search = request.GET.get('search', '').strip()
-        start_date = request.GET.get('startDate')
-        end_date = request.GET.get('endDate')
-        sort_field = request.GET.get('sortField', 'total_sales')
-        sort_order = request.GET.get('sortOrder', 'desc')
+        page = params['page']
+        page_size = params['page_size']
+        search = params['search'].strip()
+        start_date = params.get('start_date')
+        end_date = params.get('end_date')
+        sort_field = params['sort_field']
+        sort_order = params['sort_order']
 
         # Базовый QuerySet для отгрузок с фильтрацией по датам
         shipments_query = Shipment.objects.all()
         
         if start_date:
-            try:
-                start_date = datetime.strptime(start_date, '%Y-%m-%d')
-                start_date = timezone.make_aware(start_date, timezone.get_current_timezone())
-                shipments_query = shipments_query.filter(date__gte=start_date)
-            except ValueError:
-                pass
+            start_date = timezone.make_aware(
+                datetime.combine(start_date, datetime.min.time()),
+                timezone.get_current_timezone(),
+            )
+            shipments_query = shipments_query.filter(date__gte=start_date)
 
         if end_date:
-            try:
-                end_date = datetime.strptime(end_date, '%Y-%m-%d')
-                end_date = end_date.replace(hour=23, minute=59, second=59)
-                end_date = timezone.make_aware(end_date, timezone.get_current_timezone())
-                shipments_query = shipments_query.filter(date__lte=end_date)
-            except ValueError:
-                pass
+            end_date = timezone.make_aware(
+                datetime.combine(end_date, datetime.max.time()),
+                timezone.get_current_timezone(),
+            )
+            shipments_query = shipments_query.filter(date__lte=end_date)
 
         # Получаем ID контрагентов с отгрузками за период
         counterparty_ids = shipments_query.values_list('counterparty_id', flat=True).distinct()
@@ -86,7 +91,7 @@ def counterparty_data(request):
             search_words = search.split()
             search_query = Q()
             for word in search_words:
-                word_query = Q(name__iregex=f'(?i){word}')
+                word_query = Q(name__icontains=word)
                 search_query &= word_query
             counterparties_query = counterparties_query.filter(search_query)
 

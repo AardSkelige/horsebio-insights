@@ -394,11 +394,66 @@ class SortingSerializer(serializers.Serializer):
     sort_field = serializers.CharField(required=False, default='name')
     sort_order = serializers.ChoiceField(choices=['asc', 'desc'], default='desc')
 
+    def validate_sort_field(self, value: str) -> str:
+        allowed_fields = self.context.get('allowed_sort_fields')
+        if allowed_fields is not None and value not in allowed_fields:
+            raise serializers.ValidationError("Unsupported sort field")
+        return value
+
 
 class SearchFilterSerializer(serializers.Serializer):
     """Serializer for search and filter input validation."""
     search = serializers.CharField(required=False, allow_blank=True, default='')
     group = serializers.CharField(required=False, allow_blank=True, default='')
+
+
+class ListQuerySerializer(
+    DateRangeSerializer,
+    PaginationSerializer,
+    SortingSerializer,
+    SearchFilterSerializer,
+):
+    """Единая валидация query-параметров аналитических списков.
+
+    API исторически использует camelCase, а базовые serializers — snake_case.
+    ``from_query_params`` централизованно выполняет это преобразование, чтобы
+    views больше не разбирали числа и даты вручную.
+    """
+    subgroup = serializers.CharField(required=False, allow_blank=True, default='')
+
+    @classmethod
+    def from_query_params(
+        cls,
+        query_params,
+        *,
+        default_sort_field: str,
+        allowed_sort_fields,
+    ) -> Dict[str, Any]:
+        aliases = {
+            'page': ('page',),
+            'page_size': ('pageSize', 'page_size'),
+            'search': ('search',),
+            'group': ('group',),
+            'subgroup': ('subgroup',),
+            'start_date': ('startDate', 'start_date'),
+            'end_date': ('endDate', 'end_date'),
+            'sort_field': ('sortField', 'sort_field'),
+            'sort_order': ('sortOrder', 'sort_order'),
+        }
+        data = {}
+        for target, source_names in aliases.items():
+            for source_name in source_names:
+                if source_name in query_params:
+                    data[target] = query_params.get(source_name)
+                    break
+        data.setdefault('sort_field', default_sort_field)
+
+        serializer = cls(
+            data=data,
+            context={'allowed_sort_fields': set(allowed_sort_fields)},
+        )
+        serializer.is_valid(raise_exception=True)
+        return serializer.validated_data
 
 
 # =============================================================================

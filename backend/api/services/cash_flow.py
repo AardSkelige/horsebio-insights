@@ -40,26 +40,24 @@ def _fetch_operation_pages(operation, filter_from, filter_to, headers):
 
         try:
             response = requests.get(url, headers=headers, timeout=TIMEOUT)
-            if response.status_code == 200:
-                data = response.json()
-                rows = data.get('rows', [])
+            response.raise_for_status()
+            data = response.json()
+        except Exception:
+            # Частичный набор финансовых операций нельзя использовать для отчёта:
+            # вызывающий view преобразует ошибку API в корректный error response.
+            logger.exception("Ошибка получения операций %s", operation)
+            raise
 
-                if not rows:  # Больше нет данных
-                    break
+        rows = data.get('rows', [])
 
-                all_operations.extend(rows)
-                offset += limit
+        if not rows:  # Больше нет данных
+            break
 
-                # Если получили меньше чем limit, значит это последняя страница
-                if len(rows) < limit:
-                    break
+        all_operations.extend(rows)
+        offset += limit
 
-            else:
-                logger.error(f"Ошибка получения {operation}: {response.status_code}")
-                break
-
-        except Exception as e:
-            logger.error(f"Ошибка запроса {operation}: {e}")
+        # Если получили меньше чем limit, значит это последняя страница
+        if len(rows) < limit:
             break
 
     logger.info(f"Итого операций {operation}: {len(all_operations)}")

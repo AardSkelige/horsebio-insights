@@ -20,7 +20,8 @@ class ProductsMixin(PaginationMixin):
             product_id: Product ID
 
         Returns:
-            Product details dict or empty dict if not found
+            Product details dict or empty dict if neither a product nor a
+            variant with this ID exists. Other failures are propagated.
         """
         try:
             # Try to get as regular product
@@ -66,12 +67,11 @@ class ProductsMixin(PaginationMixin):
             return product_data
 
         except requests.exceptions.HTTPError as e:
-            if e.response.status_code != 404:
-                logger.error(f"HTTP error for product {product_id}: {str(e)}")
-            return {}
-        except Exception as e:
-            logger.error(f"Unexpected error for product {product_id}: {str(e)}")
-            return {}
+            logger.error(f"HTTP error for product {product_id}: {str(e)}")
+            raise
+        except Exception:
+            logger.exception(f"Unexpected error for product {product_id}")
+            raise
 
     def _determine_group(self, product_data):
         """

@@ -1,6 +1,6 @@
 import { useEffect, useRef } from 'react';
 import { useLocation } from 'react-router-dom';
-import { getCookie } from '../utils/api';
+import { authApi } from '../api/authApi';
 import NAV_GROUPS from '../components/layout/sidebar/navGroups';
 
 const PATH_NAMES = {};
@@ -17,16 +17,7 @@ const MAX_GAP_MS = 60000; // разрыв больше минуты = сон/ф�
 
 const sendTrack = (path, name, duration, keepalive = false) => {
     if (!path || !name || duration < 2) return;
-    fetch('/api/auth/track/', {
-        method: 'POST',
-        credentials: 'include',
-        keepalive,
-        headers: {
-            'Content-Type': 'application/json',
-            'X-CSRFToken': getCookie('csrftoken') || '',
-        },
-        body: JSON.stringify({ path, name, duration }),
-    }).catch(() => {});
+    authApi.track(path, name, duration, keepalive);
 };
 
 export function usePageTracking() {

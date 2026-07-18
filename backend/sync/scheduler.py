@@ -56,13 +56,15 @@ class AutoSyncScheduler:
         )
 
         try:
-            from sync.sync_task import ParserTask
+            from sync.sync_task import ParserTask, SyncLockHeartbeat, TaskStatus
             from sync.models import SyncLock
 
-            if not SyncLock.acquire_lock('moysklad_sync', locked_by='auto_scheduler'):
+            lock_token = SyncLock.acquire_lock('moysklad_sync', locked_by='auto_scheduler')
+            if not lock_token:
                 structured_logger.warning("Синхронизация уже выполняется, пропускаем")
                 return
 
+            heartbeat = None
             try:
                 end_date = timezone.now()
                 start_date = end_date - timedelta(days=7)
@@ -74,14 +76,25 @@ class AutoSyncScheduler:
                     end_date=end_date,
                     auto_sync=True
                 )
+                heartbeat = SyncLockHeartbeat(task, 'moysklad_sync', lock_token)
+                heartbeat.start()
 
                 import asyncio
                 asyncio.run(task.run())
 
+                if task.progress.status != TaskStatus.COMPLETED:
+                    raise RuntimeError(
+                        task.progress.error
+                        or task.progress.message
+                        or 'Синхронизация не была завершена'
+                    )
+
                 structured_logger.section_end("Запланированная автосинхронизация", "Выполнена успешно")
 
             finally:
-                SyncLock.release_lock('moysklad_sync')
+                if heartbeat:
+                    heartbeat.stop()
+                SyncLock.release_lock('moysklad_sync', lock_token)
 
         except Exception as e:
             structured_logger.error(f"Ошибка запланированной автосинхронизации: {str(e)}")

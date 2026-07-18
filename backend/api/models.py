@@ -71,6 +71,21 @@ class UserSession(models.Model):
         return f'{self.user} session {self.session_key[:8]}... @ {self.ip_address}'
 
 
+class UserHomePreference(models.Model):
+    """Персональные настройки главной страницы пользователя."""
+
+    user = models.OneToOneField(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.CASCADE,
+        related_name='home_preference',
+    )
+    pinned_paths = models.JSONField(default=list, blank=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    def __str__(self):
+        return f'{self.user} home preferences'
+
+
 class HealthCheckException(models.Model):
     """Исключение (подтверждённая ложная тревога) проверки здоровья себестоимости.
 

@@ -13,6 +13,7 @@ from dateutil.relativedelta import relativedelta
 
 from django.conf import settings
 from django.core.cache import cache
+from django.db import close_old_connections
 from django.utils import timezone
 from asgiref.sync import sync_to_async
 
@@ -104,12 +105,46 @@ class BaseTask(ABC):
         }
 
 
+class SyncLockHeartbeat:
+    """Поддерживает lease блокировки, пока задача выполняется."""
+
+    def __init__(self, task: BaseTask, lock_type: str, lock_token: str):
+        self.task = task
+        self.lock_type = lock_type
+        self.lock_token = lock_token
+        self.interval_seconds = getattr(settings, 'SYNC_LOCK_HEARTBEAT_SECONDS', 300)
+        self._stop_event = threading.Event()
+        self._thread = None
+
+    def start(self) -> None:
+        self._thread = threading.Thread(target=self._run, daemon=True)
+        self._thread.start()
+
+    def _run(self) -> None:
+        close_old_connections()
+        try:
+            while not self._stop_event.wait(self.interval_seconds):
+                if not SyncLock.refresh_lock(self.lock_type, self.lock_token):
+                    structured_logger.error(
+                        "Потеряна блокировка синхронизации; задача будет остановлена"
+                    )
+                    self.task.stop()
+                    return
+        finally:
+            close_old_connections()
+
+    def stop(self) -> None:
+        self._stop_event.set()
+        if self._thread and self._thread is not threading.current_thread():
+            self._thread.join(timeout=5)
+
+
 # --- Task Manager ---
 
 class TaskManager:
     """Менеджер задач - синглтон для управления асинхронными задачами"""
     _instance = None
-    _lock = threading.Lock()
+    _lock = threading.RLock()
 
     def __new__(cls):
         if cls._instance is None:
@@ -132,47 +167,66 @@ class TaskManager:
         self._cached_state = None
         self._last_state_update = 0
 
-    def _cleanup(self) -> None:
-        """Безопасная очистка состояния с использованием блокировки"""
-        with self._cleanup_lock:
+    def _cleanup(self, preserve_terminal_state: bool = True) -> None:
+        """Очистка ресурсов после того, как loop задачи уже завершил работу."""
+        # Serialize cleanup with start/stop so a new task cannot be installed
+        # while the old worker is clearing its resources.
+        with self._lock, self._cleanup_lock:
+            if preserve_terminal_state and self._current_task:
+                state = self._current_task.get_state()
+                if state.get('status') in {
+                    TaskStatus.COMPLETED.value,
+                    TaskStatus.ERROR.value,
+                    TaskStatus.STOPPED.value,
+                }:
+                    with self._state_lock:
+                        self._cached_state = state
+                        self._last_state_update = time.time()
+
             self._is_running = False
 
             if self._loop and not self._loop.is_closed():
                 try:
-                    if hasattr(asyncio, 'all_tasks'):
-                        tasks = asyncio.all_tasks(self._loop)
-                    else:
-                        tasks = asyncio.Task.all_tasks(self._loop)
-
-                    for task in tasks:
-                        task.cancel()
-
-                    if tasks:
-                        self._loop.run_until_complete(asyncio.gather(*tasks, return_exceptions=True))
-
-                    self._loop.stop()
+                    # _cleanup is normally called by run_loop after
+                    # run_until_complete has returned. Never drive or cancel an
+                    # event loop from the HTTP/SSE thread.
                     if not self._loop.is_running():
                         self._loop.close()
                 except Exception:
-                    pass
+                    logger.exception("Error closing task event loop")
                 finally:
                     self._loop = None
 
             self._current_task = None
             self._thread = None
             self._event.clear()
-            self._cached_state = None
+            if not preserve_terminal_state:
+                with self._state_lock:
+                    self._cached_state = None
+                    self._last_state_update = 0
 
     async def _run_task(self, task: BaseTask) -> None:
         """Выполнение задачи с обработкой исключений"""
         try:
             structured_logger.info("Начало выполнения задачи")
             await task.run()
-            structured_logger.success("Задача завершена успешно")
+            if task.progress.status == TaskStatus.ERROR:
+                structured_logger.error("Задача завершена с ошибкой")
+            elif task.progress.status == TaskStatus.STOPPED:
+                structured_logger.warning("Задача была остановлена")
+            else:
+                structured_logger.success("Задача завершена успешно")
         except asyncio.CancelledError:
+            if task.progress.status != TaskStatus.STOPPED:
+                task.stop()
             raise
         except Exception as e:
             logger.exception("Ошибка выполнения задачи")
+            task.update_progress(
+                status=TaskStatus.ERROR,
+                message="Ошибка при выполнении задачи",
+                error=str(e),
+            )
         finally:
             self._event.set()
 
@@ -189,18 +243,27 @@ class TaskManager:
                         'message': 'Другая задача уже выполняется'
                     }
 
-            try:
-                if not SyncLock.acquire_lock('moysklad_sync', locked_by='task_manager_ui'):
-                    return {
-                        'status': 'error',
-                        'message': 'Синхронизация уже выполняется (другой процесс)'
-                    }
-            except Exception as e:
-                logger.warning(f"Could not acquire DB lock (may be first run): {e}")
+            lock_token = SyncLock.acquire_lock('moysklad_sync', locked_by='task_manager_ui')
+            if not lock_token:
+                return {
+                    'status': 'error',
+                    'message': 'Синхронизация уже выполняется (другой процесс)'
+                }
 
             try:
+                with self._state_lock:
+                    self._cached_state = None
+                    self._last_state_update = 0
+
                 def run_loop():
+                    heartbeat = None
                     try:
+                        heartbeat = SyncLockHeartbeat(
+                            self._current_task,
+                            'moysklad_sync',
+                            lock_token,
+                        )
+                        heartbeat.start()
                         self._loop = asyncio.new_event_loop()
                         asyncio.set_event_loop(self._loop)
                         try:
@@ -209,10 +272,18 @@ class TaskManager:
                             return
                     except Exception as e:
                         logger.error(f"Error in event loop: {e}")
+                        if self._current_task:
+                            self._current_task.update_progress(
+                                status=TaskStatus.ERROR,
+                                message="Ошибка запуска задачи",
+                                error=str(e),
+                            )
                     finally:
+                        if heartbeat:
+                            heartbeat.stop()
                         self._cleanup()
                         try:
-                            SyncLock.release_lock('moysklad_sync')
+                            SyncLock.release_lock('moysklad_sync', lock_token)
                         except Exception:
                             pass
 
@@ -230,9 +301,9 @@ class TaskManager:
                 }
             except Exception as e:
                 logger.exception("Ошибка запуска задачи")
-                self._cleanup()
+                self._cleanup(preserve_terminal_state=False)
                 try:
-                    SyncLock.release_lock('moysklad_sync')
+                    SyncLock.release_lock('moysklad_sync', lock_token)
                 except Exception:
                     pass
                 return {
@@ -241,7 +312,7 @@ class TaskManager:
                 }
 
     def stop_current_task(self) -> Dict:
-        """Остановка текущей задачи с немедленным ответом"""
+        """Запрос кооперативной остановки; ресурсы закроет поток задачи."""
         with self._lock:
             if not self._is_running or not self._current_task:
                 return {
@@ -250,12 +321,7 @@ class TaskManager:
                 }
 
             try:
-                if self._current_task:
-                    self._current_task.stop()
-
-                cleanup_thread = threading.Thread(target=self._cleanup)
-                cleanup_thread.daemon = True
-                cleanup_thread.start()
+                self._current_task.stop()
 
                 return {
                     'status': 'success',
@@ -263,7 +329,6 @@ class TaskManager:
                 }
             except Exception as e:
                 logger.exception("Ошибка остановки задачи")
-                self._cleanup()
                 return {
                     'status': 'error',
                     'message': f'Ошибка при остановке задачи: {str(e)}'
@@ -275,8 +340,7 @@ class TaskManager:
             current_time = time.time()
 
             if not self._is_running or not self._current_task:
-                logger.debug("No active task when getting state")
-                return None
+                return self._cached_state.copy() if self._cached_state else None
 
             try:
                 if (not self._cached_state or
@@ -284,7 +348,7 @@ class TaskManager:
                     self._cached_state = self._current_task.get_state()
                     self._last_state_update = current_time
                     logger.debug(f"Updated cached state: {self._cached_state}")
-                return self._cached_state
+                return self._cached_state.copy()
             except Exception as e:
                 logger.error(f"Error getting task state: {e}")
                 return None
@@ -295,33 +359,19 @@ class TaskManager:
                self._thread and self._thread.is_alive()
 
     def cleanup_state(self):
-        """Очистка состояния задачи"""
-        with self._cleanup_lock:
-            try:
-                if self._current_task:
-                    self._current_task.stop()
-                self._is_running = False
-                self._current_task = None
+        """Удаляет уже прочитанное terminal state, не вмешиваясь в loop."""
+        with self._state_lock:
+            if not self._is_running:
                 self._cached_state = None
-                if self._loop and not self._loop.is_closed():
-                    self._loop.stop()
-                    self._loop.close()
-                    self._loop = None
-            except Exception as e:
-                logger.error(f"Error during task cleanup: {e}")
-            finally:
-                self._is_running = False
-                self._current_task = None
+                self._last_state_update = 0
 
     def force_reset(self):
         """Принудительный сброс всех состояний менеджера"""
         with self._lock:
-            if self._current_task:
-                try:
-                    self._current_task.stop()
-                except Exception:
-                    pass
-            self._cleanup()
+            if self._is_running and self._current_task:
+                self._current_task.stop()
+                return
+            self._cleanup(preserve_terminal_state=False)
 
 
 # --- Parser Task ---
@@ -485,6 +535,7 @@ class ParserTask(BaseTask):
                 message="Ошибка при синхронизации материалов",
                 error=str(e)
             )
+            raise
         finally:
             structured_logger.section_end("Синхронизация материалов")
 

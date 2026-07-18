@@ -11,14 +11,15 @@ export function useAnalysisTable({ fetchFn, dataKey, defaultSort, defaultFilters
     const [selectedItem, setSelectedItem] = useState(null);
     const [modalVisible, setModalVisible] = useState(false);
     const abortRef = useRef(null);
+    const { current, pageSize } = pagination;
 
     const requestDeps = useMemo(() => ({
         ...filters,
-        current: pagination.current,
-        pageSize: pagination.pageSize,
+        current,
+        pageSize,
         sortField,
         sortOrder,
-    }), [filters, pagination.current, pagination.pageSize, sortField, sortOrder]);
+    }), [filters, current, pageSize, sortField, sortOrder]);
 
     const doFetch = useCallback(async () => {
         abortRef.current?.abort();

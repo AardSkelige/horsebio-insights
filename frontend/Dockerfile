@@ -1,5 +1,5 @@
 # Этап сборки
-FROM node:23.1.0-slim AS builder
+FROM node:22.23.1-slim AS builder
 
 WORKDIR /app
 
@@ -7,7 +7,7 @@ WORKDIR /app
 COPY package*.json ./
 
 # Устанавливаем зависимости
-RUN npm install
+RUN npm ci
 
 # Копируем исходный код
 COPY . .

@@ -64,6 +64,14 @@ describe('ChecksPage — список', () => {
         expect(screen.getByText('StarPony')).toBeInTheDocument();
     });
 
+    it('показывает статус и время запуска одной компактной строкой', async () => {
+        renderAt('/checks');
+        expect(await screen.findByText('Проверка данных')).toBeInTheDocument();
+        expect(screen.getByText('Не запускался')).toBeInTheDocument();
+        expect(screen.getByLabelText('Последний запуск')).toBeInTheDocument();
+        expect(screen.getByLabelText('Расписание')).toHaveTextContent('каждый час');
+    });
+
     it('показывает ошибку, если API недоступен', async () => {
         api.get.mockRejectedValue(new Error('Сервер недоступен'));
         renderAt('/checks');

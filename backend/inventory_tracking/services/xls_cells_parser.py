@@ -14,8 +14,6 @@ Expected structure:
 import logging
 from datetime import date, datetime
 
-import xlrd
-
 logger = logging.getLogger(__name__)
 
 
@@ -32,6 +30,8 @@ def parse_cells_inventory_xls(file_obj) -> dict:
         }
     Raises ValueError if the file structure is unrecognised.
     """
+    import xlrd
+
     wb = xlrd.open_workbook(file_contents=file_obj.read())
     ws = wb.sheet_by_index(0)
 
@@ -163,3 +163,22 @@ def apply_cells_upload(run, codes: list, inventory_date: date) -> int:
         f"Run totals: {inventoried}/{total}"
     )
     return len(to_update)
+
+
+def apply_saved_cells_uploads(run) -> int:
+    """Apply all saved XLS uploads for the run's month to a fresh snapshot."""
+    from inventory_tracking.models import CellsUploadLog
+
+    matched_total = 0
+    uploads = CellsUploadLog.objects.filter(
+        month_start=run.month_start,
+    ).order_by('inventory_date', 'id')
+
+    for upload in uploads:
+        matched = apply_cells_upload(run, upload.codes, upload.inventory_date)
+        matched_total += matched
+        upload.run = run
+        upload.matched_count = matched
+        upload.save(update_fields=['run', 'matched_count'])
+
+    return matched_total

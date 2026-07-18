@@ -1,28 +1,20 @@
 // src/api/materialsApi.js
-import { getCsrfToken } from '../utils/api';
-
-const json = (r) => r.json();
+import api from '../utils/api';
 
 export const materialsApi = {
     getList: (params, signal) =>
-        fetch(`/api/materials/?${params}`, { signal }).then(json),
+        api.get('/materials/', { params, signal }),
 
     getAll: (signal) =>
-        fetch('/api/materials/', { signal }).then(json),
+        api.get('/materials/', { signal }),
 
     getDetails: (id, qs, signal) =>
-        fetch(`/api/materials/${id}/${qs ? `?${qs}` : ''}`, { signal }).then(json),
+        api.get(`/materials/${id}/`, { params: qs || undefined, signal }),
 
     getPeriod: (id, params, signal) =>
-        fetch(`/api/materials/${id}/period/${params ? `?${params}` : ''}`, { signal }).then(json),
+        api.get(`/materials/${id}/period/`, { params: params || undefined, signal }),
 
     patchPeriod: async (id, periodMonths) => {
-        const csrfToken = await getCsrfToken();
-        return fetch(`/api/materials/${id}/period/`, {
-            method: 'PATCH',
-            headers: { 'Content-Type': 'application/json', 'X-CSRFToken': csrfToken },
-            credentials: 'include',
-            body: JSON.stringify({ period_months: periodMonths }),
-        }).then(json);
+        return api.patch(`/materials/${id}/period/`, { period_months: periodMonths });
     },
 };

@@ -1,10 +1,13 @@
 // src/api/counterpartiesApi.js
-const json = (r) => r.json();
+import api from '../utils/api';
 
 export const counterpartiesApi = {
     getList: (params, signal) =>
-        fetch(`/api/counterparties/?${params}`, { signal }).then(json),
+        api.get('/counterparties/', { params, signal }),
 
     getGroups: (params, signal) =>
-        fetch(`/api/counterparty-groups/?${params}`, { signal }).then(json),
+        api.get('/counterparty-groups/', { params, signal }),
+
+    getDetails: (id, params, signal) =>
+        api.get(`/counterparties/${id}/`, { params, signal }),
 };

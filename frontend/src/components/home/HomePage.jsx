@@ -1,130 +1,181 @@
-import { useState, useEffect, useRef } from 'react';
-import {
-    PackageIcon, BuildingIcon, BoxIcon, UsersIcon,
-    ChartPieIcon, TrendingUp, ShoppingCart, ShoppingBagIcon,
-    DollarSign, Factory, ShieldCheck, FileSpreadsheet, ClipboardList,
-    BarChart2, PackageCheck, Clock,
-} from 'lucide-react';
+import { useState, useEffect } from 'react';
 import FeatureCard from './components/FeatureCard';
-import StatisticsCards from './components/StatisticsCards';
+import PersonalWorkspace from './components/PersonalWorkspace';
 import { FadeRise } from '../ui/motion';
-import { statsApi } from '../../api/statsApi';
+import NAV_GROUPS from '../layout/sidebar/navGroups';
 import { authApi } from '../../api/authApi';
 import { useLoading } from '../../contexts/LoadingContext';
-
-const BASE_SECTIONS = [
-    {
-        title: 'Отгрузки',
-        items: [
-            { icon: BoxIcon,     title: 'Товары',        description: 'Анализ проданных товаров',            link: '/shipments/products' },
-            { icon: UsersIcon,   title: 'Покупатели',    description: 'Клиенты и их покупки',                link: '/shipments/counterparties' },
-            { icon: PackageIcon, title: 'Материалы',     description: 'Расход материалов в продажах',        link: '/shipments/materials' },
-            { icon: Clock,       title: 'Сроки оплаты',  description: 'Дебиторка с отсрочкой платежа',       link: '/deadlines' },
-        ],
-    },
-    {
-        title: 'Приёмки',
-        items: [
-            { icon: PackageIcon,  title: 'Материалы',  description: 'Поступления на склад',      link: '/supplies/materials' },
-            { icon: BuildingIcon, title: 'Поставщики', description: 'Контрагенты-поставщики',    link: '/supplies/suppliers' },
-        ],
-    },
-    {
-        title: 'Производство',
-        items: [
-            { icon: Factory, title: 'Производство', description: 'Расчёт сырья для производства', link: '/production/calculator' },
-        ],
-    },
-    {
-        title: 'Инвентаризация',
-        items: [
-            { icon: ClipboardList, title: 'Мониторинг', description: 'Контроль позиций с 1-го числа месяца', link: '/inventory' },
-        ],
-    },
-    {
-        title: 'Аналитика',
-        items: [
-            { icon: BarChart2,       title: 'ABC-анализ',          description: 'Категоризация по продажам',          link: '/analysis/abc' },
-            { icon: TrendingUp,      title: 'Сезонный анализ',     description: 'Паттерны продаж по времени',        link: '/analysis/seasonal' },
-            { icon: PackageCheck,    title: 'FBO Заказы',          description: 'Планирование FBO заказов',          link: '/analysis/fbo' },
-            { icon: ChartPieIcon,    title: 'Группы контрагентов', description: 'Сегментация клиентов',              link: '/analysis/counterparty-groups' },
-            { icon: ShoppingCart,    title: 'Помощник закупок',    description: 'Рекомендации по закупкам',          link: '/purchases/analysis' },
-            { icon: FileSpreadsheet, title: 'FBO Конвертер',       description: 'Конвертация прогноза в шаблон Ozon', link: '/ozon/fbo-converter' },
-            { icon: ShoppingBagIcon, title: 'Аналитика OZON',      description: 'Отчёты по рекламе и продажам',     link: '/analysis/ozon' },
-            { icon: DollarSign,      title: 'Движение ДС',         description: 'Мониторинг денежных потоков',      link: '/analysis/cash-flow' },
-        ],
-    },
-];
+import {
+    HOME_PREFERENCES_EVENT,
+    MAX_PINNED_SECTIONS,
+    publishHomePreferences,
+} from '../../utils/homePreferences';
+import './HomePage.css';
 
 const HomePage = () => {
-    const [stats, setStats] = useState(null);
-    const [isSuperuser, setIsSuperuser] = useState(false);
-    const abortRef = useRef(null);
-    const { syncVersion } = useLoading();
+    const [auth, setAuth] = useState({ isSuperuser: false, username: '', firstName: '' });
+    const [homeData, setHomeData] = useState(null);
+    const [saveError, setSaveError] = useState('');
+    const { isLoading, syncVersion } = useLoading();
 
     useEffect(() => {
-        abortRef.current = new AbortController();
-        const { signal } = abortRef.current;
+        const controller = new AbortController();
 
-        statsApi.get(signal)
-            .then(data => { if (data.status === 'success') setStats(data.stats); })
-            .catch(() => {});
+        Promise.all([
+            authApi.check(controller.signal),
+            authApi.home(controller.signal),
+        ]).then(([authResult, homeResult]) => {
+            setAuth({
+                isSuperuser: Boolean(authResult.isSuperuser),
+                username: authResult.username || '',
+                firstName: authResult.firstName || '',
+            });
+            setHomeData(homeResult.data);
+        }).catch((error) => {
+            if (error.name !== 'AbortError') setSaveError('Не удалось загрузить персональные настройки');
+        });
 
-        return () => abortRef.current?.abort();
+        return () => controller.abort();
     }, [syncVersion]);
 
     useEffect(() => {
-        abortRef.current = new AbortController();
-        const { signal } = abortRef.current;
-
-        authApi.check(signal)
-            .then(d => setIsSuperuser(!!d.isSuperuser))
-            .catch(() => {});
-
-        return () => abortRef.current?.abort();
+        const handlePreferences = (event) => {
+            if (!Array.isArray(event.detail?.pinnedPaths)) return;
+            setHomeData((current) => current ? {
+                ...current,
+                pinnedPaths: event.detail.pinnedPaths,
+            } : current);
+        };
+        window.addEventListener(HOME_PREFERENCES_EVENT, handlePreferences);
+        return () => window.removeEventListener(HOME_PREFERENCES_EVENT, handlePreferences);
     }, []);
 
-    const moyskladItems = isSuperuser ? [
-        { icon: ShieldCheck, title: 'Проверки', description: 'Автоматические проверки МойСклад', link: '/checks' },
-    ] : [];
+    const sections = NAV_GROUPS
+        .filter((group) => group.label)
+        .map((group) => ({
+            title: group.label,
+            items: group.items
+                .filter((item) => !item.superuserOnly || auth.isSuperuser)
+                .map((item) => ({
+                    icon: item.icon,
+                    title: item.label,
+                    description: item.description,
+                    link: item.path,
+                })),
+        }))
+        .filter((section) => section.items.length);
+    const workspaceItems = sections.flatMap((section) => section.items.map((item) => ({
+        ...item,
+        label: item.title,
+        path: item.link,
+        section: section.title,
+    })));
+    const analyticsIndex = sections.findIndex((section) => section.title === 'Аналитика');
+    const workSections = sections.slice(0, analyticsIndex);
+    const analyticsSection = sections[analyticsIndex];
+    const systemSections = sections.slice(analyticsIndex + 1);
 
-    const sections = [
-        ...BASE_SECTIONS,
-        ...(moyskladItems.length ? [{ title: 'МойСклад', items: moyskladItems }] : []),
-    ];
+    const handleTogglePin = async (path) => {
+        const previous = homeData?.pinnedPaths || [];
+        const isPinned = previous.includes(path);
+        if (!isPinned && previous.length >= MAX_PINNED_SECTIONS) {
+            setSaveError(`Можно закрепить не больше ${MAX_PINNED_SECTIONS} разделов`);
+            return;
+        }
+
+        const next = isPinned
+            ? previous.filter((item) => item !== path)
+            : [...previous, path];
+        setSaveError('');
+        setHomeData((current) => ({ ...current, pinnedPaths: next }));
+        publishHomePreferences(next);
+
+        try {
+            const result = await authApi.updateHome(next);
+            setHomeData(result.data);
+            publishHomePreferences(result.data.pinnedPaths);
+        } catch {
+            setHomeData((current) => ({ ...current, pinnedPaths: previous }));
+            publishHomePreferences(previous);
+            setSaveError('Не удалось сохранить закреплённые разделы');
+        }
+    };
 
     return (
-        <div style={{ color: 'var(--ink)' }} className="space-y-10">
+        <div className="home-dashboard">
 
-            {stats && (
-                <div>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '14px' }}>
-                        <span style={{ fontSize: '11px', fontWeight: 500, letterSpacing: '0.1em', textTransform: 'uppercase', color: 'var(--muted)', whiteSpace: 'nowrap' }}>
-                            Статистика
-                        </span>
-                        <div style={{ flex: 1, height: '1px', backgroundColor: 'var(--hairline)' }} />
-                    </div>
-                    <StatisticsCards stats={stats} />
-                </div>
+            {homeData && (
+                <PersonalWorkspace
+                    auth={auth}
+                    data={homeData}
+                    items={workspaceItems}
+                    isSyncing={isLoading}
+                    onTogglePin={handleTogglePin}
+                    saveError={saveError}
+                    syncVersion={syncVersion}
+                />
             )}
 
-            <div className="space-y-8">
-                {sections.map((section) => (
-                    <FadeRise inView key={section.title}>
-                        <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '14px' }}>
-                            <span style={{ fontSize: '11px', fontWeight: 500, letterSpacing: '0.1em', textTransform: 'uppercase', color: 'var(--muted)', whiteSpace: 'nowrap' }}>
-                                {section.title}
-                            </span>
-                            <div style={{ flex: 1, height: '1px', backgroundColor: 'var(--hairline)' }} />
-                        </div>
-                        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-3">
-                            {section.items.map((item) => (
-                                <FeatureCard key={item.link} {...item} />
-                            ))}
-                        </div>
-                    </FadeRise>
-                ))}
+            <div className="home-dashboard__work-grid">
+                {workSections.map((section, index) => {
+                    const isWide = section.items.length > 2;
+                    const sectionId = `home-work-section-${index}`;
+
+                    return (
+                        <FadeRise
+                            className={isWide ? 'home-dashboard__group home-dashboard__group--wide' : 'home-dashboard__group'}
+                            delay={index * 0.025}
+                            key={section.title}
+                        >
+                            <section aria-labelledby={sectionId}>
+                                <div className="home-dashboard__heading">
+                                    <h2 id={sectionId}>{section.title}</h2>
+                                    <span />
+                                </div>
+                                <div className={isWide ? 'home-dashboard__links home-dashboard__links--two-columns' : 'home-dashboard__links'}>
+                                    {section.items.map((item) => (
+                                        <FeatureCard key={item.link} {...item} compact />
+                                    ))}
+                                </div>
+                            </section>
+                        </FadeRise>
+                    );
+                })}
             </div>
+
+            <FadeRise className="home-dashboard__group" delay={0.1}>
+                <section aria-labelledby="home-analytics-title">
+                    <div className="home-dashboard__heading">
+                        <h2 id="home-analytics-title">Аналитика</h2>
+                        <span />
+                    </div>
+                    <div className="home-dashboard__links home-dashboard__links--analytics">
+                        {analyticsSection.items.map((item) => (
+                            <FeatureCard key={item.link} {...item} compact />
+                        ))}
+                    </div>
+                </section>
+            </FadeRise>
+
+            {systemSections.length > 0 && (
+                <div className="home-dashboard__system-grid">
+                    {systemSections.map((section, index) => (
+                        <FadeRise className="home-dashboard__group" delay={0.125 + index * 0.025} key={section.title}>
+                            <section aria-labelledby={`home-system-section-${index}`}>
+                                <div className="home-dashboard__heading">
+                                    <h2 id={`home-system-section-${index}`}>{section.title}</h2>
+                                    <span />
+                                </div>
+                                <div className="home-dashboard__links">
+                                    {section.items.map((item) => (
+                                        <FeatureCard key={item.link} {...item} compact />
+                                    ))}
+                                </div>
+                            </section>
+                        </FadeRise>
+                    ))}
+                </div>
+            )}
         </div>
     );
 };

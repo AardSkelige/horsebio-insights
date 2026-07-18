@@ -42,10 +42,18 @@ class ProductInventoryStatus(models.Model):
 
 class CellsUploadLog(models.Model):
     """Tracks each manually uploaded 'Инвентаризация с ячейками' XLS file."""
-    run = models.ForeignKey(InventoryRun, on_delete=models.CASCADE, related_name='cells_uploads')
+    run = models.ForeignKey(
+        InventoryRun,
+        on_delete=models.SET_NULL,
+        related_name='cells_uploads',
+        null=True,
+        blank=True,
+    )
+    month_start = models.DateField(db_index=True)
     inventory_name = models.CharField(max_length=50)   # e.g. "00022"
     inventory_date = models.DateField()
     warehouse = models.CharField(max_length=255, blank=True)
+    codes = models.JSONField(default=list)
     matched_count = models.IntegerField(default=0)
     uploaded_at = models.DateTimeField(auto_now_add=True)
 

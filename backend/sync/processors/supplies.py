@@ -2,13 +2,14 @@
 
 import asyncio
 from decimal import Decimal
-from django.db import transaction
+from django.db import DatabaseError, transaction
 from django.utils.dateparse import parse_datetime
 from django.utils import timezone
 from asgiref.sync import sync_to_async
 from sync.models import Supply, SupplyItem, Counterparty, RawMaterial, PurchaseOrder
 from sync.logger import logger, structured_logger
 from sync.sync_task import TaskStatus
+from sync.cache import ProductDetailsFetchError
 from sync.utils import get_group_from_pathname
 
 
@@ -73,6 +74,8 @@ class SupplyStorage:
                                 f"for supply {supply.number}"
                             )
                     except Exception as e:
+                        if isinstance(e, DatabaseError):
+                            raise
                         logger.error(
                             f"Error linking supply {supply.number} with order: {str(e)}"
                         )
@@ -81,6 +84,8 @@ class SupplyStorage:
 
         except Exception as e:
             logger.error(f"Error saving supply data: {str(e)}")
+            if isinstance(e, (DatabaseError, ProductDetailsFetchError)):
+                raise
             return None
 
     @sync_to_async
@@ -153,6 +158,8 @@ class SupplyStorage:
 
         except Exception as e:
             logger.error(f"Error saving supply item: {str(e)}")
+            if isinstance(e, (DatabaseError, ProductDetailsFetchError)):
+                raise
             return None
 
 
@@ -324,3 +331,4 @@ class SupplyProcessor:
                 message="Ошибка при обработке приемок",
                 error=str(e)
             )
+            raise

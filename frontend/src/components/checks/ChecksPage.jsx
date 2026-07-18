@@ -3,7 +3,7 @@ import { useNavigate, useParams } from 'react-router-dom';
 import { Loader2, ShieldCheck, PackageOpen, ChevronRight } from 'lucide-react';
 import PropTypes from 'prop-types';
 import { checksApi, plural, fmtRub, PENDING_RETURNS_HINT } from './checksShared';
-import ScriptCard, { accountBadge } from './ScriptCard';
+import ScriptCard, { AccountBadge } from './ScriptCard';
 import CheckDetail from './CheckDetail';
 import PendingReturnsDetail from './PendingReturnsDetail';
 import InfoTip from './InfoTip';
@@ -35,7 +35,7 @@ function PendingReturnsRow({ pending, onOpen }) {
                     <div style={{ display: 'flex', alignItems: 'center', gap: 7, fontSize: 14.5, fontWeight: 600, color: 'var(--ink)', lineHeight: 1.3 }}>
                         <PackageOpen size={16} style={{ color: 'var(--muted)', flexShrink: 0 }} />
                         Возвраты в пути
-                        {accountBadge('HorseBio')}
+                        <AccountBadge account="HorseBio" />
                         <InfoTip text={PENDING_RETURNS_HINT} width={300} />
                     </div>
                     <div style={{ fontSize: 12, color: 'var(--muted)', marginTop: 3, lineHeight: 1.45 }}>

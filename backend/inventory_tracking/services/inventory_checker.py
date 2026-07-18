@@ -163,4 +163,9 @@ class InventoryChecker:
                     ['last_inventoried_at', 'days_since_last'],
                 )
 
+        # XLS uploads are stored independently from a particular snapshot.
+        # Reapply them whenever a new run for the same month is created.
+        from inventory_tracking.services.xls_cells_parser import apply_saved_cells_uploads
+        apply_saved_cells_uploads(run)
+
         return run

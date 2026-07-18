@@ -9,7 +9,10 @@ from django.utils import timezone
 from django.views.decorators.csrf import ensure_csrf_cookie
 from django.views.decorators.http import require_http_methods
 
-from .models import UserActivityLog, UserPageEvent, UserSession
+from .models import UserActivityLog, UserHomePreference, UserPageEvent, UserSession
+
+
+MAX_PINNED_HOME_PATHS = 3
 
 
 def login_required_api(view_func):
@@ -159,6 +162,106 @@ def track_page_view(request):
         duration_seconds=min(duration, 7200),
     )
     return JsonResponse({'status': 'ok'})
+
+
+def _validate_pinned_paths(value):
+    if not isinstance(value, list):
+        return None
+
+    result = []
+    for path in value:
+        if not isinstance(path, str):
+            return None
+        path = path.strip()
+        if (
+            not path.startswith('/')
+            or path.startswith('//')
+            or len(path) > 200
+            or path in {'/', '/login', '/profile'}
+        ):
+            return None
+        if path not in result:
+            result.append(path)
+
+    if len(result) > MAX_PINNED_HOME_PATHS:
+        return None
+    return result
+
+
+def _recent_page_paths(user, limit=6):
+    paths = []
+    rows = (
+        UserPageEvent.objects
+        .filter(user=user)
+        .order_by('-created_at')
+        .values_list('page_path', flat=True)[:100]
+    )
+    for path in rows:
+        if path in {'/', '/login', '/profile'} or path in paths:
+            continue
+        paths.append(path)
+        if len(paths) == limit:
+            break
+    return paths
+
+
+def _latest_data_update():
+    """Возвращает последнее известное обновление данных без тяжёлой статистики."""
+    from django.core.cache import cache
+    from core.models import Shipment, Supply
+
+    cached = [
+        cache.get('last_manual_update'),
+        cache.get('last_auto_sync_update'),
+        cache.get('last_successful_update'),
+    ]
+    candidates = [value for value in cached if hasattr(value, 'isoformat')]
+    if candidates:
+        return max(candidates)
+
+    shipment_update = (
+        Shipment.objects.order_by('-moysklad_updated')
+        .values_list('moysklad_updated', flat=True)
+        .first()
+    )
+    supply_update = (
+        Supply.objects.order_by('-moysklad_updated')
+        .values_list('moysklad_updated', flat=True)
+        .first()
+    )
+    fallback = [value for value in (shipment_update, supply_update) if value]
+    return max(fallback) if fallback else None
+
+
+@require_http_methods(["GET", "PATCH"])
+@login_required_api
+def home_preferences_view(request):
+    preference, _ = UserHomePreference.objects.get_or_create(user=request.user)
+
+    if request.method == 'PATCH':
+        try:
+            data = json.loads(request.body)
+        except (json.JSONDecodeError, ValueError):
+            return JsonResponse({'status': 'error', 'message': 'Некорректный JSON'}, status=400)
+
+        pinned_paths = _validate_pinned_paths(data.get('pinnedPaths'))
+        if pinned_paths is None:
+            return JsonResponse({
+                'status': 'error',
+                'message': f'Можно закрепить до {MAX_PINNED_HOME_PATHS} разделов',
+            }, status=400)
+        preference.pinned_paths = pinned_paths
+        preference.save(update_fields=['pinned_paths', 'updated_at'])
+
+    updated_at = _latest_data_update()
+    return JsonResponse({
+        'status': 'success',
+        'data': {
+            'pinnedPaths': preference.pinned_paths,
+            'recentPaths': _recent_page_paths(request.user),
+            'dataUpdatedAt': updated_at.isoformat() if updated_at else None,
+        },
+    })
 
 
 def _compute_badge(user, page_qs, sessions_this_month):
