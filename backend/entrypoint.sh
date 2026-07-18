@@ -1,5 +1,7 @@
 #!/bin/bash
 
+set -e
+
 # Функция для проверки доступности PostgreSQL
 postgres_ready() {
 python << END

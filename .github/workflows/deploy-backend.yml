@@ -133,8 +133,9 @@ jobs:
             echo "$GHCR_TOKEN" | docker login ghcr.io -u "$GHCR_USER" --password-stdin
             cd /root/horsebio
             docker compose -f docker-compose.prod.yml pull
-            docker compose -f docker-compose.prod.yml up -d --remove-orphans
+            # The backend entrypoint applies migrations before starting Django.
+            # Waiting for its health avoids racing a second migration process.
+            docker compose -f docker-compose.prod.yml up -d --remove-orphans --wait --wait-timeout 180
             # nginx does not notice changes inside a bind-mounted config by itself.
             docker compose -f docker-compose.prod.yml up -d --force-recreate --no-deps backend_nginx
-            docker compose -f docker-compose.prod.yml exec -T backend python manage.py migrate
             docker image prune -f
