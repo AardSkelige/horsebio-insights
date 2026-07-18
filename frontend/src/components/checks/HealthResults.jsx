@@ -96,18 +96,64 @@ function StatsRow({ stats, onJump }) {
 }
 StatsRow.propTypes = { stats: PropTypes.array.isRequired, onJump: PropTypes.func };
 
-function FindingRow({ cat, item, excepted, onAdded }) {
+// Сетка статусов всех проверок хелс-чека, включая чистые: видно, что «Списания ✓»
+// проверялись и проблем нет, а не просто отсутствуют в отчёте
+function ChecksGrid({ checks, onJump }) {
+    return (
+        <div style={{
+            display: 'grid', gap: 8, marginBottom: 18,
+            gridTemplateColumns: 'repeat(auto-fill, minmax(190px, 1fr))',
+        }}>
+            {checks.map((ch) => {
+                const clean = ch.status === 'ok';
+                const skipped = ch.status === 'skipped';
+                const c = sevOf(ch.severity);
+                const clickable = !clean && !skipped && ch.cats.length > 0;
+                return (
+                    <div key={ch.id}
+                        onClick={clickable ? () => onJump?.(ch.cats[0]) : undefined}
+                        title={clickable ? 'Показать находки ниже' : undefined}
+                        style={{
+                            display: 'flex', alignItems: 'center', gap: 8, padding: '8px 12px',
+                            borderRadius: 10, border: '1px solid var(--hairline)',
+                            background: clean ? 'rgba(93,184,114,0.06)' : skipped ? 'var(--surface-soft)' : c.bg,
+                            cursor: clickable ? 'pointer' : 'default',
+                            opacity: skipped ? 0.6 : 1,
+                        }}>
+                        {clean
+                            ? <Check size={14} style={{ color: 'var(--success)', flexShrink: 0 }} />
+                            : <span style={{ width: 8, height: 8, borderRadius: 999, flexShrink: 0, background: skipped ? 'var(--muted-soft)' : c.color }} />}
+                        <span style={{ fontSize: 12, fontWeight: 600, color: 'var(--ink)', lineHeight: 1.25, minWidth: 0 }}>
+                            {ch.title}
+                        </span>
+                        <span style={{ marginLeft: 'auto', fontSize: 12, fontWeight: 700, flexShrink: 0, color: clean ? 'var(--success)' : skipped ? 'var(--muted)' : c.color }}>
+                            {clean ? 'чисто' : skipped ? '—' : ch.count}
+                        </span>
+                    </div>
+                );
+            })}
+        </div>
+    );
+}
+ChecksGrid.propTypes = { checks: PropTypes.array.isRequired, onJump: PropTypes.func };
+
+function FindingRow({ cat, item, excepted, prevReason, onAdded }) {
     const [state, setState] = useState('idle'); // idle | reason | busy | added
     const [reason, setReason] = useState('');
     const [excId, setExcId] = useState(null);
+    // Скачки цен: 'once' — глушит только этот скачок (по приёмке), 'always' — товар навсегда
+    const [scope, setScope] = useState('once');
     const c = sevOf(item.severity);
     const link = item.ms_href || msLink(cat.ms_type, item.ms_id);
     const canExcept = cat.kind && item.key;
+    const isJump = cat.kind === 'supply_jumps';
 
     const add = async () => {
         setState('busy');
         try {
-            const extra = cat.kind === 'deviations' ? { status: 'норма', ms_id: item.ms_id || '', ms_href: item.ms_href || '' } : {};
+            let extra = {};
+            if (cat.kind === 'deviations') extra = { status: 'норма', ms_id: item.ms_id || '', ms_href: item.ms_href || '' };
+            if (isJump && scope === 'once' && item.last_doc) extra = { supply_doc: item.last_doc };
             const res = await checksApi.addException({
                 kind: cat.kind, key: item.key, label: item.object, reason: reason.trim(), extra,
             });
@@ -143,6 +189,18 @@ function FindingRow({ cat, item, excepted, onAdded }) {
                 <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--ink)', marginBottom: 7 }}>
                     В исключения: {item.object}
                 </div>
+                {isJump && (
+                    <div style={{ display: 'flex', gap: 14, marginBottom: 8, fontSize: 12.5, color: 'var(--body)' }}>
+                        <label style={{ display: 'inline-flex', alignItems: 'center', gap: 5, cursor: 'pointer' }}>
+                            <input type="radio" checked={scope === 'once'} onChange={() => setScope('once')} />
+                            Разовый случай — только этот скачок (приёмка №{item.last_doc || '?'})
+                        </label>
+                        <label style={{ display: 'inline-flex', alignItems: 'center', gap: 5, cursor: 'pointer' }}>
+                            <input type="radio" checked={scope === 'always'} onChange={() => setScope('always')} />
+                            У товара всегда так — не проверять больше
+                        </label>
+                    </div>
+                )}
                 <div style={{ display: 'flex', alignItems: 'flex-start', gap: 8, flexWrap: 'wrap' }}>
                     <textarea
                         autoFocus
@@ -179,6 +237,12 @@ function FindingRow({ cat, item, excepted, onAdded }) {
                 <div style={{ minWidth: 0 }}>
                     <div style={{ fontSize: 13.5, fontWeight: 600, color: 'var(--ink)' }}>{item.object}</div>
                     <div style={{ fontSize: 12.5, color: 'var(--muted)', marginTop: 2, lineHeight: 1.4 }}>{item.detail}</div>
+                    {prevReason && (
+                        <div style={{ display: 'flex', alignItems: 'flex-start', gap: 5, fontSize: 12, color: 'var(--success)', marginTop: 3, lineHeight: 1.4 }}>
+                            <ShieldCheck size={13} style={{ flexShrink: 0, marginTop: 1 }} />
+                            <span>уже разбирали: {prevReason}</span>
+                        </div>
+                    )}
                 </div>
             </div>
             <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexShrink: 0 }}>
@@ -200,19 +264,28 @@ function FindingRow({ cat, item, excepted, onAdded }) {
         </div>
     );
 }
-FindingRow.propTypes = { cat: PropTypes.object, item: PropTypes.object, excepted: PropTypes.bool, onAdded: PropTypes.func };
+FindingRow.propTypes = { cat: PropTypes.object, item: PropTypes.object, excepted: PropTypes.bool, prevReason: PropTypes.string, onAdded: PropTypes.func };
 
-function Category({ cat, excKeys, jumpKey, onChanged }) {
+function Category({ cat, excKeys, excMap, jumpKey, onChanged }) {
     const [open, setOpen] = useState(cat.severity === 'critical' || cat.severity === 'important');
     const [hidden, setHidden] = useState(new Set());
     const c = sevOf(cat.severity);
 
     useEffect(() => { if (jumpKey === cat.key) setOpen(true); }, [jumpKey, cat.key]);
 
+    const excFor = (it) => (cat.kind && it.key ? (excMap[cat.kind] || {})[it.key] : undefined);
+
     // ack-типы, уже добавленные в исключения, из снимка не показываем — при следующем
-    // запуске скрипт их и так не выдаст; deviations остаются (помечаются бейджем)
-    const isAckExcepted = (it) => cat.kind && cat.kind !== 'deviations'
-        && it.key && (excKeys[cat.kind] || []).includes(it.key);
+    // запуске скрипт их и так не выдаст; deviations остаются (помечаются бейджем).
+    // Скачки цен: разовое исключение прячет только скачок своей приёмки — новый скачок
+    // того же товара (другая приёмка) должен быть виден.
+    const isAckExcepted = (it) => {
+        if (!cat.kind || cat.kind === 'deviations') return false;
+        const e = excFor(it);
+        if (!e) return false;
+        if (cat.kind === 'supply_jumps') return !e.supply_doc || e.supply_doc === it.last_doc;
+        return true;
+    };
     const visible = cat.items.filter((it) => !hidden.has(it.key || it.object) && !isAckExcepted(it));
     // Все находки ушли в исключения — категория схлопывается целиком
     if (visible.length === 0) return null;
@@ -236,12 +309,15 @@ function Category({ cat, excKeys, jumpKey, onChanged }) {
                     {visible.map((it) => {
                         const ekey = it.key || it.object;
                         const excepted = cat.kind && it.key && (excKeys[cat.kind] || []).includes(it.key);
+                        // Прошлый разбор этого товара: причина исключения прямо в находке
+                        const prevReason = excFor(it)?.reason || '';
                         return (
                             <FindingRow
                                 key={ekey}
                                 cat={cat}
                                 item={it}
                                 excepted={excepted}
+                                prevReason={prevReason}
                                 onAdded={() => {
                                     // ack-типы исчезают при следующем запуске — прячем сразу;
                                     // deviations остаются (помечаются), не прячем
@@ -258,7 +334,7 @@ function Category({ cat, excKeys, jumpKey, onChanged }) {
         </div>
     );
 }
-Category.propTypes = { cat: PropTypes.object, excKeys: PropTypes.object, jumpKey: PropTypes.string, onChanged: PropTypes.func };
+Category.propTypes = { cat: PropTypes.object, excKeys: PropTypes.object, excMap: PropTypes.object, jumpKey: PropTypes.string, onChanged: PropTypes.func };
 
 export default function HealthResults({ scriptId, runId, running }) {
     const [data, setData] = useState(undefined); // undefined=loading, null=нет данных
@@ -292,6 +368,9 @@ export default function HealthResults({ scriptId, runId, running }) {
     }
 
     const excKeys = data.exception_keys || {};
+    const excMap = data.exceptions_map || {};
+    // Возвраты в пути — не находки чека, показываются отдельной карточкой на /checks
+    const visibleCats = data.categories.filter((c) => c.key !== 'pending_returns');
     return (
         <div>
             {runId && (
@@ -302,15 +381,18 @@ export default function HealthResults({ scriptId, runId, running }) {
             {Array.isArray(data.summary?.stats) && data.summary.stats.length > 0
                 ? <StatsRow stats={data.summary.stats} onJump={handleJump} />
                 : <SummaryBar summary={data.summary || {}} />}
-            {data.categories.length === 0 ? (
+            {Array.isArray(data.checks) && data.checks.length > 0 && (
+                <ChecksGrid checks={data.checks} onJump={handleJump} />
+            )}
+            {visibleCats.length === 0 ? (
                 Array.isArray(data.summary?.stats) && data.summary.stats.length > 0 ? (
                     <div style={{ textAlign: 'center', padding: 28, color: 'var(--muted)' }}>Изменений нет — всё актуально</div>
                 ) : (
                     <div style={{ textAlign: 'center', padding: 40, color: 'var(--success)', fontWeight: 600 }}>✓ Проблем не найдено</div>
                 )
             ) : (
-                data.categories.map((cat) => (
-                    <Category key={cat.key} cat={cat} excKeys={excKeys} jumpKey={jumpKey} onChanged={() => setRefreshKey((k) => k + 1)} />
+                visibleCats.map((cat) => (
+                    <Category key={cat.key} cat={cat} excKeys={excKeys} excMap={excMap} jumpKey={jumpKey} onChanged={() => setRefreshKey((k) => k + 1)} />
                 ))
             )}
         </div>

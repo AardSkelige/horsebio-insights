@@ -296,7 +296,8 @@ def _run_script_async(script_id, script_path, args):
     is_structured = SCRIPTS_BY_ID.get(script_id, {}).get('structured')
     if script_id == HEALTH_CHECK_SCRIPT_ID:
         try:
-            from api.services.health_checks import export_exceptions_to_json
+            from api.services.health_checks import cleanup_expired_exceptions, export_exceptions_to_json
+            cleanup_expired_exceptions()
             export_exceptions_to_json()
         except Exception as e:
             logger.error('Не удалось экспортировать исключения health_check: %s', e)

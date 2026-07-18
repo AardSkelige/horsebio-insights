@@ -717,15 +717,14 @@ class DocumentChecksMixin:
     def check_stale_drafts(self):
         """Найти непроведённые документы (черновики), которые не трогали более N дней.
 
-        Пороги:
-          salesreturn — 3 дня  (возвраты должны подтверждаться быстро)
-          supply, enter, loss, move, inventory — 7 дней
+        Порог: supply, enter, loss, move, inventory — 7 дней.
+        Возвраты от покупателей здесь не проверяются — их черновики создаёт
+        монитор возвратов намеренно (см. check_pending_returns).
 
         Признак «старый»: поле updated (дата последнего изменения) старше порога.
         Используем updated, а не moment, чтобы не ловить намеренно задним числом.
         """
         THRESHOLDS = [
-            ('salesreturn', 'Возвраты от покупателей', 3),
             ('supply',      'Приёмки',                 7),
             ('enter',       'Оприходования',            7),
             ('loss',        'Списания',                 7),
@@ -787,5 +786,67 @@ class DocumentChecksMixin:
 
         if not found_any:
             print("  ✅ Незавершённых черновиков не найдено\n")
+
+        print()
+
+    def check_pending_returns(self):
+        """Возвраты от покупателей, ждущие поступления товара.
+
+        Монитор возвратов (01_monitor_returns.py) создаёт возврат черновиком, когда
+        интеграция маркетплейса ставит заказу статус «возврат». Черновик — штатное
+        состояние: документ проводят, когда товар физически вернулся на склад.
+        Проверка собирает все непроведённые возвраты за doc_months и считает
+        зависшие деньги; возраст от даты документа (moment) — с этого момента
+        начался процесс возврата. Старше PENDING_RETURN_WARN_DAYS — пора выяснять
+        в кабинете маркетплейса, где товар.
+        """
+        self._section_header("Возвраты: ждут поступления товара")
+
+        now = datetime.now()
+        date_from = (now - timedelta(days=self.doc_months * 30)).strftime('%Y-%m-%d %H:%M:%S')
+
+        try:
+            docs = self.h._get_all_pages("/entity/salesreturn", {
+                "filter": f"moment>={date_from}",
+                "order": "moment,asc",
+                "expand": "agent",
+            })
+        except Exception as e:
+            print(f"  ❌ Ошибка при загрузке возвратов: {e}\n")
+            return
+
+        for doc in docs:
+            if doc.get('applicable', True):
+                continue
+            moment = (doc.get('moment') or '')[:10]
+            try:
+                age_days = (now - datetime.strptime(moment, '%Y-%m-%d')).days
+            except ValueError:
+                age_days = 0
+            self.stats['pending_returns'].append({
+                'doc_id':      doc.get('id', ''),
+                'doc_name':    doc.get('name', '?'),
+                'moment':      moment,
+                'age_days':    age_days,
+                'sum_rub':     round(doc.get('sum', 0) / 100, 2),
+                'agent':       (doc.get('agent') or {}).get('name', ''),
+                'description': (doc.get('description') or '')[:120],
+                'overdue':     age_days >= self.PENDING_RETURN_WARN_DAYS,
+            })
+
+        pending = self.stats['pending_returns']
+        if pending:
+            total = sum(p['sum_rub'] for p in pending)
+            overdue = [p for p in pending if p['overdue']]
+            print(f"  📦 Ждут поступления: {len(pending)} возвратов на {total:,.0f}р")
+            if overdue:
+                print(f"  ⚠️  Из них дольше {self.PENDING_RETURN_WARN_DAYS} дн.: "
+                      f"{len(overdue)} на {sum(p['sum_rub'] for p in overdue):,.0f}р")
+            for p in pending:
+                marker = '⚠️ ' if p['overdue'] else '  '
+                print(f"    {marker}№{p['doc_name']:<10} {p['moment']}  {p['age_days']:>3} дн."
+                      f"  {p['sum_rub']:>10,.0f}р  {p['agent']}")
+        else:
+            print("  ✅ Непроведённых возвратов нет")
 
         print()

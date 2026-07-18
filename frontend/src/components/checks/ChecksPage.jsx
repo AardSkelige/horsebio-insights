@@ -4,6 +4,8 @@ import { Loader2, ShieldCheck } from 'lucide-react';
 import { checksApi } from './checksShared';
 import ScriptCard from './ScriptCard';
 import CheckDetail from './CheckDetail';
+import PendingReturnsCard from './PendingReturnsCard';
+import PendingReturnsDetail from './PendingReturnsDetail';
 
 export default function ChecksPage() {
     const [scripts, setScripts] = useState(null);
@@ -34,8 +36,12 @@ export default function ChecksPage() {
             if (window.history.state?.idx > 0) navigate(-1);
             else navigate('/checks', { replace: true });
         };
+        if (scriptId === 'pending-returns') return <PendingReturnsDetail onBack={goBack} />;
         return <CheckDetail scriptId={scriptId} initial={script} onBack={goBack} />;
     }
+
+    // Индикатор возвратов — из сводки последнего запуска хелс-чека
+    const pendingReturns = (scripts || []).find((s) => s.is_health)?.summary?.pending_returns;
 
     // Группировка по аккаунтам с сохранением порядка появления
     const groups = [];
@@ -70,6 +76,8 @@ export default function ChecksPage() {
                     <Loader2 size={18} className="animate-spin" /> Загрузка…
                 </div>
             )}
+
+            <PendingReturnsCard pending={pendingReturns} onOpen={() => navigate('/checks/pending-returns')} />
 
             {groups.map((g) => (
                 <section key={g.account} style={{ marginBottom: 28 }}>

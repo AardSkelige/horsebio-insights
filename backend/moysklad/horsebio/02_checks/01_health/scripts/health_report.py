@@ -446,6 +446,14 @@ class ReportingMixin:
             print(f"  🕐 Незавершённых черновиков: {stale_cnt} — не проведены дольше порога")
         else:
             print(f"  ✅ Незавершённых черновиков не найдено")
+        pending = self.stats['pending_returns']
+        if pending:
+            overdue = sum(1 for p in pending if p['overdue'])
+            total = sum(p['sum_rub'] for p in pending)
+            tail = f", из них {overdue} дольше {self.PENDING_RETURN_WARN_DAYS} дн." if overdue else ''
+            print(f"  📦 Возвраты ждут товара: {len(pending)} на {total:,.0f}р{tail}")
+        else:
+            print(f"  ✅ Возвратов в ожидании нет")
 
         print("="*70 + "\n")
 
@@ -651,13 +659,16 @@ class ReportingMixin:
             for it in self.stats['enter_zero_prices']
         ])
 
-        # 13. Скачки цен в приёмках
+        # 13. Скачки цен в приёмках. last_doc нужен UI для разового исключения
+        # (extra.supply_doc — глушит только скачок этой приёмки).
         add('supply_jumps', 'Скачки цен в приёмках', 'supply_jumps', None, [
             {
                 'key': it['name'], 'ms_id': '',
                 'object': it['name'], 'severity': 'warning',
+                'last_doc': it.get('last_doc', ''),
                 'detail': f"{'▲' if it['last_price'] > it['avg_prev'] else '▼'} {it['jump_pct']:.1f}% · "
-                          f"последняя {money(it['last_price'])} ↔ средняя {money(it['avg_prev'])}",
+                          f"последняя {money(it['last_price'])} ↔ средняя {money(it['avg_prev'])} · "
+                          f"приёмка №{it.get('last_doc', '?')} {it.get('last_date', '')}",
             }
             for it in self.stats['supply_jumps']
         ])
@@ -691,11 +702,66 @@ class ReportingMixin:
             for it in self.stats['stale_drafts']
         ])
 
-        # Сводка
+        # 18. Возвраты, ждущие поступления товара. Не часть хелс-чека — отдельный
+        # индикатор на странице /checks (черновик тут штатное состояние), поэтому
+        # категория не участвует в сводке severity ниже.
+        add('pending_returns', 'Возвраты: ждут поступления товара', None, None, [
+            {
+                'key': '', 'ms_id': it['doc_id'],
+                'ms_href': (f"https://online.moysklad.ru/app/#salesreturn/edit?id={it['doc_id']}"
+                            if it['doc_id'] else ''),
+                'object': f"№{it['doc_name']}",
+                'severity': 'warning' if it['overdue'] else 'info',
+                'sum_rub': it['sum_rub'],
+                'age_days': it['age_days'],
+                'detail': f"{it['moment']} · {it['age_days']} дн · {money(it['sum_rub'])}"
+                          + (f" · {it['agent']}" if it['agent'] else ''),
+            }
+            for it in self.stats['pending_returns']
+        ])
+
+        # Сетка статусов всех проверок, включая чистые (для деталки /checks).
+        # Одна плитка = одна проверка; cats — ключи категорий с её находками.
+        _CHECKS_GRID = [
+            ('deviations',        'Отклонения FIFO vs приёмка',   ['critical', 'important']),
+            ('negative_stock',    'Отрицательные остатки',        ['negative_stock']),
+            ('enters',            'Оприходования: внутр. склады', ['suspect_enters']),
+            ('enter_prices',      'Оприходования: цена ≠ приёмка', ['enter_price_issues']),
+            ('enter_zero',        'Оприходования: нулевые цены',  ['enter_zero_prices']),
+            ('losses',            'Списания',                     ['suspect_losses']),
+            ('inventories',       'Инвентаризации',               ['suspect_inventories', 'inventory_price_issues']),
+            ('moves',             'Перемещения',                  ['suspect_moves']),
+            ('supplies',          'Приёмки',                      ['suspect_supplies']),
+            ('salesreturns',      'Возвраты: нулевая себест.',    ['suspect_sales_returns']),
+            ('supply_jumps',      'Скачки цен в приёмках',        ['supply_jumps']),
+            ('codes',             'Коды товаров',                 ['code_no_code', 'code_duplicates', 'code_suspect']),
+            ('stale_drafts',      'Незавершённые черновики',      ['stale_drafts']),
+        ]
+        cat_by_key = {c['key']: c for c in categories}
+        checks_grid = []
+        for check_id, title, cat_keys in _CHECKS_GRID:
+            if check_id == 'supply_jumps' and not getattr(self, 'full_mode', False):
+                checks_grid.append({'id': check_id, 'title': title, 'status': 'skipped',
+                                    'count': 0, 'severity': None, 'cats': []})
+                continue
+            present = [cat_by_key[k] for k in cat_keys if k in cat_by_key]
+            count = sum(c['count'] for c in present)
+            sev = max((c['severity'] for c in present),
+                      key=lambda s: self._SEVERITY_RANK.get(s, 0)) if present else None
+            checks_grid.append({
+                'id': check_id, 'title': title,
+                'status': 'problems' if count else 'ok',
+                'count': count, 'severity': sev,
+                'cats': [c['key'] for c in present],
+            })
+
+        # Сводка (pending_returns — индикатор, не находки чека)
         sev_counts = {'critical': 0, 'important': 0, 'warning': 0}
         cat_counts = {}
         for cat in categories:
             cat_counts[cat['key']] = cat['count']
+            if cat['key'] == 'pending_returns':
+                continue
             for it in cat['items']:
                 s = it['severity']
                 if s in sev_counts:
@@ -715,7 +781,15 @@ class ReportingMixin:
                 'warnings': sev_counts['warning'],
                 'ok': self.stats.get('ok', 0),
                 'categories': cat_counts,
+                'pending_returns': {
+                    'count': len(self.stats['pending_returns']),
+                    'total_rub': round(sum(p['sum_rub'] for p in self.stats['pending_returns']), 2),
+                    'overdue': sum(1 for p in self.stats['pending_returns'] if p['overdue']),
+                    'overdue_rub': round(sum(p['sum_rub'] for p in self.stats['pending_returns'] if p['overdue']), 2),
+                    'warn_days': self.PENDING_RETURN_WARN_DAYS,
+                },
             },
+            'checks': checks_grid,
             'categories': categories,
         }
 

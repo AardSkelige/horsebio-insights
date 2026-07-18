@@ -62,6 +62,36 @@ def _write_json(path, data):
         json.dump(data, f, ensure_ascii=False, indent=2)
 
 
+# ─── Очистка отработавших исключений ──────────────────────────────────────────
+
+# Документные проверки сканируют последние 3 месяца (doc_months/enter_months=3).
+# Исключение по документу старше этого окна больше никогда не сработает — документ
+# в отчёт не попадает. 4 месяца = окно + месяц запаса.
+EXPIRE_DAYS = 120
+
+
+def cleanup_expired_exceptions():
+    """Удалить документные исключения, чей документ гарантированно вышел из окна
+    сканирования. deviations и supply_jumps бессрочные — не трогаются.
+    Возвращает число удалённых записей."""
+    from datetime import timedelta
+    from django.utils import timezone
+    from api.models import HealthCheckException
+
+    cutoff = timezone.now() - timedelta(days=EXPIRE_DAYS)
+    qs = HealthCheckException.objects.filter(
+        kind__in=HealthCheckException.ACK_KINDS, created_at__lt=cutoff)
+    expired = list(qs)
+    if not expired:
+        return 0
+    for r in expired:
+        logger.info('Удалено отработавшее исключение %s:%s %s (создано %s): %s',
+                    r.kind, r.key, r.label, r.created_at.date(), r.reason[:80])
+    qs.delete()
+    logger.info('Очистка исключений health_check: удалено %d отработавших', len(expired))
+    return len(expired)
+
+
 # ─── Экспорт исключений из БД в data/*.json (перед запуском скрипта) ───────────
 
 def export_exceptions_to_json(data_dir=None):
@@ -102,8 +132,15 @@ def export_exceptions_to_json(data_dir=None):
         'notes': notes,
     })
 
-    # Скачки цен (ignored-list по name)
-    ignored = [{'name': r.key, 'reason': r.reason} for r in by_kind.get('supply_jumps', [])]
+    # Скачки цен (ignored-list по name). supply_doc в extra — разовое исключение:
+    # глушит только скачок этой приёмки; без него — вечное («у товара всегда так»)
+    ignored = []
+    for r in by_kind.get('supply_jumps', []):
+        entry = {'name': r.key, 'reason': r.reason}
+        supply_doc = (r.extra or {}).get('supply_doc')
+        if supply_doc:
+            entry['supply_doc'] = supply_doc
+        ignored.append(entry)
     _write_json(os.path.join(data_dir, SUPPLY_JUMPS_FILE), {
         '_comment': 'Позиции исключённые из проверки скачков цен в приёмках. Добавляй сюда когда скачок объяснён и не требует внимания.',
         'ignored': ignored,
@@ -166,6 +203,36 @@ def import_exceptions_from_files(model_cls, data_dir=None):
 
 # ─── Разбор результатов скрипта в БД ──────────────────────────────────────────
 
+HEALTH_SCRIPT_ID = 'horsebio_health_check'
+
+# Статусы deviations с конечным жизненным циклом: проблема закрыта, запись нужна
+# только пока отклонение ещё видно в отчёте. «норма» — постоянное свойство товара,
+# не чистится: отклонение может уйти и вернуться, объяснение снова пригодится.
+_RESOLVED_DEVIATION_STATUSES = ('исправлено', 'ошибка-некритично')
+
+
+def cleanup_resolved_deviations(categories):
+    """Удалить deviations-исключения со статусом «исправлено»/«ошибка-некритично»,
+    чьи позиции больше не фигурируют в отчёте — отклонение реально рассосалось.
+    Возвращает число удалённых записей."""
+    from api.models import HealthCheckException
+
+    still_flagged = {
+        it.get('key')
+        for cat in categories if cat.get('kind') == 'deviations'
+        for it in cat.get('items', [])
+    }
+    qs = HealthCheckException.objects.filter(
+        kind='deviations', extra__status__in=_RESOLVED_DEVIATION_STATUSES,
+    ).exclude(key__in=still_flagged)
+    resolved = list(qs)
+    for r in resolved:
+        logger.info('Удалено закрытое deviations-исключение %s %s (%s): %s',
+                    r.key, r.label, (r.extra or {}).get('status'), r.reason[:80])
+    qs.delete()
+    return len(resolved)
+
+
 def ingest_results_file(script_id, run_id, path, exit_code=None, duration_sec=None):
     """Разобрать <run>.results.json и сохранить снимок в CheckRunResult."""
     from django.utils import timezone
@@ -185,4 +252,10 @@ def ingest_results_file(script_id, run_id, path, exit_code=None, duration_sec=No
             'finished_at': timezone.now(),
         },
     )
+    # Успешный запуск хелс-чека — закрытые и рассосавшиеся отклонения больше не нужны
+    if script_id == HEALTH_SCRIPT_ID and exit_code == 0:
+        try:
+            cleanup_resolved_deviations(data.get('categories', []))
+        except Exception:
+            logger.exception('Не удалось почистить закрытые deviations-исключения')
     return obj

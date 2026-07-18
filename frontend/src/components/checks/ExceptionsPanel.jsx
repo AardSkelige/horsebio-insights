@@ -29,6 +29,10 @@ function ExceptionRow({ exc, first, onSaved, onRemove }) {
         ? (exc.extra?.ms_href || null)
         : msLink(KIND_MS_TYPE[exc.kind], exc.key);
     const status = exc.kind === 'deviations' ? exc.extra?.status : null;
+    // Скачки цен: разовое исключение (одна приёмка) или вечное (товар не проверяется)
+    const jumpScope = exc.kind === 'supply_jumps'
+        ? (exc.extra?.supply_doc ? `разовое · приёмка №${exc.extra.supply_doc}` : 'навсегда')
+        : null;
 
     const save = async () => {
         setSaving(true);
@@ -43,6 +47,11 @@ function ExceptionRow({ exc, first, onSaved, onRemove }) {
                 <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
                     <span style={{ fontSize: 14, fontWeight: 600, color: 'var(--ink)' }}>{exc.label || exc.key}</span>
                     {status && <StatusBadge status={status} />}
+                    {jumpScope && (
+                        <span style={{ fontSize: 11, fontWeight: 600, color: exc.extra?.supply_doc ? 'var(--muted)' : '#b08a1f', background: 'var(--surface-soft)', padding: '2px 8px', borderRadius: 6, whiteSpace: 'nowrap' }}>
+                            {jumpScope}
+                        </span>
+                    )}
                     <span style={{ fontSize: 11, fontWeight: 600, color: 'var(--muted)', background: 'var(--surface-soft)', padding: '2px 8px', borderRadius: 6, whiteSpace: 'nowrap' }} title={exc.created_by ? `добавил ${exc.created_by}` : ''}>
                         {shortDate(exc.created_at)}
                     </span>

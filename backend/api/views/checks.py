@@ -147,11 +147,18 @@ def checks_results(request, script_id):
     if not crr:
         return JsonResponse({'results': None})
 
-    # Активные исключения по типам — только у health_check (для deviations, остающихся в отчёте)
+    # Активные исключения — только у health_check. exception_keys — ключи по типам;
+    # exceptions_map — причина и привязка к приёмке (для «прошлого разбора» в находках)
     exc_keys = defaultdict(list)
+    exc_map = defaultdict(dict)
     if script_id == HEALTH_CHECK_SCRIPT_ID:
-        for kind, key in HealthCheckException.objects.values_list('kind', 'key'):
+        for kind, key, reason, extra in HealthCheckException.objects.values_list(
+                'kind', 'key', 'reason', 'extra'):
             exc_keys[kind].append(key)
+            exc_map[kind][key] = {
+                'reason': reason,
+                'supply_doc': (extra or {}).get('supply_doc', ''),
+            }
 
     return JsonResponse({
         'results': {
@@ -161,6 +168,7 @@ def checks_results(request, script_id):
             'summary': crr.summary or {},
             'categories': crr.findings or [],
             'exception_keys': exc_keys,
+            'exceptions_map': exc_map,
         }
     })
 

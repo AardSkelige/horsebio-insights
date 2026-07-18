@@ -362,13 +362,16 @@ class PriceChecksMixin:
         )
 
         # Загружаем игнор-лист (supply_jumps_ignore.json рядом со скриптом)
-        # Формат: {"ignored": [{"name": "...", "reason": "..."}]}
+        # Формат: {"ignored": [{"name": "...", "reason": "...", "supply_doc": "00096"?}]}
+        # supply_doc указан → разовое исключение: глушит только скачок, чья последняя
+        # приёмка совпадает; новая приёмка с новым скачком снова попадёт в отчёт.
+        # supply_doc нет → вечное («у товара всегда так»).
         ignore_file = os.path.join(os.path.dirname(__file__), '..', 'data', 'supply_jumps_ignore.json')
-        ignore_map = {}  # name -> reason
+        ignore_map = {}  # name -> {'reason': ..., 'supply_doc': ...}
         if os.path.exists(ignore_file):
             try:
                 data = json.loads(open(ignore_file, encoding='utf-8').read())
-                ignore_map = {e['name']: e.get('reason', '') for e in data.get('ignored', [])}
+                ignore_map = {e['name']: e for e in data.get('ignored', [])}
                 pass  # Игнор-лист загружен, детали — в итоговой статистике
             except Exception as e:
                 print(f"  ⚠️ Не удалось загрузить игнор-лист: {e}\n")
@@ -385,10 +388,12 @@ class PriceChecksMixin:
             result = self.check_supply_price(product['id'], product['name'])
 
             if result:
-                reason = ignore_map.get(product['name'])
-                if reason is not None:
-                    # Явная запись в игнор-листе
-                    result['reason'] = reason
+                entry = ignore_map.get(product['name'])
+                ignored = entry is not None and (
+                    not entry.get('supply_doc')                          # вечное
+                    or entry['supply_doc'] == result.get('last_doc'))    # разовое: та же приёмка
+                if ignored:
+                    result['reason'] = entry.get('reason', '')
                     self.stats['supply_jumps_explained'].append(result)
                 elif result.get('auto_reason'):
                     # Авто-определённый паттерн (напр. одна сторона этикетки)
