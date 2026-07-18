@@ -3,6 +3,7 @@ Cash flow business logic services.
 Extracted from views/cash_flow.py for separation of concerns.
 """
 import requests
+from concurrent.futures import ThreadPoolExecutor
 from django.conf import settings
 from openpyxl import Workbook
 from openpyxl.styles import Font, PatternFill, Border, Side
@@ -28,6 +29,43 @@ def get_headers():
     }
 
 
+def _fetch_operation_pages(operation, filter_from, filter_to, headers):
+    """Постраничная загрузка всех операций одного типа"""
+    all_operations = []
+    offset = 0
+    limit = 1000
+
+    while True:
+        url = f"{BASE_URL}/entity/{operation}?filter=moment>={filter_from};moment<={filter_to}&limit={limit}&offset={offset}"
+
+        try:
+            response = requests.get(url, headers=headers, timeout=TIMEOUT)
+            if response.status_code == 200:
+                data = response.json()
+                rows = data.get('rows', [])
+
+                if not rows:  # Больше нет данных
+                    break
+
+                all_operations.extend(rows)
+                offset += limit
+
+                # Если получили меньше чем limit, значит это последняя страница
+                if len(rows) < limit:
+                    break
+
+            else:
+                logger.error(f"Ошибка получения {operation}: {response.status_code}")
+                break
+
+        except Exception as e:
+            logger.error(f"Ошибка запроса {operation}: {e}")
+            break
+
+    logger.info(f"Итого операций {operation}: {len(all_operations)}")
+    return all_operations
+
+
 def get_operations_data(date_from, date_to):
     """
     Получить данные по операциям (все типы, влияющие на денежный поток)
@@ -39,51 +77,18 @@ def get_operations_data(date_from, date_to):
         'cashin', 'cashout', 'paymentin', 'paymentout',
         'retaildrawercashin', 'retaildrawercashout'
     ]
-    all_data = {}
+    filter_from = date_from.replace('T', ' ').replace('.000', '')
+    filter_to = date_to.replace('T', ' ').replace('.000', '')
 
-    for operation in operations:
-        logger.info(f"Загружаем операции {operation}...")
-        # Конвертируем даты для фильтра
-        filter_from = date_from.replace('T', ' ').replace('.000', '')
-        filter_to = date_to.replace('T', ' ').replace('.000', '')
+    # Типы операций независимы — грузим параллельно.
+    # МойСклад допускает до 5 одновременных запросов, держим запас.
+    with ThreadPoolExecutor(max_workers=4) as pool:
+        results = pool.map(
+            lambda op: (op, _fetch_operation_pages(op, filter_from, filter_to, headers)),
+            operations,
+        )
 
-        all_operations = []
-        offset = 0
-        limit = 1000
-
-        while True:
-            url = f"{BASE_URL}/entity/{operation}?filter=moment>={filter_from};moment<={filter_to}&limit={limit}&offset={offset}"
-
-            try:
-                response = requests.get(url, headers=headers, timeout=TIMEOUT)
-                if response.status_code == 200:
-                    data = response.json()
-                    rows = data.get('rows', [])
-
-                    if not rows:  # Больше нет данных
-                        break
-
-                    all_operations.extend(rows)
-                    offset += limit
-
-                    logger.info(f"  Загружено {len(rows)} операций (всего: {len(all_operations)})")
-
-                    # Если получили меньше чем limit, значит это последняя страница
-                    if len(rows) < limit:
-                        break
-
-                else:
-                    logger.error(f"Ошибка получения {operation}: {response.status_code}")
-                    break
-
-            except Exception as e:
-                logger.error(f"Ошибка запроса {operation}: {e}")
-                break
-
-        all_data[operation] = all_operations
-        logger.info(f"Итого операций {operation}: {len(all_operations)}")
-
-    return all_data
+    return dict(results)
 
 
 def get_expense_items():
@@ -198,11 +203,12 @@ def get_sales_channels():
     return channels_dict
 
 
-def get_payments_by_channels(channels_dict, date_from, date_to):
+def get_payments_by_channels(channels_dict, operations_data):
     """
-    Получить суммы ПЛАТЕЖЕЙ по каналам в строгом режиме
+    Получить суммы ПЛАТЕЖЕЙ по каналам в строгом режиме.
+    Работает по уже загруженным операциям (get_operations_data) — без повторных
+    запросов к МойСклад; заодно охватывает все платежи, а не первую тысячу.
     """
-    headers = get_headers()
     channel_payments = {}
     # Инициализируем каналы нулевыми значениями
     for channel_id, channel_name in channels_dict.items():
@@ -214,51 +220,34 @@ def get_payments_by_channels(channels_dict, date_from, date_to):
         if channel_name not in channel_payments:
             channel_payments[channel_name] = 0
 
-    filter_from = date_from.replace('T', ' ').replace('.000', '')
-    filter_to = date_to.replace('T', ' ').replace('.000', '')
-
     processed_payments = set()  # Отслеживаем обработанные платежи по ID
 
     for payment_type in ['paymentin', 'cashin']:
-        url = f"{BASE_URL}/entity/{payment_type}?filter=moment>={filter_from};moment<={filter_to}&limit=1000"
+        for payment in operations_data.get(payment_type, []):
+            # Проверяем, не обрабатывали ли мы уже этот платеж
+            payment_id = payment.get('id')
+            if payment_id in processed_payments:
+                continue
+            processed_payments.add(payment_id)
 
-        try:
-            response = requests.get(url, headers=headers, timeout=TIMEOUT)
-            if response.status_code == 200:
-                data = response.json()
-                payments = data.get('rows', [])
+            sum_value = payment.get('sum', 0)
+            amount = sum_value / 100 if sum_value else 0
+            channel_found = False
 
-                for payment in payments:
-                    # Проверяем, не обрабатывали ли мы уже этот платеж
-                    payment_id = payment.get('id')
-                    if payment_id in processed_payments:
-                        continue
-                    processed_payments.add(payment_id)
+            # Проверяем прямое поле salesChannel у платежа
+            sales_channel = payment.get('salesChannel')
+            if sales_channel and sales_channel.get('meta'):
+                href = sales_channel['meta'].get('href', '')
+                if '/entity/saleschannel/' in href:
+                    channel_id = href.split('/entity/saleschannel/')[-1]
+                    channel_name = channels_dict.get(channel_id, f'Неизвестный канал ({channel_id})')
+                    ensure_channel_exists(channel_name)
+                    channel_payments[channel_name] += amount
+                    channel_found = True
 
-                    sum_value = payment.get('sum', 0)
-                    amount = sum_value / 100 if sum_value else 0
-                    channel_found = False
-
-                    # Проверяем прямое поле salesChannel у платежа
-                    sales_channel = payment.get('salesChannel')
-                    if sales_channel and sales_channel.get('meta'):
-                        href = sales_channel['meta'].get('href', '')
-                        if '/entity/saleschannel/' in href:
-                            channel_id = href.split('/entity/saleschannel/')[-1]
-                            channel_name = channels_dict.get(channel_id, f'Неизвестный канал ({channel_id})')
-                            ensure_channel_exists(channel_name)
-                            channel_payments[channel_name] += amount
-                            channel_found = True
-
-                    # Если никак не найден
-                    if not channel_found:
-                        channel_payments['Без канала'] += amount
-
-            else:
-                logger.error(f"Ошибка получения {payment_type}: {response.status_code}")
-
-        except Exception as e:
-            logger.error(f"Ошибка запроса {payment_type}: {e}")
+            # Если никак не найден
+            if not channel_found:
+                channel_payments['Без канала'] += amount
 
     return channel_payments
 

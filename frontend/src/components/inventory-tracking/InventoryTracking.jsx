@@ -1,5 +1,8 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
+import PropTypes from 'prop-types';
+import { m as motion } from 'motion/react';
 import { RefreshCw, Upload } from 'lucide-react';
+import { FadeRise } from '../ui/motion';
 import InventoryStatsCards from './InventoryStatsCards';
 import { inventoryApi } from '../../api/inventoryApi';
 import InventoryTable from './InventoryTable';
@@ -59,21 +62,29 @@ function MonthPicker({ selected, history, onSelect, isMobile }) {
                         key={m}
                         onClick={() => onSelect(isCurrent ? null : m)}
                         style={{
+                            position: 'relative',
                             padding: '4px 13px',
                             borderRadius: 16,
-                            border: `1px solid ${active ? 'var(--ink)' : 'var(--hairline)'}`,
-                            background: active ? 'var(--ink)' : 'transparent',
+                            border: `1px solid ${active ? 'transparent' : 'var(--hairline)'}`,
+                            background: 'transparent',
                             color: active ? 'var(--canvas)' : row ? 'var(--body)' : 'var(--muted)',
                             fontFamily: 'var(--sans)',
                             fontSize: 12,
                             cursor: 'pointer',
-                            transition: 'all 0.15s',
+                            transition: 'color 0.15s',
                             display: 'flex',
                             alignItems: 'center',
                             gap: 5,
                         }}
                     >
-                        {label}
+                        {active && (
+                            <motion.span
+                                layoutId="month-picker-pill"
+                                transition={{ type: 'spring', stiffness: 500, damping: 40 }}
+                                style={{ position: 'absolute', inset: -1, borderRadius: 16, background: 'var(--ink)' }}
+                            />
+                        )}
+                        <span style={{ position: 'relative' }}>{label}</span>
                         {row && !active && (
                             <span style={{
                                 color: row.pct >= 80 ? 'var(--success)' : row.pct >= 50 ? '#f59e0b' : 'var(--error)',
@@ -90,6 +101,13 @@ function MonthPicker({ selected, history, onSelect, isMobile }) {
     );
 }
 
+MonthPicker.propTypes = {
+    selected: PropTypes.string,
+    history: PropTypes.arrayOf(PropTypes.object).isRequired,
+    onSelect: PropTypes.func.isRequired,
+    isMobile: PropTypes.bool,
+};
+
 export default function InventoryTracking() {
     const [data, setData] = useState(null);
     const [loading, setLoading] = useState(true);
@@ -100,6 +118,8 @@ export default function InventoryTracking() {
     const [error, setError] = useState(null);
     const [activeFolder, setActiveFolder] = useState('Все');
     const [selectedMonth, setSelectedMonth] = useState(null);
+    // Таблицы позиций свёрнуты по умолчанию — страница иначе слишком длинная
+    const [openTables, setOpenTables] = useState({ inventoried: false, 'not-inventoried': false });
     const [history, setHistory] = useState([]);
     const [isMobile, setIsMobile] = useState(() => window.innerWidth < 768);
     const abortRef = useRef(null);
@@ -386,7 +406,7 @@ export default function InventoryTracking() {
 
             {/* ── Upload result banner ── */}
             {uploadResult && (
-                <div style={{
+                <FadeRise style={{
                     background: uploadResult.ok ? 'rgba(93,184,114,0.1)' : 'rgba(198,69,69,0.08)',
                     border: `1px solid ${uploadResult.ok ? 'rgba(93,184,114,0.3)' : 'rgba(198,69,69,0.2)'}`,
                     borderRadius: 8,
@@ -404,7 +424,7 @@ export default function InventoryTracking() {
                     {uploadResult.errLines.map((msg, i) => (
                         <span key={i} style={{ color: 'var(--error)' }}>{msg}</span>
                     ))}
-                </div>
+                </FadeRise>
             )}
 
             {/* ── Error banners ── */}
@@ -442,14 +462,18 @@ export default function InventoryTracking() {
 
             {/* ── Stats ── */}
             {data && (
-                <InventoryStatsCards
-                    data={data}
-                    isMobile={isMobile}
-                    onScrollTo={(type) => {
-                        const ref = type === 'inventoried' ? inventoriedRef : notInventoriedRef;
-                        ref.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
-                    }}
-                />
+                <FadeRise>
+                    <InventoryStatsCards
+                        data={data}
+                        isMobile={isMobile}
+                        onScrollTo={(type) => {
+                            // Сначала раскрываем таблицу, потом скроллим к ней
+                            setOpenTables(t => ({ ...t, [type]: true }));
+                            const ref = type === 'inventoried' ? inventoriedRef : notInventoriedRef;
+                            setTimeout(() => ref.current?.scrollIntoView({ behavior: 'smooth', block: 'start' }), 50);
+                        }}
+                    />
+                </FadeRise>
             )}
 
             {/* ── Folder filter ── */}
@@ -482,35 +506,45 @@ export default function InventoryTracking() {
             {/* ── Product tables ── */}
             {(loading || data) && (
                 <>
-                    <div ref={inventoriedRef}>
-                        <InventoryTable
-                            title={`Были в инвентаризации · ${currentMonthLabel}`}
-                            products={inventoried}
-                            type="inventoried"
-                            loading={loading}
-                            isMobile={isMobile}
-                        />
-                    </div>
-                    <div ref={notInventoriedRef}>
-                        <InventoryTable
-                            title={`Не были в инвентаризации · ${currentMonthLabel}`}
-                            products={notInventoried}
-                            type="not-inventoried"
-                            loading={loading}
-                            isMobile={isMobile}
-                        />
-                    </div>
+                    <FadeRise delay={0.05}>
+                        <div ref={inventoriedRef} style={{ scrollMarginTop: 16 }}>
+                            <InventoryTable
+                                title={`Были в инвентаризации · ${currentMonthLabel}`}
+                                products={inventoried}
+                                type="inventoried"
+                                loading={loading}
+                                isMobile={isMobile}
+                                open={openTables.inventoried}
+                                onToggle={() => setOpenTables(t => ({ ...t, inventoried: !t.inventoried }))}
+                            />
+                        </div>
+                    </FadeRise>
+                    <FadeRise delay={0.1}>
+                        <div ref={notInventoriedRef} style={{ scrollMarginTop: 16 }}>
+                            <InventoryTable
+                                title={`Не были в инвентаризации · ${currentMonthLabel}`}
+                                products={notInventoried}
+                                type="not-inventoried"
+                                loading={loading}
+                                isMobile={isMobile}
+                                open={openTables['not-inventoried']}
+                                onToggle={() => setOpenTables(t => ({ ...t, 'not-inventoried': !t['not-inventoried'] }))}
+                            />
+                        </div>
+                    </FadeRise>
                 </>
             )}
 
             {/* ── Monthly history ── */}
             {history.length > 0 && (
-                <InventoryHistoryTable
-                    history={history}
-                    selectedMonth={selectedMonth}
-                    onSelectMonth={setSelectedMonth}
-                    isMobile={isMobile}
-                />
+                <FadeRise inView>
+                    <InventoryHistoryTable
+                        history={history}
+                        selectedMonth={selectedMonth}
+                        onSelectMonth={setSelectedMonth}
+                        isMobile={isMobile}
+                    />
+                </FadeRise>
             )}
 
             <style>{`

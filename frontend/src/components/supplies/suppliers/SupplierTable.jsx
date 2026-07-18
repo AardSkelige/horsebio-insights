@@ -1,6 +1,8 @@
 import PropTypes from 'prop-types';
-import { ChevronUp, ChevronDown, ChevronsUpDown, Eye, Loader2 } from 'lucide-react';
+import { ChevronUp, ChevronDown, ChevronsUpDown, Eye } from 'lucide-react';
 import { SupplierPropTypes } from './types';
+import { SkeletonRows } from '../../ui/Skeleton';
+import { useRowHoverPill } from '../../ui/motion';
 
 const thStyle = (active) => ({
     fontFamily: 'var(--sans)', fontSize: '11px', fontWeight: 500,
@@ -41,10 +43,12 @@ const COLUMNS = [
 
 const SupplierTable = ({ suppliers, loading, pagination, sortField, sortOrder, onSort, onPageChange, onSupplierClick }) => {
     const totalPages = Math.ceil((pagination.total || 0) / pagination.pageSize) || 1;
+    const { containerProps, rowHoverProps, pill } = useRowHoverPill();
 
     return (
         <div>
-            <div style={{ overflowX: 'auto' }}>
+            <div {...containerProps} style={{ ...containerProps.style, overflowX: 'auto' }}>
+                {pill}
                 <table style={{ width: '100%', borderCollapse: 'collapse' }}>
                     <thead>
                         <tr>
@@ -59,24 +63,15 @@ const SupplierTable = ({ suppliers, loading, pagination, sortField, sortOrder, o
                             <th style={{ ...thStyle(false), cursor: 'default' }}>Детали</th>
                         </tr>
                     </thead>
-                    <tbody>
-                        {loading ? (
-                            <tr>
-                                <td colSpan={8} style={{ ...tdStyle, textAlign: 'center', padding: '32px 0', color: 'var(--muted)' }}>
-                                    <Loader2 size={16} className="animate-spin" style={{ display: 'inline-block', marginRight: 8 }} />
-                                    Загрузка...
-                                </td>
-                            </tr>
-                        ) : suppliers.length === 0 ? (
+                    <tbody style={{ opacity: loading && suppliers.length > 0 ? 0.45 : 1, transition: 'opacity 200ms ease' }}>
+                        {loading && suppliers.length === 0 ? (
+                            <SkeletonRows cols={8} />
+                        ) : !loading && suppliers.length === 0 ? (
                             <tr>
                                 <td colSpan={8} style={{ ...tdStyle, textAlign: 'center', padding: '32px 0', color: 'var(--muted)' }}>Нет данных</td>
                             </tr>
                         ) : suppliers.map(row => (
-                            <tr key={row.id}
-                                style={{ transition: 'background 100ms' }}
-                                onMouseEnter={e => { e.currentTarget.style.background = 'var(--surface-soft)'; }}
-                                onMouseLeave={e => { e.currentTarget.style.background = ''; }}
-                            >
+                            <tr key={row.id} {...rowHoverProps}>
                                 <td style={{ ...tdStyle, fontWeight: 500, color: 'var(--ink)' }}>{row.name}</td>
                                 <td style={tdStyle}>{fmt(row.supplies_count)}</td>
                                 <td style={tdStyle}>{fmt(row.positions_count)}</td>

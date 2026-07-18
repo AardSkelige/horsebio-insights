@@ -13,7 +13,9 @@ const FeatureCard = ({ icon: Icon, title, description, link }) => {
             style={{
                 backgroundColor: hovered ? 'var(--surface-cream-strong)' : 'var(--surface-card)',
                 borderRadius: '12px',
-                transition: 'background-color 150ms ease',
+                transform: hovered ? 'translateY(-2px)' : 'translateY(0)',
+                boxShadow: hovered ? '0 6px 20px rgba(20,20,19,0.08)' : '0 0 0 rgba(20,20,19,0)',
+                transition: 'background-color 150ms ease, transform 180ms ease-out, box-shadow 180ms ease-out',
                 display: 'block',
                 padding: '16px',
                 textDecoration: 'none',

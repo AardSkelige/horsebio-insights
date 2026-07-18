@@ -1,5 +1,6 @@
 import PropTypes from 'prop-types';
 import { PieChart, Pie, Cell, ResponsiveContainer, Tooltip, Legend } from 'recharts';
+import { CHART_ANIMATION } from '../../utils/chartAnimation';
 
 const COLORS = { A: '#cc785c', B: '#5c8acc', C: '#cc9c3a' };
 
@@ -36,7 +37,7 @@ export const ABCCharts = ({ data }) => {
             <div style={{ height: 320 }}>
                 <ResponsiveContainer width="100%" height="100%">
                     <PieChart>
-                        <Pie data={pieData} cx="50%" cy="50%" innerRadius={60} outerRadius={110} dataKey="value" labelLine={false}>
+                        <Pie {...CHART_ANIMATION} data={pieData} cx="50%" cy="50%" innerRadius={60} outerRadius={110} dataKey="value" labelLine={false}>
                             {pieData.map(e => <Cell key={e.category} fill={COLORS[e.category]} />)}
                         </Pie>
                         <Legend

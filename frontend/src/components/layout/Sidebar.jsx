@@ -18,6 +18,8 @@ export const Sidebar = ({ expanded, onToggle, isMobile, mobileOpen, onMobileClos
     const navigate = useNavigate();
     const { toggle: toggleDataPanel } = useDataPanel();
     const [isSuperuser, setIsSuperuser] = useState(getFreshAuthStatus().isSuperuser === true);
+    // Ховер живёт на уровне сайдбара: одна layoutId-пилюля перетекает между пунктами
+    const [hovPath, setHovPath] = useState(null);
 
     useEffect(() => subscribeAuth(s => setIsSuperuser(s.isSuperuser === true)), []);
 
@@ -120,6 +122,7 @@ export const Sidebar = ({ expanded, onToggle, isMobile, mobileOpen, onMobileClos
                 style={{ flex: 1, overflowY: 'auto', overflowX: 'hidden', padding: '6px 0', scrollbarWidth: 'none', WebkitOverflowScrolling: 'touch', overscrollBehavior: 'contain' }}
                 onTouchStart={e => e.stopPropagation()}
                 onTouchMove={e => e.stopPropagation()}
+                onMouseLeave={() => setHovPath(null)}
             >
                 {NAV_GROUPS.map((group, gi) => {
                     const items = group.items.filter(item => !item.superuserOnly || isSuperuser);
@@ -156,6 +159,8 @@ export const Sidebar = ({ expanded, onToggle, isMobile, mobileOpen, onMobileClos
                                     expanded={showExpanded}
                                     active={isActive(item.path)}
                                     onNavigate={mobileNavigate}
+                                    hovered={hovPath === item.path}
+                                    onHover={setHovPath}
                                 />
                             ))}
                         </div>

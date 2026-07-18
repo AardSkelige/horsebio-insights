@@ -7,6 +7,7 @@ import {
 } from 'lucide-react';
 import FeatureCard from './components/FeatureCard';
 import StatisticsCards from './components/StatisticsCards';
+import { FadeRise } from '../ui/motion';
 import { statsApi } from '../../api/statsApi';
 import { authApi } from '../../api/authApi';
 import { useLoading } from '../../contexts/LoadingContext';
@@ -109,7 +110,7 @@ const HomePage = () => {
 
             <div className="space-y-8">
                 {sections.map((section) => (
-                    <div key={section.title}>
+                    <FadeRise inView key={section.title}>
                         <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '14px' }}>
                             <span style={{ fontSize: '11px', fontWeight: 500, letterSpacing: '0.1em', textTransform: 'uppercase', color: 'var(--muted)', whiteSpace: 'nowrap' }}>
                                 {section.title}
@@ -121,7 +122,7 @@ const HomePage = () => {
                                 <FeatureCard key={item.link} {...item} />
                             ))}
                         </div>
-                    </div>
+                    </FadeRise>
                 ))}
             </div>
         </div>

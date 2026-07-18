@@ -48,8 +48,8 @@ def cash_flow_report(request):
         # Получаем каналы продаж
         channels_dict = get_sales_channels()
 
-        # Получаем платежи по каналам
-        channel_payments = get_payments_by_channels(channels_dict, date_from, date_to)
+        # Получаем платежи по каналам из уже загруженных операций
+        channel_payments = get_payments_by_channels(channels_dict, operations_data)
 
         # Получаем статьи расходов
         expense_items_dict = get_expense_items()
@@ -169,7 +169,7 @@ def cash_flow_export(request):
         # Получаем все данные (аналогично cash_flow_report)
         operations_data = get_operations_data(date_from, date_to)
         channels_dict = get_sales_channels()
-        channel_payments = get_payments_by_channels(channels_dict, date_from, date_to)
+        channel_payments = get_payments_by_channels(channels_dict, operations_data)
         expense_items_dict = get_expense_items()
         expense_categories, excluded_categories, _, _ = get_expense_categories_by_api(operations_data, expense_items_dict)
 

@@ -4,6 +4,7 @@ import MaterialTable from './MaterialTable';
 import MaterialStatistics from './MaterialStatistics';
 import MaterialDetailsModal from './MaterialDetailsModal';
 import SectionLabel from '../../ui/SectionLabel';
+import { FadeRise } from '../../ui/motion';
 import { materialsApi } from '../../../api/materialsApi';
 import { useAnalysisTable } from '../../../hooks/useAnalysisTable';
 
@@ -38,26 +39,30 @@ const MaterialAnalysis = () => {
                 </button>
             </div>
 
-            <MaterialFilterPanel filters={filters} onChange={handleFiltersChange} />
+            <FadeRise>
+                <MaterialFilterPanel filters={filters} onChange={handleFiltersChange} />
+            </FadeRise>
 
             {stats && (
-                <div style={{ marginBottom: 24 }}>
+                <FadeRise delay={0.05} style={{ marginBottom: 24 }}>
                     <SectionLabel>Сводка</SectionLabel>
                     <MaterialStatistics stats={stats} />
-                </div>
+                </FadeRise>
             )}
 
-            <MaterialTable
-                materials={materials}
-                loading={loading}
-                pagination={pagination}
-                sortField={sortField}
-                sortOrder={sortOrder}
-                onSort={handleSort}
-                onPageChange={handlePageChange}
-                onMaterialClick={handleItemClick}
-                filters={filters}
-            />
+            <FadeRise delay={0.1}>
+                <MaterialTable
+                    materials={materials}
+                    loading={loading}
+                    pagination={pagination}
+                    sortField={sortField}
+                    sortOrder={sortOrder}
+                    onSort={handleSort}
+                    onPageChange={handlePageChange}
+                    onMaterialClick={handleItemClick}
+                    filters={filters}
+                />
+            </FadeRise>
 
             {selectedMaterial && (
                 <MaterialDetailsModal

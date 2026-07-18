@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import PropTypes from 'prop-types';
 import { ChevronDown, ChevronUp } from 'lucide-react';
 
 function fmt(dateStr) {
@@ -32,6 +33,7 @@ export default function CellsInfoPanel({ cellsLog, selectedMonth, isMobile }) {
             {/* ── Header — always visible ── */}
             <button
                 onClick={() => setOpen(v => !v)}
+                className="no-tap-scale"
                 style={{
                     width: '100%',
                     display: 'flex',
@@ -190,3 +192,9 @@ export default function CellsInfoPanel({ cellsLog, selectedMonth, isMobile }) {
         </div>
     );
 }
+
+CellsInfoPanel.propTypes = {
+    cellsLog: PropTypes.arrayOf(PropTypes.object).isRequired,
+    selectedMonth: PropTypes.string,
+    isMobile: PropTypes.bool,
+};

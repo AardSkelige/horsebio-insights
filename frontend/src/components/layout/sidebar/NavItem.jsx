@@ -1,12 +1,13 @@
 import { useState, useRef } from 'react';
 import { Link } from 'react-router-dom';
 import PropTypes from 'prop-types';
+import { m } from 'motion/react';
 
 const tooltipStyle = (top) => ({
     position: 'fixed',
     top,
     left: 60,
-    transform: 'translateY(-50%)',
+    y: '-50%',
     backgroundColor: 'var(--surface-dark-elevated)',
     color: 'var(--on-dark)',
     padding: '5px 10px',
@@ -18,20 +19,18 @@ const tooltipStyle = (top) => ({
     zIndex: 200,
     pointerEvents: 'none',
     boxShadow: '0 2px 8px rgba(0,0,0,0.3)',
-    animation: 'sidebar-tooltip-in 150ms ease forwards',
 });
 
-const NavItem = ({ path, label, icon: Icon, expanded, active, onNavigate }) => {
-    const [hov, setHov] = useState(false);
+const NavItem = ({ path, label, icon: Icon, expanded, active, onNavigate, hovered, onHover }) => {
     const [tipTop, setTipTop] = useState(0);
     const ref = useRef(null);
 
     const handleEnter = () => {
-        setHov(true);
         if (ref.current) {
             const r = ref.current.getBoundingClientRect();
             setTipTop(r.top + r.height / 2);
         }
+        onHover(path);
     };
 
     return (
@@ -41,8 +40,8 @@ const NavItem = ({ path, label, icon: Icon, expanded, active, onNavigate }) => {
                 to={path}
                 onClick={onNavigate ? (e) => { e.preventDefault(); onNavigate(path); } : undefined}
                 onMouseEnter={handleEnter}
-                onMouseLeave={() => setHov(false)}
                 style={{
+                    position: 'relative',
                     display: 'flex',
                     alignItems: 'center',
                     justifyContent: expanded ? 'flex-start' : 'center',
@@ -51,20 +50,33 @@ const NavItem = ({ path, label, icon: Icon, expanded, active, onNavigate }) => {
                     margin: '1px 6px',
                     borderRadius: 8,
                     textDecoration: 'none',
-                    backgroundColor: active
-                        ? 'rgba(255,255,255,0.10)'
-                        : hov ? 'rgba(255,255,255,0.06)' : 'transparent',
-                    transition: 'background 150ms ease',
-                    overflow: 'hidden',
                     whiteSpace: 'nowrap',
                 }}
             >
+                {/* Ховер-пилюля: одна на весь сайдбар, перетекает за курсором */}
+                {hovered && (
+                    <m.span
+                        layoutId="sidebar-hover-pill"
+                        transition={{ type: 'spring', stiffness: 550, damping: 45 }}
+                        style={{ position: 'absolute', inset: 0, borderRadius: 8, backgroundColor: 'rgba(255,255,255,0.06)' }}
+                    />
+                )}
+                {/* Активная пилюля: перелетает к выбранному пункту при навигации */}
+                {active && (
+                    <m.span
+                        layoutId="sidebar-active-pill"
+                        transition={{ type: 'spring', stiffness: 450, damping: 38 }}
+                        style={{ position: 'absolute', inset: 0, borderRadius: 8, backgroundColor: 'rgba(255,255,255,0.10)' }}
+                    />
+                )}
                 <Icon style={{
+                    position: 'relative',
                     width: 16, height: 16, flexShrink: 0,
                     color: active ? 'var(--primary)' : 'var(--on-dark-soft)',
                     transition: 'color 150ms ease',
                 }} />
                 <span style={{
+                    position: 'relative',
                     fontFamily: 'var(--sans)',
                     fontSize: '13px',
                     fontWeight: active ? 500 : 400,
@@ -79,7 +91,16 @@ const NavItem = ({ path, label, icon: Icon, expanded, active, onNavigate }) => {
                     {label}
                 </span>
             </Link>
-            {!expanded && hov && <div style={tooltipStyle(tipTop)}>{label}</div>}
+            {!expanded && hovered && (
+                <m.div
+                    initial={{ opacity: 0, x: -4 }}
+                    animate={{ opacity: 1, x: 0 }}
+                    transition={{ type: 'spring', stiffness: 400, damping: 28 }}
+                    style={tooltipStyle(tipTop)}
+                >
+                    {label}
+                </m.div>
+            )}
         </>
     );
 };
@@ -91,6 +112,8 @@ NavItem.propTypes = {
     expanded: PropTypes.bool.isRequired,
     active: PropTypes.bool.isRequired,
     onNavigate: PropTypes.func,
+    hovered: PropTypes.bool.isRequired,
+    onHover: PropTypes.func.isRequired,
 };
 
 export default NavItem;

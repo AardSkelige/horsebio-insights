@@ -4,6 +4,7 @@ import MaterialSupplyTable from './MaterialSupplyTable';
 import MaterialSupplyDetailsModal from './MaterialSupplyDetailsModal';
 import SectionLabel from '../../ui/SectionLabel';
 import StatCard from '../../ui/StatCard';
+import { FadeRise } from '../../ui/motion';
 import { suppliesApi } from '../../../api/suppliesApi';
 import { useAnalysisTable } from '../../../hooks/useAnalysisTable';
 
@@ -40,30 +41,34 @@ const MaterialSupplyAnalysis = () => {
                 </button>
             </div>
 
-            <MaterialSupplyFilterPanel filters={filters} onChange={handleFiltersChange} />
+            <FadeRise>
+                <MaterialSupplyFilterPanel filters={filters} onChange={handleFiltersChange} />
+            </FadeRise>
 
             {stats && (
-                <div style={{ marginBottom: 24 }}>
+                <FadeRise delay={0.05} style={{ marginBottom: 24 }}>
                     <SectionLabel>Сводка</SectionLabel>
                     <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(300px, 1fr))', gap: 12 }}>
                         <StatCard title="Материалов" value={stats.total_materials} />
                         <StatCard title="Приёмок" value={stats.total_supplies} />
-                        <StatCard title="Общая сумма" value={`${fmt(stats.total_sum)} ₽`} />
+                        <StatCard title="Общая сумма" value={stats.total_sum ?? 0} format={(v) => `${fmt(v)} ₽`} />
                     </div>
-                </div>
+                </FadeRise>
             )}
 
-            <MaterialSupplyTable
-                materials={materials}
-                loading={loading}
-                pagination={pagination}
-                sortField={sortField}
-                sortOrder={sortOrder}
-                onSort={handleSort}
-                onPageChange={handlePageChange}
-                onMaterialClick={handleItemClick}
-                filters={filters}
-            />
+            <FadeRise delay={0.1}>
+                <MaterialSupplyTable
+                    materials={materials}
+                    loading={loading}
+                    pagination={pagination}
+                    sortField={sortField}
+                    sortOrder={sortOrder}
+                    onSort={handleSort}
+                    onPageChange={handlePageChange}
+                    onMaterialClick={handleItemClick}
+                    filters={filters}
+                />
+            </FadeRise>
 
             {selectedMaterial && (
                 <MaterialSupplyDetailsModal

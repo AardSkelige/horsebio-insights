@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import PropTypes from 'prop-types';
+import { m } from 'motion/react';
 import { ArrowLeft, Play, Square, Loader2, CheckCircle, AlertCircle, Clock, History } from 'lucide-react';
 import { checksApi, relTime, fmtDuration } from './checksShared';
 import HealthResults from './HealthResults';
@@ -134,10 +135,20 @@ export default function CheckDetail({ scriptId, initial, onBack }) {
 function Seg({ active, onClick, children }) {
     return (
         <button onClick={onClick} style={{
+            position: 'relative',
             padding: '6px 16px', fontSize: 13, fontWeight: 600, cursor: 'pointer', borderRadius: 7, border: 'none',
-            background: active ? 'var(--canvas)' : 'transparent', color: active ? 'var(--ink)' : 'var(--muted)',
-            boxShadow: active ? '0 1px 2px rgba(0,0,0,0.06)' : 'none',
-        }}>{children}</button>
+            background: 'transparent', color: active ? 'var(--ink)' : 'var(--muted)',
+            transition: 'color 150ms ease',
+        }}>
+            {active && (
+                <m.span
+                    layoutId="checks-seg-pill"
+                    transition={{ type: 'spring', stiffness: 500, damping: 40 }}
+                    style={{ position: 'absolute', inset: 0, borderRadius: 7, background: 'var(--canvas)', boxShadow: '0 1px 2px rgba(0,0,0,0.06)' }}
+                />
+            )}
+            <span style={{ position: 'relative' }}>{children}</span>
+        </button>
     );
 }
 Seg.propTypes = { active: PropTypes.bool, onClick: PropTypes.func, children: PropTypes.node };

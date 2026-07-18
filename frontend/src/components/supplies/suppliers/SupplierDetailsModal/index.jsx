@@ -1,11 +1,11 @@
 import { useState, useEffect, useRef } from 'react';
-import { createPortal } from 'react-dom';
 import PropTypes from 'prop-types';
 import { X, ChevronRight, Loader2, Check, Search, ChevronDown } from 'lucide-react';
 import StatisticsSection from './StatisticsSection';
 import MaterialsSection from './MaterialsSection';
 import PriceChart from './PriceChart';
 import SectionLabel from '../../../ui/SectionLabel';
+import { ModalShell } from '../../../ui/motion';
 import { suppliesApi } from '../../../../api/suppliesApi';
 
 const fmt = (n) => (n ?? 0).toLocaleString('ru-RU');
@@ -169,8 +169,6 @@ const SupplierDetailsModal = ({ supplier, visible, onClose, startDate, endDate }
         return () => ctrl.abort();
     }, [supplier, visible, startDate, endDate]);
 
-    if (!visible) return null;
-
     const allMaterials = details
         ? Object.values(details.categories).flatMap(c => c.materials || []).sort((a, b) => a.name.localeCompare(b.name))
         : [];
@@ -180,10 +178,8 @@ const SupplierDetailsModal = ({ supplier, visible, onClose, startDate, endDate }
 
     const thStyle = { fontFamily: 'var(--sans)', fontSize: '11px', fontWeight: 500, letterSpacing: '0.07em', textTransform: 'uppercase', color: 'var(--muted)', padding: '7px 10px', textAlign: 'left', borderBottom: '1px solid var(--hairline)', background: 'var(--canvas)' };
 
-    const modal = (
-        <div style={{ position: 'fixed', inset: 0, zIndex: 9999, display: 'flex', alignItems: 'flex-start', justifyContent: 'center', padding: '40px 16px' }}>
-            <div onClick={onClose} style={{ position: 'absolute', inset: 0, background: 'rgba(20,20,19,0.55)' }} />
-            <div style={{ position: 'relative', background: 'var(--canvas)', borderRadius: 16, border: '1px solid var(--hairline)', width: '100%', maxWidth: 1080, maxHeight: 'calc(100vh - 80px)', display: 'flex', flexDirection: 'column', boxShadow: '0 8px 40px rgba(20,20,19,0.18)' }}>
+    return (
+        <ModalShell open={visible} onClose={onClose} maxWidth={1080}>
                 {/* Header */}
                 <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', padding: '20px 24px 16px', borderBottom: '1px solid var(--hairline)', flexShrink: 0 }}>
                     <h2 style={{ fontFamily: 'var(--serif)', fontSize: 22, fontWeight: 400, letterSpacing: '-0.02em', color: 'var(--ink)', margin: 0 }}>
@@ -260,11 +256,8 @@ const SupplierDetailsModal = ({ supplier, visible, onClose, startDate, endDate }
                         </div>
                     )}
                 </div>
-            </div>
-        </div>
+        </ModalShell>
     );
-
-    return createPortal(modal, document.body);
 };
 
 SupplierDetailsModal.propTypes = {

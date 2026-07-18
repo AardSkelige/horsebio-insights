@@ -1,5 +1,5 @@
 // src/api/authApi.js
-import { getCookie, getCsrfToken, parserAPI } from '../utils/api';
+import { getCookie, parserAPI } from '../utils/api';
 
 const json = (r) => r.json();
 

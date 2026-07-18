@@ -1,6 +1,7 @@
 import PropTypes from 'prop-types';
 import { LineChart, Line, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend, Cell } from 'recharts';
 import { formatNumber } from '../../utils/formatters';
+import { CHART_ANIMATION } from '../../utils/chartAnimation';
 
 const prepareChartData = (monthlyData) =>
     Object.entries(monthlyData).map(([month, quantity]) => ({ month, quantity: Number(quantity) }));
@@ -44,7 +45,7 @@ export const SeasonalCharts = ({ data }) => {
                             <YAxis style={{ fontFamily: 'var(--sans)', fontSize: 11 }} />
                             <Tooltip content={<CustomTooltip valueSuffix=" шт." />} />
                             <Legend wrapperStyle={{ fontFamily: 'var(--sans)', fontSize: 12 }} />
-                            <Line type="monotone" dataKey="quantity" name="Продажи" stroke="var(--primary)" strokeWidth={2} dot={{ r: 3 }} activeDot={{ r: 5 }} />
+                            <Line {...CHART_ANIMATION} type="monotone" dataKey="quantity" name="Продажи" stroke="var(--primary)" strokeWidth={2} dot={{ r: 3 }} activeDot={{ r: 5 }} />
                         </LineChart>
                     </ResponsiveContainer>
                 </div>
@@ -60,7 +61,7 @@ export const SeasonalCharts = ({ data }) => {
                             <YAxis domain={[0, Math.max(2, Math.ceil(Math.max(...seasonalData.map(d => d.factor))))]} ticks={[0, 0.5, 1, 1.5, 2]} style={{ fontFamily: 'var(--sans)', fontSize: 11 }} />
                             <Tooltip content={<CustomTooltip valuePrefix="×" valueSuffix=" от среднего" />} />
                             <Legend wrapperStyle={{ fontFamily: 'var(--sans)', fontSize: 12 }} />
-                            <Bar dataKey="factor" name="Сезонный коэффициент" maxBarSize={50}>
+                            <Bar {...CHART_ANIMATION} dataKey="factor" name="Сезонный коэффициент" maxBarSize={50}>
                                 {seasonalData.map((e, i) => (
                                     <Cell key={i} fill={e.factor >= 1.2 ? '#5cac6a' : e.factor <= 0.8 ? '#c64545' : '#5c8acc'} />
                                 ))}

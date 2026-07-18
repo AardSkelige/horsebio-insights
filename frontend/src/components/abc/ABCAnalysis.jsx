@@ -1,9 +1,11 @@
 import { useState, useEffect, useCallback } from 'react';
-import { Loader2, Download, X } from 'lucide-react';
+import { Download, X } from 'lucide-react';
 import { ABCFilters } from './ABCFilters';
 import { ABCStatistics } from './ABCStatistics';
 import { ABCCharts } from './ABCCharts';
 import { ABCTable } from './ABCTable';
+import { FadeRise } from '../ui/motion';
+import { Skeleton } from '../ui/Skeleton';
 import { abcAnalysisApi } from '../../api/abcAnalysis';
 
 const CATEGORIES = [
@@ -99,16 +101,19 @@ export const ABCAnalysis = () => {
             </div>
 
             {/* Filters */}
-            <div style={{ ...sectionCard, backgroundColor: 'var(--surface-soft)' }}>
+            <FadeRise style={{ ...sectionCard, backgroundColor: 'var(--surface-soft)' }}>
                 <div style={labelStyle}>Параметры анализа</div>
                 <ABCFilters value={filters} onChange={setFilters} />
-            </div>
+            </FadeRise>
 
-            {/* Loading */}
-            {loading && (
-                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '48px 0', gap: '10px' }}>
-                    <Loader2 style={{ width: 20, height: 20, color: 'var(--primary)' }} className="animate-spin" />
-                    <span style={{ fontFamily: 'var(--sans)', fontSize: '14px', color: 'var(--muted)' }}>Загрузка данных...</span>
+            {/* Первая загрузка — скелетон страницы */}
+            {loading && !data && (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }} aria-busy="true">
+                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: '16px' }}>
+                        <Skeleton height={380} style={{ borderRadius: 10 }} />
+                        <Skeleton height={380} style={{ borderRadius: 10 }} />
+                    </div>
+                    <Skeleton height={280} style={{ borderRadius: 10 }} />
                 </div>
             )}
 
@@ -122,11 +127,11 @@ export const ABCAnalysis = () => {
                 </div>
             )}
 
-            {/* Content */}
-            {!loading && data && (
-                <>
+            {/* Content: при перезагрузке фильтров не размонтируем, а приглушаем */}
+            {data && (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '20px', opacity: loading ? 0.45 : 1, pointerEvents: loading ? 'none' : 'auto', transition: 'opacity 200ms ease' }}>
                     {/* Charts + Stats side by side */}
-                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: '16px' }}>
+                    <FadeRise style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: '16px' }}>
                         <div style={sectionCard}>
                             <h2 style={sectionHeading}>Распределение по категориям</h2>
                             <ABCCharts data={data} />
@@ -135,16 +140,16 @@ export const ABCAnalysis = () => {
                             <h2 style={sectionHeading}>Статистика по категориям</h2>
                             <ABCStatistics data={data} />
                         </div>
-                    </div>
+                    </FadeRise>
 
                     {/* Table */}
-                    <div style={sectionCard}>
+                    <FadeRise inView style={sectionCard}>
                         <h2 style={sectionHeading}>Список продуктов</h2>
                         <ABCTable data={data.tableData} />
-                    </div>
+                    </FadeRise>
 
                     {/* Recommendations */}
-                    <div style={{ ...sectionCard, backgroundColor: 'var(--surface-soft)' }}>
+                    <FadeRise inView style={{ ...sectionCard, backgroundColor: 'var(--surface-soft)' }}>
                         <div style={labelStyle}>Рекомендации по управлению</div>
                         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(300px, 1fr))', gap: '16px' }}>
                             {RECOMMENDATIONS.map(r => (
@@ -160,8 +165,8 @@ export const ABCAnalysis = () => {
                                 </div>
                             ))}
                         </div>
-                    </div>
-                </>
+                    </FadeRise>
+                </div>
             )}
         </div>
     );

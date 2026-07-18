@@ -1,5 +1,6 @@
 // src/components/common/FloatingLoadingCard.jsx
 import { useState, useEffect, useRef } from 'react';
+import { m } from 'motion/react';
 import { CheckCircle2, Loader2, XCircle, AlertCircle, X, ChevronUp, ChevronDown, Database, Square } from 'lucide-react';
 import { useLoading } from '../../contexts/LoadingContext';
 import { formatDate } from '../../utils/formatters';
@@ -161,16 +162,17 @@ const FloatingLoadingCard = () => {
 
     return (
         <div style={{ position: 'fixed', right: '20px', bottom: '20px', zIndex: 50, width: 'min(380px, calc(100vw - 40px))' }}>
-            <div style={{
-                border: `1px solid ${toneBorder(tone)}`,
-                borderRadius: '12px',
-                background: 'var(--canvas)',
-                boxShadow: '0 10px 32px rgba(20,20,19,0.14)',
-                overflow: 'hidden',
-                opacity: isHiding ? 0 : 1,
-                transform: isHiding ? 'translateY(8px) scale(0.98)' : 'translateY(0) scale(1)',
-                transition: 'opacity 200ms ease, transform 200ms ease',
-            }}>
+            <m.div
+                initial={{ opacity: 0, y: 16, scale: 0.97 }}
+                animate={isHiding ? { opacity: 0, y: 8, scale: 0.98 } : { opacity: 1, y: 0, scale: 1 }}
+                transition={{ type: 'spring', stiffness: 350, damping: 26 }}
+                style={{
+                    border: `1px solid ${toneBorder(tone)}`,
+                    borderRadius: '12px',
+                    background: 'var(--canvas)',
+                    boxShadow: '0 10px 32px rgba(20,20,19,0.14)',
+                    overflow: 'hidden',
+                }}>
                 {/* Header */}
                 <div style={{ padding: '14px' }}>
                     <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: '12px' }}>
@@ -335,7 +337,7 @@ const FloatingLoadingCard = () => {
                         </div>
                     </div>
                 )}
-            </div>
+            </m.div>
         </div>
     );
 };

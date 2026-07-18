@@ -1,11 +1,13 @@
-import { useState, useEffect } from 'react';
-import { Loader2, X } from 'lucide-react';
+import { useState, useEffect, useRef } from 'react';
+import { X } from 'lucide-react';
 import { seasonalAnalysisApi } from '../../api/seasonalAnalysis';
 import { SeasonalFilters } from './SeasonalFilters';
 import { SeasonalPatterns } from './SeasonalPatterns';
 import { SeasonalStatistics } from './SeasonalStatistics';
 import { SeasonalCharts } from './SeasonalCharts';
 import SeasonalProductDetails from './SeasonalProductDetails';
+import { FadeRise } from '../ui/motion';
+import { Skeleton } from '../ui/Skeleton';
 
 const sectionCard = { backgroundColor: 'var(--canvas)', border: '1px solid var(--hairline)', borderRadius: '10px', padding: '24px' };
 const sectionHeading = { fontFamily: 'var(--serif)', fontSize: '22px', fontWeight: 400, letterSpacing: '-0.02em', color: 'var(--ink)', margin: '0 0 16px' };
@@ -16,7 +18,9 @@ export const SeasonalAnalysis = () => {
     const [error, setError] = useState(null);
     const [data, setData] = useState(null);
     const [selectedProduct, setSelectedProduct] = useState(null);
+    const [detailsLoading, setDetailsLoading] = useState(false);
     const [filters, setFilters] = useState({ category: 'A', periodMonths: 12, endDate: null });
+    const statsRef = useRef(null);
 
     useEffect(() => {
         const load = async () => {
@@ -37,10 +41,13 @@ export const SeasonalAnalysis = () => {
         load();
     }, [filters]);
 
+    // Детали грузим отдельным флагом: общий loading размонтирует всю страницу,
+    // и выбор продукта выглядел как «ничего не произошло»
     const handleProductSelect = async (product) => {
         if (!product?.id) return;
-        setLoading(true);
+        setDetailsLoading(true);
         setError(null);
+        statsRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
         try {
             const res = await seasonalAnalysisApi.getProductDetails(product.id, filters);
             if (!res) throw new Error('Нет ответа от сервера');
@@ -59,7 +66,7 @@ export const SeasonalAnalysis = () => {
             setError('Ошибка загрузки данных продукта');
             setSelectedProduct(null);
         } finally {
-            setLoading(false);
+            setDetailsLoading(false);
         }
     };
 
@@ -78,16 +85,16 @@ export const SeasonalAnalysis = () => {
             </div>
 
             {/* Filters */}
-            <div style={{ ...sectionCard, backgroundColor: 'var(--surface-soft)' }}>
+            <FadeRise style={{ ...sectionCard, backgroundColor: 'var(--surface-soft)' }}>
                 <div style={labelStyle}>Параметры анализа</div>
                 <SeasonalFilters value={filters} onChange={handleFiltersChange} />
-            </div>
+            </FadeRise>
 
-            {/* Loading */}
-            {loading && (
-                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '48px 0', gap: '10px' }}>
-                    <Loader2 style={{ width: 20, height: 20, color: 'var(--primary)' }} className="animate-spin" />
-                    <span style={{ fontFamily: 'var(--sans)', fontSize: '14px', color: 'var(--muted)' }}>Загрузка данных...</span>
+            {/* Первая загрузка — скелетон страницы */}
+            {loading && !data && (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }} aria-busy="true">
+                    <Skeleton height={420} style={{ borderRadius: 10 }} />
+                    <Skeleton height={180} style={{ borderRadius: 10 }} />
                 </div>
             )}
 
@@ -101,33 +108,35 @@ export const SeasonalAnalysis = () => {
                 </div>
             )}
 
-            {/* Content */}
-            {!loading && data && (
-                <>
-                    <div style={sectionCard}>
+            {/* Content: при перезагрузке фильтров не размонтируем, а приглушаем */}
+            {data && (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '20px', opacity: loading ? 0.45 : 1, pointerEvents: loading ? 'none' : 'auto', transition: 'opacity 200ms ease' }}>
+                    <FadeRise style={sectionCard}>
                         <h2 style={sectionHeading}>Сезонные паттерны</h2>
                         <SeasonalPatterns data={data} onProductSelect={handleProductSelect} loading={loading} />
-                    </div>
+                    </FadeRise>
 
-                    <div style={sectionCard}>
-                        <h2 style={sectionHeading}>Статистика сезонности</h2>
-                        <SeasonalStatistics data={selectedProduct} loading={loading} />
+                    <div ref={statsRef} style={{ scrollMarginTop: 16 }}>
+                        <FadeRise delay={0.05} style={sectionCard}>
+                            <h2 style={sectionHeading}>Статистика сезонности</h2>
+                            <SeasonalStatistics data={selectedProduct} loading={detailsLoading} />
+                        </FadeRise>
                     </div>
 
                     {selectedProduct && (
                         <>
-                            <div style={sectionCard}>
+                            <FadeRise style={sectionCard}>
                                 <h2 style={sectionHeading}>Детальный анализ</h2>
                                 <SeasonalCharts data={selectedProduct} loading={loading} />
-                            </div>
+                            </FadeRise>
 
-                            <div style={sectionCard}>
+                            <FadeRise delay={0.05} style={sectionCard}>
                                 <h2 style={sectionHeading}>Подробная информация о продукте</h2>
                                 <SeasonalProductDetails data={selectedProduct} loading={loading} error={error} />
-                            </div>
+                            </FadeRise>
                         </>
                     )}
-                </>
+                </div>
             )}
         </div>
     );

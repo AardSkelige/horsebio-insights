@@ -100,6 +100,13 @@
   }
 }
 
+/* Тактильный отклик нажатия — все кнопки приложения.
+   Исключения: .no-tap-scale и любые кнопки на всю ширину (инлайн width: 100%) —
+   на широких кнопках-заголовках сжатие выглядит как сдвиг текста, а не как нажатие */
+button:active:not(:disabled):not(.no-tap-scale):not([style*="width: 100%"]) {
+  transform: scale(0.97);
+}
+
 .route-transition {
   animation: route-enter 180ms ease-out both;
 }
@@ -118,6 +125,19 @@
 
 @keyframes spin {
   to { transform: rotate(360deg); }
+}
+
+/* Скелетон загрузки раздела (RouteFallback) */
+.skeleton {
+  border-radius: 10px;
+  background: linear-gradient(90deg, var(--surface-card) 25%, var(--surface-soft) 37%, var(--surface-card) 63%);
+  background-size: 400% 100%;
+  animation: skeleton-shimmer 1.4s ease infinite;
+}
+
+@keyframes skeleton-shimmer {
+  0%   { background-position: 100% 50%; }
+  100% { background-position: 0 50%; }
 }
 
 /* Индетерминантная полоса загрузки (для запущенных проверок) */
@@ -156,6 +176,14 @@
 @media (prefers-reduced-motion: reduce) {
   .route-transition {
     animation: none;
+  }
+
+  .skeleton {
+    animation: none;
+  }
+
+  button:active:not(:disabled):not(.no-tap-scale):not([style*="width: 100%"]) {
+    transform: none;
   }
 }
 

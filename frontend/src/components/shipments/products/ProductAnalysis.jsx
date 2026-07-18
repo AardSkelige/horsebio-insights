@@ -4,6 +4,7 @@ import ProductTable from './ProductTable';
 import ProductStatistics from './ProductStatistics';
 import ProductDetailsModal from './ProductDetailsModal';
 import SectionLabel from '../../ui/SectionLabel';
+import { FadeRise } from '../../ui/motion';
 import { productsApi } from '../../../api/productsApi';
 import { useAnalysisTable } from '../../../hooks/useAnalysisTable';
 
@@ -60,25 +61,29 @@ const ProductAnalysis = () => {
                 </div>
             </div>
 
-            <ProductFilterPanel filters={filters} onChange={handleFiltersChange} />
+            <FadeRise>
+                <ProductFilterPanel filters={filters} onChange={handleFiltersChange} />
+            </FadeRise>
 
             {stats && (
-                <div style={{ marginBottom: 24 }}>
+                <FadeRise delay={0.05} style={{ marginBottom: 24 }}>
                     <SectionLabel>Топ товаров</SectionLabel>
                     <ProductStatistics stats={stats} />
-                </div>
+                </FadeRise>
             )}
 
-            <ProductTable
-                products={products}
-                loading={loading}
-                pagination={pagination}
-                sortField={sortField}
-                sortOrder={sortOrder}
-                onSort={handleSort}
-                onPageChange={handlePageChange}
-                onProductClick={handleItemClick}
-            />
+            <FadeRise delay={0.1}>
+                <ProductTable
+                    products={products}
+                    loading={loading}
+                    pagination={pagination}
+                    sortField={sortField}
+                    sortOrder={sortOrder}
+                    onSort={handleSort}
+                    onPageChange={handlePageChange}
+                    onProductClick={handleItemClick}
+                />
+            </FadeRise>
 
             {selectedProduct && (
                 <ProductDetailsModal

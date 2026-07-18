@@ -18,7 +18,7 @@ const th = {
     fontWeight: 600,
     textTransform: 'uppercase',
     letterSpacing: '0.05em',
-    color: 'var(--on-dark-soft)',
+    color: 'var(--muted)',
     padding: '10px 16px',
     textAlign: 'left',
     whiteSpace: 'nowrap',
@@ -27,9 +27,9 @@ const th = {
 const td = {
     fontFamily: 'var(--sans)',
     fontSize: 13,
-    color: 'var(--on-dark)',
+    color: 'var(--ink)',
     padding: '11px 16px',
-    borderTop: '1px solid rgba(255,255,255,0.06)',
+    borderTop: '1px solid var(--hairline-soft)',
 };
 
 function PctBar({ pct }) {
@@ -38,7 +38,7 @@ function PctBar({ pct }) {
         <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
             <div style={{
                 width: 72, height: 4, borderRadius: 2,
-                background: 'rgba(255,255,255,0.1)',
+                background: 'var(--surface-cream-strong)',
                 overflow: 'hidden', flexShrink: 0,
             }}>
                 <div style={{ width: `${pct}%`, height: '100%', background: color, borderRadius: 2 }} />
@@ -66,7 +66,7 @@ export default function InventoryHistoryTable({ history, selectedMonth, onSelect
                 По месяцам
             </h2>
 
-            <div style={{ background: 'var(--surface-dark)', borderRadius: 12, overflow: 'hidden' }}>
+            <div style={{ background: 'var(--canvas)', border: '1px solid var(--hairline)', borderRadius: 12, overflow: 'hidden' }}>
                 {isMobile ? (
                     /* ── Mobile cards ── */
                     <div>
@@ -80,15 +80,15 @@ export default function InventoryHistoryTable({ history, selectedMonth, onSelect
                                     onClick={() => onSelectMonth(active ? null : monthKey)}
                                     style={{
                                         padding: '12px 16px',
-                                        borderTop: i > 0 ? '1px solid rgba(255,255,255,0.06)' : 'none',
-                                        background: active ? 'rgba(255,255,255,0.05)' : 'transparent',
+                                        borderTop: i > 0 ? '1px solid var(--hairline-soft)' : 'none',
+                                        background: active ? 'var(--surface-soft)' : 'transparent',
                                         cursor: 'pointer',
                                     }}
                                 >
                                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
                                         <span style={{
                                             fontFamily: 'var(--sans)', fontSize: 13,
-                                            color: active ? 'var(--primary)' : 'var(--on-dark)',
+                                            color: active ? 'var(--primary)' : 'var(--ink)',
                                             fontWeight: active ? 600 : 500,
                                         }}>
                                             {formatMonthShort(monthKey)}
@@ -113,13 +113,13 @@ export default function InventoryHistoryTable({ history, selectedMonth, onSelect
                                         <PctBar pct={row.pct} />
                                     </div>
                                     <div style={{ display: 'flex', gap: 16, flexWrap: 'wrap' }}>
-                                        <span style={{ fontSize: 11, color: 'var(--on-dark-soft)' }}>
+                                        <span style={{ fontSize: 11, color: 'var(--muted)' }}>
                                             Всего: {row.total}
                                         </span>
                                         <span style={{ fontSize: 11, color: 'var(--success)' }}>
                                             Были: {row.inventoried}
                                         </span>
-                                        <span style={{ fontSize: 11, color: row.not_inventoried > 0 ? 'var(--error)' : 'var(--on-dark-soft)' }}>
+                                        <span style={{ fontSize: 11, color: row.not_inventoried > 0 ? 'var(--error)' : 'var(--muted)' }}>
                                             Не были: {row.not_inventoried}
                                         </span>
                                     </div>
@@ -132,7 +132,7 @@ export default function InventoryHistoryTable({ history, selectedMonth, onSelect
                     <div style={{ overflowX: 'auto' }}>
                         <table style={{ width: '100%', borderCollapse: 'collapse' }}>
                             <thead>
-                                <tr style={{ background: 'rgba(255,255,255,0.04)' }}>
+                                <tr style={{ background: 'var(--surface-soft)' }}>
                                     <th style={th}>Месяц</th>
                                     <th style={{ ...th, textAlign: 'right' }}>Всего</th>
                                     <th style={{ ...th, textAlign: 'right' }}>Были</th>
@@ -151,30 +151,30 @@ export default function InventoryHistoryTable({ history, selectedMonth, onSelect
                                             key={row.month_start}
                                             onClick={() => onSelectMonth(active ? null : monthKey)}
                                             style={{
-                                                background: active ? 'rgba(255,255,255,0.05)' : 'transparent',
+                                                background: active ? 'var(--surface-soft)' : 'transparent',
                                                 cursor: 'pointer',
                                                 transition: 'background 0.1s',
                                             }}
                                         >
                                             <td style={td}>
                                                 <span style={{
-                                                    color: active ? 'var(--primary)' : 'var(--on-dark)',
+                                                    color: active ? 'var(--primary)' : 'var(--ink)',
                                                     fontWeight: active ? 600 : 400,
                                                 }}>
                                                     {formatMonthLabel(monthKey)}
                                                 </span>
                                             </td>
-                                            <td style={{ ...td, textAlign: 'right', color: 'var(--on-dark-soft)' }}>
+                                            <td style={{ ...td, textAlign: 'right', color: 'var(--muted)' }}>
                                                 {row.total}
                                             </td>
                                             <td style={{ ...td, textAlign: 'right', color: 'var(--success)' }}>
                                                 {row.inventoried}
                                             </td>
-                                            <td style={{ ...td, textAlign: 'right', color: row.not_inventoried > 0 ? 'var(--error)' : 'var(--on-dark-soft)' }}>
+                                            <td style={{ ...td, textAlign: 'right', color: row.not_inventoried > 0 ? 'var(--error)' : 'var(--muted)' }}>
                                                 {row.not_inventoried}
                                             </td>
                                             <td style={td}><PctBar pct={row.pct} /></td>
-                                            <td style={{ ...td, color: 'var(--on-dark-soft)', fontSize: 12 }}>
+                                            <td style={{ ...td, color: 'var(--muted)', fontSize: 12 }}>
                                                 {new Date(row.run_at).toLocaleString('ru-RU', {
                                                     day: '2-digit', month: '2-digit',
                                                     hour: '2-digit', minute: '2-digit',

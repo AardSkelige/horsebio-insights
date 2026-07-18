@@ -3,6 +3,7 @@ import PropTypes from 'prop-types';
 import { Loader2, Activity, TrendingUp, Box, Calendar, AlertTriangle } from 'lucide-react';
 import { ResponsiveContainer, LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip } from 'recharts';
 import { formatNumber } from '../../utils/formatters';
+import { CHART_ANIMATION } from '../../utils/chartAnimation';
 
 const MonthNames = ['Январь', 'Февраль', 'Март', 'Апрель', 'Май', 'Июнь', 'Июль', 'Август', 'Сентябрь', 'Октябрь', 'Ноябрь', 'Декабрь'];
 
@@ -113,7 +114,7 @@ const SeasonalProductDetails = ({ data, loading, error }) => {
                                 <XAxis dataKey="date" tickFormatter={fmtDate} angle={-45} textAnchor="end" height={70} style={{ fontFamily: 'var(--sans)', fontSize: 11 }} />
                                 <YAxis style={{ fontFamily: 'var(--sans)', fontSize: 11 }} />
                                 <Tooltip contentStyle={tooltipStyle} formatter={v => [formatNumber(v), 'Количество']} labelFormatter={fmtDate} />
-                                <Line type="monotone" dataKey="quantity" name="Количество" stroke="var(--primary)" strokeWidth={2} dot={<DotComponent />} />
+                                <Line {...CHART_ANIMATION} type="monotone" dataKey="quantity" name="Количество" stroke="var(--primary)" strokeWidth={2} dot={<DotComponent />} />
                             </LineChart>
                         </ResponsiveContainer>
                     </div>
@@ -130,7 +131,7 @@ const SeasonalProductDetails = ({ data, loading, error }) => {
                                 <XAxis dataKey="month" style={{ fontFamily: 'var(--sans)', fontSize: 11 }} />
                                 <YAxis domain={[0.5, 1.5]} style={{ fontFamily: 'var(--sans)', fontSize: 11 }} />
                                 <Tooltip contentStyle={tooltipStyle} formatter={v => [`×${v.toFixed(3)}`, 'Коэффициент']} />
-                                <Line type="monotone" dataKey="factor" name="Коэффициент" stroke="#5c8acc" strokeWidth={2} dot={<DotComponent />} />
+                                <Line {...CHART_ANIMATION} type="monotone" dataKey="factor" name="Коэффициент" stroke="#5c8acc" strokeWidth={2} dot={<DotComponent />} />
                             </LineChart>
                         </ResponsiveContainer>
                     </div>

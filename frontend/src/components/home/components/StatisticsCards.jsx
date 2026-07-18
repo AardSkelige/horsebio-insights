@@ -1,6 +1,8 @@
 import PropTypes from 'prop-types';
 import { useState } from 'react';
+import { m } from 'motion/react';
 import { formatNumber } from '../../../utils/formatters';
+import { AnimatedNumber, Stagger, StaggerItem } from '../../ui/motion';
 
 const serif = { fontFamily: 'var(--serif)' };
 const mono = { fontFamily: 'var(--mono)' };
@@ -41,7 +43,11 @@ const Tooltip = ({ text }) => {
                 ?
             </span>
             {visible && (
-                <span style={{
+                <m.span
+                    initial={{ opacity: 0, y: 4, scale: 0.97 }}
+                    animate={{ opacity: 1, y: 0, scale: 1 }}
+                    transition={{ type: 'spring', stiffness: 400, damping: 28 }}
+                    style={{
                     position: 'absolute',
                     top: 'calc(100% + 6px)',
                     right: 0,
@@ -60,7 +66,7 @@ const Tooltip = ({ text }) => {
                     pointerEvents: 'none',
                 }}>
                     {text}
-                </span>
+                </m.span>
             )}
         </span>
     );
@@ -103,11 +109,11 @@ const StatisticsCards = ({ stats }) => {
     ];
 
     return (
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
+        <Stagger className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
 
             {/* Stat cards */}
             {statCards.map((c) => (
-                <div key={c.title} style={card}>
+                <StaggerItem key={c.title} style={card}>
                     <div style={{
                         ...serif,
                         fontSize: '40px',
@@ -119,7 +125,7 @@ const StatisticsCards = ({ stats }) => {
                         fontVariantNumeric: 'lining-nums',
                         fontFeatureSettings: '"lnum" 1',
                     }}>
-                        {formatNumber(c.count)}
+                        <AnimatedNumber value={c.count} format={formatNumber} />
                     </div>
                     <Tooltip text={c.tooltip} />
                     <div style={{ display: 'flex', alignItems: 'center', gap: '6px', marginBottom: '16px' }}>
@@ -145,12 +151,12 @@ const StatisticsCards = ({ stats }) => {
                             ))}
                         </div>
                     )}
-                </div>
+                </StaggerItem>
             ))}
 
             {/* Recent docs cards */}
             {recentCards.map((c) => (
-                <div key={c.title} style={card}>
+                <StaggerItem key={c.title} style={card}>
                     <Tooltip text={c.tooltip} />
                     <div style={{ marginBottom: '12px' }}>
                         <span style={{ fontSize: '11px', letterSpacing: '0.1em', textTransform: 'uppercase', color: 'var(--on-dark-soft)' }}>
@@ -178,9 +184,9 @@ const StatisticsCards = ({ stats }) => {
                     ) : (
                         <p style={{ fontSize: '12px', color: 'var(--muted-soft)' }}>Нет данных</p>
                     )}
-                </div>
+                </StaggerItem>
             ))}
-        </div>
+        </Stagger>
     );
 };
 

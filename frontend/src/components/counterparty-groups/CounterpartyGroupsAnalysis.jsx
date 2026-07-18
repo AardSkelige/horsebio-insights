@@ -1,9 +1,11 @@
 import { useState, useEffect, useCallback } from 'react';
-import { Loader2, X } from 'lucide-react';
+import { X } from 'lucide-react';
 import { CounterpartyGroupsFilters } from './CounterpartyGroupsFilters';
 import { CounterpartyGroupsStats } from './CounterpartyGroupsStats';
 import { CounterpartyGroupsCharts } from './CounterpartyGroupsCharts';
 import { CounterpartyGroupsTable } from './CounterpartyGroupsTable';
+import { FadeRise } from '../ui/motion';
+import { Skeleton } from '../ui/Skeleton';
 import { counterpartiesApi } from '../../api/counterpartiesApi';
 
 const GROUPS = [
@@ -74,16 +76,17 @@ export const CounterpartyGroupsAnalysis = () => {
             </div>
 
             {/* Filters */}
-            <div style={{ ...sectionCard, backgroundColor: 'var(--surface-soft)' }}>
+            <FadeRise style={{ ...sectionCard, backgroundColor: 'var(--surface-soft)' }}>
                 <div style={labelStyle}>Параметры анализа</div>
                 <CounterpartyGroupsFilters value={filters} onChange={setFilters} />
-            </div>
+            </FadeRise>
 
-            {/* Loading */}
-            {loading && (
-                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '48px 0', gap: '10px' }}>
-                    <Loader2 style={{ width: 20, height: 20, color: 'var(--primary)' }} className="animate-spin" />
-                    <span style={{ fontFamily: 'var(--sans)', fontSize: '14px', color: 'var(--muted)' }}>Загрузка данных...</span>
+            {/* Первая загрузка — скелетон страницы */}
+            {loading && !data && (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '24px' }} aria-busy="true">
+                    <Skeleton height={340} style={{ borderRadius: 10 }} />
+                    <Skeleton height={220} style={{ borderRadius: 10 }} />
+                    <Skeleton height={280} style={{ borderRadius: 10 }} />
                 </div>
             )}
 
@@ -97,29 +100,29 @@ export const CounterpartyGroupsAnalysis = () => {
                 </div>
             )}
 
-            {/* Content */}
-            {!loading && data && (
-                <>
+            {/* Content: при перезагрузке фильтров не размонтируем, а приглушаем */}
+            {data && (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '24px', opacity: loading ? 0.45 : 1, pointerEvents: loading ? 'none' : 'auto', transition: 'opacity 200ms ease' }}>
                     {/* Charts */}
-                    <div style={sectionCard}>
+                    <FadeRise style={sectionCard}>
                         <h2 style={sectionHeading}>Распределение по группам</h2>
                         <CounterpartyGroupsCharts data={data} />
-                    </div>
+                    </FadeRise>
 
                     {/* Stats */}
-                    <div style={sectionCard}>
+                    <FadeRise delay={0.05} style={sectionCard}>
                         <h2 style={sectionHeading}>Статистика по группам</h2>
                         <CounterpartyGroupsStats data={data} />
-                    </div>
+                    </FadeRise>
 
                     {/* Table */}
-                    <div style={sectionCard}>
+                    <FadeRise inView style={sectionCard}>
                         <h2 style={sectionHeading}>Список контрагентов</h2>
                         <CounterpartyGroupsTable data={data} />
-                    </div>
+                    </FadeRise>
 
                     {/* Recommendations */}
-                    <div style={{ ...sectionCard, backgroundColor: 'var(--surface-soft)' }}>
+                    <FadeRise inView style={{ ...sectionCard, backgroundColor: 'var(--surface-soft)' }}>
                         <div style={labelStyle}>Рекомендации по работе с группами</div>
                         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(300px, 1fr))', gap: '16px' }}>
                             {RECOMMENDATIONS.map(r => (
@@ -135,8 +138,8 @@ export const CounterpartyGroupsAnalysis = () => {
                                 </div>
                             ))}
                         </div>
-                    </div>
-                </>
+                    </FadeRise>
+                </div>
             )}
         </div>
     );

@@ -5,6 +5,7 @@ import {
     BarChart, Bar, XAxis, YAxis, CartesianGrid
 } from 'recharts';
 import { formatCurrency } from '../../utils/formatters';
+import { CHART_ANIMATION } from '../../utils/chartAnimation';
 
 const COLORS = {
     large:      '#cc785c',
@@ -73,7 +74,7 @@ export const CounterpartyGroupsCharts = ({ data }) => {
                 <div style={{ height: 280 }}>
                     <ResponsiveContainer width="100%" height="100%">
                         <PieChart>
-                            <Pie data={chartData} cx="50%" cy="50%" innerRadius={60} outerRadius={100} dataKey="total_monthly_volume" labelLine={false}>
+                            <Pie {...CHART_ANIMATION} data={chartData} cx="50%" cy="50%" innerRadius={60} outerRadius={100} dataKey="total_monthly_volume" labelLine={false}>
                                 {chartData.map(e => <Cell key={e.category} fill={COLORS[e.category]} />)}
                             </Pie>
                             <RechartsTooltip content={<ChartTooltip />} />
@@ -99,7 +100,7 @@ export const CounterpartyGroupsCharts = ({ data }) => {
                                 labelFormatter={l => `Группа: ${l}`}
                                 contentStyle={{ fontFamily: 'var(--sans)', fontSize: 12, borderRadius: 8, border: '1px solid var(--hairline)' }}
                             />
-                            <Bar dataKey="avg_frequency" name="Активность">
+                            <Bar {...CHART_ANIMATION} dataKey="avg_frequency" name="Активность">
                                 {chartData.map(e => <Cell key={e.category} fill={COLORS[e.category]} />)}
                             </Bar>
                         </BarChart>

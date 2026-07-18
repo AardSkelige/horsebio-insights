@@ -8,13 +8,15 @@ const CollapsibleSection = ({ title, hint, defaultOpen = false, children, badge 
         <div style={{ backgroundColor: 'var(--canvas)', border: '1px solid var(--hairline)', borderRadius: '10px' }}>
             <button
                 onClick={() => setOpen(o => !o)}
+                className="no-tap-scale"
                 style={{ width: '100%', display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '16px 20px', background: 'none', border: 'none', cursor: 'pointer', textAlign: 'left' }}
             >
                 <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
                     <span style={{ fontFamily: 'var(--serif)', fontSize: '18px', fontWeight: 400, color: 'var(--ink)' }}>{title}</span>
                     {badge && <span style={{ fontFamily: 'var(--sans)', fontSize: '12px', color: 'var(--muted)' }}>{badge}</span>}
                 </div>
-                <div style={{ display: 'flex', alignItems: 'center', flexShrink: 0 }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexShrink: 0 }}>
+                    {!open && hint && <span style={{ fontFamily: 'var(--sans)', fontSize: '12px', color: 'var(--muted)' }}>{hint}</span>}
                     {open ? <ChevronUp style={{ width: 16, height: 16, color: 'var(--muted)', flexShrink: 0 }} /> : <ChevronDown style={{ width: 16, height: 16, color: 'var(--muted)', flexShrink: 0 }} />}
                 </div>
             </button>

@@ -11,3 +11,17 @@ if (!window.matchMedia) {
         dispatchEvent: () => false,
     });
 }
+
+// jsdom не реализует ResizeObserver — нужен Recharts ResponsiveContainer
+if (!window.ResizeObserver) {
+    window.ResizeObserver = class {
+        observe() {}
+        unobserve() {}
+        disconnect() {}
+    };
+}
+
+// jsdom не реализует scrollIntoView
+if (!window.HTMLElement.prototype.scrollIntoView) {
+    window.HTMLElement.prototype.scrollIntoView = () => {};
+}

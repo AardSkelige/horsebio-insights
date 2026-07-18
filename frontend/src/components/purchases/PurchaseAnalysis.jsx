@@ -1,10 +1,12 @@
 import { useState, useEffect } from 'react';
-import { Loader2, Package } from 'lucide-react';
+import { Package } from 'lucide-react';
 import SupplierAnalysisCard from './components/SupplierAnalysisCard';
 import PurchaseRecommendations from './components/PurchaseRecommendations';
 import RelatedMaterialsTable from './components/RelatedMaterialsTable';
 import MaterialSearchPanel from './components/MaterialSearchPanel';
 import QuickInsightsCard from './components/QuickInsightsCard';
+import { FadeRise, Stagger, StaggerItem } from '../ui/motion';
+import { Skeleton } from '../ui/Skeleton';
 import { materialsApi } from '../../api/materialsApi';
 import { analysisApi } from '../../api/analysisApi';
 
@@ -46,12 +48,15 @@ const PurchaseAnalysis = () => {
                 </p>
             </div>
 
-            <MaterialSearchPanel materials={materials} onSearch={fetchMaterials} onSelect={setSelectedMaterial} />
+            <FadeRise>
+                <MaterialSearchPanel materials={materials} onSearch={fetchMaterials} onSelect={setSelectedMaterial} />
+            </FadeRise>
 
-            {loading && (
-                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '64px 0', gap: '10px' }}>
-                    <Loader2 style={{ width: 20, height: 20, color: 'var(--primary)' }} className="animate-spin" />
-                    <span style={{ fontFamily: 'var(--sans)', fontSize: '14px', color: 'var(--muted)' }}>Загрузка анализа...</span>
+            {loading && !analysisData && (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }} aria-busy="true">
+                    <Skeleton height={180} style={{ borderRadius: 10 }} />
+                    <Skeleton height={64} style={{ borderRadius: 10 }} />
+                    <Skeleton height={64} style={{ borderRadius: 10 }} />
                 </div>
             )}
 
@@ -63,13 +68,21 @@ const PurchaseAnalysis = () => {
                 </div>
             )}
 
-            {!loading && selectedMaterial && analysisData && (
-                <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
-                    <QuickInsightsCard analysisData={analysisData} material={analysisData.material} onPeriodChange={() => fetchAnalysis(selectedMaterial.id)} />
-                    <SupplierAnalysisCard suppliers={analysisData.suppliers || {}} material={analysisData.material} activityThreshold={activityThreshold} setActivityThreshold={setActivityThreshold} showInactive={showInactive} setShowInactive={setShowInactive} />
-                    <PurchaseRecommendations recommendations={analysisData.recommendations} material={analysisData.material} generalCalculations={analysisData.general_calculations} suppliers={analysisData.suppliers || {}} activityThreshold={activityThreshold} showInactive={showInactive} />
-                    <RelatedMaterialsTable relatedData={analysisData.related_materials} suppliers={analysisData.suppliers || {}} activityThreshold={activityThreshold} showInactive={showInactive} />
-                </div>
+            {selectedMaterial && analysisData && (
+                <Stagger style={{ display: 'flex', flexDirection: 'column', gap: '16px', opacity: loading ? 0.45 : 1, pointerEvents: loading ? 'none' : 'auto', transition: 'opacity 200ms ease' }}>
+                    <StaggerItem>
+                        <QuickInsightsCard analysisData={analysisData} material={analysisData.material} onPeriodChange={() => fetchAnalysis(selectedMaterial.id)} />
+                    </StaggerItem>
+                    <StaggerItem>
+                        <SupplierAnalysisCard suppliers={analysisData.suppliers || {}} material={analysisData.material} activityThreshold={activityThreshold} setActivityThreshold={setActivityThreshold} showInactive={showInactive} setShowInactive={setShowInactive} />
+                    </StaggerItem>
+                    <StaggerItem>
+                        <PurchaseRecommendations recommendations={analysisData.recommendations} material={analysisData.material} generalCalculations={analysisData.general_calculations} suppliers={analysisData.suppliers || {}} activityThreshold={activityThreshold} showInactive={showInactive} />
+                    </StaggerItem>
+                    <StaggerItem>
+                        <RelatedMaterialsTable relatedData={analysisData.related_materials} suppliers={analysisData.suppliers || {}} activityThreshold={activityThreshold} showInactive={showInactive} />
+                    </StaggerItem>
+                </Stagger>
             )}
         </div>
     );

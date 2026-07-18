@@ -2,6 +2,7 @@ import { useState, useMemo } from 'react';
 import PropTypes from 'prop-types';
 import { ChevronDown, ChevronUp, ChevronRight } from 'lucide-react';
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip as RechartsTooltip, ResponsiveContainer } from 'recharts';
+import { CHART_ANIMATION } from '../../../utils/chartAnimation';
 
 const CHART_COLORS = ['#cc785c', '#5c8acc', '#5cac6a', '#8a5ccc', '#cc5c8a', '#accc5c'];
 
@@ -71,10 +72,12 @@ const CollapsibleSection = ({ title, defaultOpen = false, children, rightSlot })
         <div style={{ backgroundColor: 'var(--canvas)', border: '1px solid var(--hairline)', borderRadius: '10px' }}>
             <button
                 onClick={() => setOpen(o => !o)}
+                className="no-tap-scale"
                 style={{ width: '100%', display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '16px 20px', background: 'none', border: 'none', cursor: 'pointer', textAlign: 'left' }}
             >
                 <span style={{ fontFamily: 'var(--serif)', fontSize: '18px', fontWeight: 400, color: 'var(--ink)' }}>{title}</span>
-                <div style={{ display: 'flex', alignItems: 'center', flexShrink: 0 }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexShrink: 0 }}>
+                    {!open && rightSlot}
                     {open ? <ChevronUp style={{ width: 16, height: 16, color: 'var(--muted)', flexShrink: 0 }} /> : <ChevronDown style={{ width: 16, height: 16, color: 'var(--muted)', flexShrink: 0 }} />}
                 </div>
             </button>
@@ -177,7 +180,7 @@ const SupplierAnalysisCard = ({ suppliers, material, activityThreshold, setActiv
                                         contentStyle={{ fontFamily: 'var(--sans)', fontSize: 12, borderRadius: 8, border: '1px solid var(--hairline)' }}
                                     />
                                     {filteredSuppliers.map((s, i) => (
-                                        <Line key={s.supplier_name} type="monotone" dataKey={s.supplier_name} stroke={CHART_COLORS[i % CHART_COLORS.length]} dot strokeWidth={2} />
+                                        <Line {...CHART_ANIMATION} key={s.supplier_name} type="monotone" dataKey={s.supplier_name} stroke={CHART_COLORS[i % CHART_COLORS.length]} dot strokeWidth={2} />
                                     ))}
                                 </LineChart>
                             </ResponsiveContainer>

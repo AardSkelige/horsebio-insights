@@ -16,13 +16,13 @@ const _writeStorage = (status) => {
     }
     try {
         sessionStorage.setItem(SESSION_KEY, JSON.stringify(status));
-    } catch {}
+    } catch { /* sessionStorage недоступен (private mode) — работаем без кэша */ }
 };
 
 const _clearStorage = () => {
     try {
         sessionStorage.removeItem(SESSION_KEY);
-    } catch {}
+    } catch { /* sessionStorage недоступен — нечего чистить */ }
 };
 
 let authStatus = _readStorage() ?? {

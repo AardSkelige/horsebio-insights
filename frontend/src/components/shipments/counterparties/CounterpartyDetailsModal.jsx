@@ -1,11 +1,12 @@
 import { useState, useEffect, useCallback } from 'react';
-import { createPortal } from 'react-dom';
 import PropTypes from 'prop-types';
 import { X, ChevronDown, Loader2, AlertCircle } from 'lucide-react';
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend } from 'recharts';
 import { CounterpartyPropTypes } from './types';
+import { CHART_ANIMATION } from '../../../utils/chartAnimation';
 import { formatDateTime, formatDate } from '../../../utils/formatters';
 import SectionLabel from '../../ui/SectionLabel';
+import { ModalShell } from '../../ui/motion';
 
 /* ── helpers ──────────────────────────────────────────────── */
 
@@ -133,8 +134,6 @@ const CounterpartyDetailsModal = ({ counterparty, visible, onClose, dateRange })
         return () => document.removeEventListener('keydown', onKey);
     }, [visible, onClose]);
 
-    if (!visible) return null;
-
     const chartData
  = details?.monthly_dynamics?.map(item => ({
         month: new Date(item.month).toLocaleDateString('ru', { month: 'short', year: '2-digit' }),
@@ -148,13 +147,8 @@ const CounterpartyDetailsModal = ({ counterparty, visible, onClose, dateRange })
         return acc;
     }, {}) || {};
 
-    const modal = (
-        <div style={{ position: 'fixed', inset: 0, zIndex: 9999, display: 'flex', alignItems: 'flex-start', justifyContent: 'center', padding: '40px 16px 16px' }}>
-            {/* Backdrop */}
-            <div onClick={onClose} style={{ position: 'absolute', inset: 0, background: 'rgba(20,20,19,0.55)' }} />
-
-            {/* Panel */}
-            <div style={{ position: 'relative', width: '100%', maxWidth: 900, maxHeight: 'calc(100vh - 56px)', display: 'flex', flexDirection: 'column', background: 'var(--canvas)', borderRadius: 12, border: '1px solid var(--hairline)', overflow: 'hidden' }}>
+    return (
+        <ModalShell open={visible} onClose={onClose} maxWidth={900}>
 
                 {/* Header */}
                 <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', padding: '20px 24px 16px', borderBottom: '1px solid var(--hairline)', flexShrink: 0 }}>
@@ -229,8 +223,8 @@ const CounterpartyDetailsModal = ({ counterparty, visible, onClose, dateRange })
                                                 <YAxis yAxisId="revenue" orientation="right" tick={{ fontSize: 11, fontFamily: 'var(--sans)', fill: 'var(--muted)' }} tickFormatter={v => `${(v / 1000).toFixed(0)}k ₽`} width={60} />
                                                 <Tooltip content={<CustomTooltip />} />
                                                 <Legend wrapperStyle={{ fontFamily: 'var(--sans)', fontSize: 12 }} />
-                                                <Line yAxisId="quantity" type="monotone" dataKey="quantity" name="Количество" stroke="var(--primary)" strokeWidth={2} dot={{ r: 3 }} />
-                                                <Line yAxisId="revenue"  type="monotone" dataKey="revenue"  name="Выручка"    stroke="var(--muted)"   strokeWidth={2} dot={{ r: 3 }} />
+                                                <Line {...CHART_ANIMATION} yAxisId="quantity" type="monotone" dataKey="quantity" name="Количество" stroke="var(--primary)" strokeWidth={2} dot={{ r: 3 }} />
+                                                <Line {...CHART_ANIMATION} yAxisId="revenue"  type="monotone" dataKey="revenue"  name="Выручка"    stroke="var(--muted)"   strokeWidth={2} dot={{ r: 3 }} />
                                             </LineChart>
                                         </ResponsiveContainer>
                                     </div>
@@ -268,11 +262,8 @@ const CounterpartyDetailsModal = ({ counterparty, visible, onClose, dateRange })
                         </>
                     )}
                 </div>
-            </div>
-        </div>
+        </ModalShell>
     );
-
-    return createPortal(modal, document.body);
 };
 
 CounterpartyDetailsModal.propTypes = {

@@ -1,6 +1,7 @@
 // src/components/supplies/suppliers/SupplierDetailsModal/PriceChart.jsx
 
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from 'recharts';
+import { CHART_ANIMATION } from '../../../../utils/chartAnimation';
 import PropTypes from 'prop-types';
 
 const formatNumber = (value) => value.toLocaleString('ru-RU');
@@ -63,6 +64,7 @@ const PriceChart = ({ materialsData }) => {
                     />
                     {materialsData.map((material, index) => (
                         <Line
+                            {...CHART_ANIMATION}
                             key={material.id}
                             type="monotone"
                             dataKey={`price_${material.id}`}

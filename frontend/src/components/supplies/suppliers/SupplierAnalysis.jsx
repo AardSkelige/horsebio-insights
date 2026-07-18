@@ -4,6 +4,7 @@ import SupplierTable from './SupplierTable';
 import SupplierStatistics from './SupplierStatistics';
 import SupplierDetailsModal from './SupplierDetailsModal';
 import SectionLabel from '../../ui/SectionLabel';
+import { FadeRise } from '../../ui/motion';
 import { suppliesApi } from '../../../api/suppliesApi';
 import { useAnalysisTable } from '../../../hooks/useAnalysisTable';
 
@@ -38,25 +39,29 @@ const SupplierAnalysis = () => {
                 </button>
             </div>
 
-            <SupplierFilterPanel filters={filters} onChange={handleFiltersChange} />
+            <FadeRise>
+                <SupplierFilterPanel filters={filters} onChange={handleFiltersChange} />
+            </FadeRise>
 
             {stats && (
-                <div style={{ marginBottom: 24 }}>
+                <FadeRise delay={0.05} style={{ marginBottom: 24 }}>
                     <SectionLabel>Сводка</SectionLabel>
                     <SupplierStatistics stats={stats} />
-                </div>
+                </FadeRise>
             )}
 
-            <SupplierTable
-                suppliers={suppliers}
-                loading={loading}
-                pagination={pagination}
-                sortField={sortField}
-                sortOrder={sortOrder}
-                onSort={handleSort}
-                onPageChange={handlePageChange}
-                onSupplierClick={handleItemClick}
-            />
+            <FadeRise delay={0.1}>
+                <SupplierTable
+                    suppliers={suppliers}
+                    loading={loading}
+                    pagination={pagination}
+                    sortField={sortField}
+                    sortOrder={sortOrder}
+                    onSort={handleSort}
+                    onPageChange={handlePageChange}
+                    onSupplierClick={handleItemClick}
+                />
+            </FadeRise>
 
             {selectedSupplier && (
                 <SupplierDetailsModal

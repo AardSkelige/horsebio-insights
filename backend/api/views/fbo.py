@@ -65,59 +65,79 @@ def get_stock_info(client, assortments):
     except Exception as e:
         return {}
 
+def get_fbo_state_href(client):
+    """Href статуса «FBO» из метаданных заказов покупателей"""
+    url = f"{client.BASE_URL}/entity/customerorder/metadata"
+    response = requests.get(url, headers=client.headers, timeout=30)
+    response.raise_for_status()
+    for state in response.json().get('states', []):
+        if state.get('name') == 'FBO':
+            return state['meta']['href']
+    return None
+
 @api_view(['GET'])
 def get_fbo_analysis(request):
    """API endpoint для анализа FBO заказов"""
    try:
        client = MoySkladAPIClient(settings.MOYSKLAD_TOKEN)
-       
+
        end_date = timezone.localtime(timezone.now())
        start_date = end_date - timedelta(days=30)
        today_start = timezone.now().replace(hour=0, minute=0, second=0, microsecond=0)
 
        url = f"{client.BASE_URL}/entity/customerorder"
-       all_orders = []
+       moment_filter = (
+           f"moment>={start_date.strftime('%Y-%m-%d %H:%M:%S')};"
+           f"moment<={end_date.strftime('%Y-%m-%d %H:%M:%S')}"
+       )
+
+       # Общее число заказов за период — лёгкий запрос без expand, только meta.size
+       response = requests.get(url, headers=client.headers,
+                               params={"filter": moment_filter, "limit": 1},
+                               timeout=30)
+       response.raise_for_status()
+       total_orders = response.json().get('meta', {}).get('size', 0)
+
+       # FBO-заказы фильтруем на стороне МойСклад (state + deliveryPlannedMoment):
+       # вместо всех ~1000 заказов с expand приходит только пара десятков
+       state_href = get_fbo_state_href(client)
+       if not state_href:
+           raise DataProcessingError("Статус «FBO» не найден в МойСклад")
+
+       fbo_filter = (
+           f"{moment_filter};state={state_href};"
+           f"deliveryPlannedMoment>={today_start.strftime('%Y-%m-%d %H:%M:%S')}"
+       )
+
+       candidates = []
        offset = 0
        limit = 100
-       
-       # Получаем все заказы
        while True:
            params = {
-               "filter": f"moment>={start_date.strftime('%Y-%m-%d %H:%M:%S')};moment<={end_date.strftime('%Y-%m-%d %H:%M:%S')}",
+               "filter": fbo_filter,
                "limit": limit,
                "offset": offset,
                "expand": "state,agent,positions,positions.assortment,organization,store"
            }
-           
            response = requests.get(url, headers=client.headers, params=params, timeout=30)
            response.raise_for_status()
-           data = response.json()
-           rows = data.get('rows', [])
+           rows = response.json().get('rows', [])
 
            if not rows:
                break
-               
-           all_orders.extend(rows)
-           
+
+           candidates.extend(rows)
+
            if len(rows) < limit:
                break
-               
+
            offset += limit
 
-       # Фильтруем FBO заказы
-       fbo_orders = []
-       for order in all_orders:
-           if (order.get('state', {}).get('name') == 'FBO' and 
-               float(order.get('shippedSum', 0)) == 0 and 
-               order.get('deliveryPlannedMoment')):
-               
-               delivery_date = timezone.make_aware(
-                   datetime.fromisoformat(
-                       order['deliveryPlannedMoment'].replace('Z', '')
-                   )
-               )
-               if delivery_date >= today_start:
-                   fbo_orders.append(order)
+       # shippedSum не фильтруется в API — оставляем проверку здесь
+       fbo_orders = [
+           order for order in candidates
+           if float(order.get('shippedSum', 0)) == 0 and order.get('deliveryPlannedMoment')
+       ]
 
        products_data = []
        product_hrefs = set()
@@ -204,7 +224,7 @@ def get_fbo_analysis(request):
 
        response_data = {
            'statistics': {
-               'total_orders': len(all_orders),
+               'total_orders': total_orders,
                'fbo_orders': len(fbo_orders),
                'no_shipment_orders': len(fbo_orders),
                'start_date': start_date.isoformat(),

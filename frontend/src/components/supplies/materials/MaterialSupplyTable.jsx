@@ -1,6 +1,8 @@
 import { useState } from 'react';
 import PropTypes from 'prop-types';
 import { ChevronUp, ChevronDown, ChevronsUpDown, ChevronRight, Eye, Loader2 } from 'lucide-react';
+import { SkeletonRows } from '../../ui/Skeleton';
+import { useRowHoverPill } from '../../ui/motion';
 import { suppliesApi } from '../../../api/suppliesApi';
 
 const thStyle = (active) => ({
@@ -89,6 +91,7 @@ const MaterialSupplyTable = ({ materials, loading, pagination, sortField, sortOr
     const [expandedIds, setExpandedIds] = useState([]);
     const [detailsCache, setDetailsCache] = useState({});
     const [loadingIds, setLoadingIds] = useState({});
+    const { containerProps, rowHoverProps, pill } = useRowHoverPill();
 
     const cacheKey = (id) => {
         const f = filters || {};
@@ -123,7 +126,8 @@ const MaterialSupplyTable = ({ materials, loading, pagination, sortField, sortOr
 
     return (
         <div>
-            <div style={{ overflowX: 'auto' }}>
+            <div {...containerProps} style={{ ...containerProps.style, overflowX: 'auto' }}>
+                {pill}
                 <table style={{ width: '100%', borderCollapse: 'collapse' }}>
                     <thead>
                         <tr>
@@ -139,15 +143,10 @@ const MaterialSupplyTable = ({ materials, loading, pagination, sortField, sortOr
                             <th style={{ ...thStyle(false), cursor: 'default' }}>Детали</th>
                         </tr>
                     </thead>
-                    <tbody>
-                        {loading ? (
-                            <tr>
-                                <td colSpan={8} style={{ ...tdStyle, textAlign: 'center', padding: '32px 0', color: 'var(--muted)' }}>
-                                    <Loader2 size={16} className="animate-spin" style={{ display: 'inline-block', marginRight: 8 }} />
-                                    Загрузка...
-                                </td>
-                            </tr>
-                        ) : materials.length === 0 ? (
+                    <tbody style={{ opacity: loading && materials.length > 0 ? 0.45 : 1, transition: 'opacity 200ms ease' }}>
+                        {loading && materials.length === 0 ? (
+                            <SkeletonRows cols={8} />
+                        ) : !loading && materials.length === 0 ? (
                             <tr>
                                 <td colSpan={8} style={{ ...tdStyle, textAlign: 'center', padding: '32px 0', color: 'var(--muted)' }}>Нет данных</td>
                             </tr>
@@ -160,9 +159,8 @@ const MaterialSupplyTable = ({ materials, loading, pagination, sortField, sortOr
                             return [
                                 <tr key={row.id}
                                     onClick={() => toggleExpand(row)}
-                                    style={{ cursor: 'pointer', transition: 'background 100ms', background: expanded ? 'var(--surface-soft)' : '' }}
-                                    onMouseEnter={e => { if (!expanded) e.currentTarget.style.background = 'var(--surface-soft)'; }}
-                                    onMouseLeave={e => { if (!expanded) e.currentTarget.style.background = ''; }}
+                                    {...rowHoverProps}
+                                    style={{ cursor: 'pointer', background: expanded ? 'var(--surface-soft)' : '' }}
                                 >
                                     <td style={{ ...tdStyle, paddingRight: 4, paddingLeft: 8, width: 28 }}>
                                         <ChevronRight size={13} style={{ color: 'var(--muted)', transform: expanded ? 'rotate(90deg)' : 'none', transition: 'transform 150ms' }} />

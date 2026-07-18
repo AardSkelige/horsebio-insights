@@ -3,6 +3,7 @@ import { lazy, Suspense } from 'react';
 import { BrowserRouter as Router, Routes, Route } from 'react-router-dom';
 import PropTypes from 'prop-types';
 import Layout from './components/layout/Layout';
+import { MotionProvider } from './components/ui/motion';
 import { LoadingProvider } from './contexts/LoadingContext';
 import { DataPanelProvider } from './contexts/DataPanelContext';
 import LoginPage from './components/auth/LoginPage';
@@ -33,22 +34,15 @@ const InventoryTracking = lazy(() => import('./components/inventory-tracking/Inv
 const PaymentDeadlinesPage = lazy(() => import('./components/payment-deadlines/PaymentDeadlinesPage'));
 
 const RouteFallback = () => (
-  <div
-    aria-busy="true"
-    style={{
-      minHeight: '220px',
-      border: '1px solid var(--hairline)',
-      borderRadius: '10px',
-      background: 'var(--canvas)',
-      display: 'flex',
-      alignItems: 'center',
-      justifyContent: 'center',
-      color: 'var(--muted)',
-      fontFamily: 'var(--sans)',
-      fontSize: '14px'
-    }}
-  >
-    Загрузка раздела...
+  <div aria-busy="true" aria-label="Загрузка раздела" style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+    <div className="skeleton" style={{ width: 220, height: 32 }} />
+    <div className="skeleton" style={{ height: 56 }} />
+    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: 12 }}>
+      <div className="skeleton" style={{ height: 88 }} />
+      <div className="skeleton" style={{ height: 88 }} />
+      <div className="skeleton" style={{ height: 88 }} />
+    </div>
+    <div className="skeleton" style={{ height: 240 }} />
   </div>
 );
 
@@ -299,13 +293,15 @@ function AppRoutes() {
 
 function App() {
   return (
-    <LoadingProvider>
-      <DataPanelProvider>
-      <Router>
-        <AppRoutes />
-      </Router>
-      </DataPanelProvider>
-    </LoadingProvider>
+    <MotionProvider>
+      <LoadingProvider>
+        <DataPanelProvider>
+        <Router>
+          <AppRoutes />
+        </Router>
+        </DataPanelProvider>
+      </LoadingProvider>
+    </MotionProvider>
   );
 }
 

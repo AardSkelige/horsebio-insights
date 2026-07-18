@@ -1,7 +1,9 @@
 import { useState, useCallback, useRef, useEffect, Fragment } from 'react';
 import PropTypes from 'prop-types';
 import { Factory, Search, Trash2, Calculator, Download, Loader2, ChevronDown, ChevronUp, FileSpreadsheet } from 'lucide-react';
+import { m } from 'motion/react';
 import SectionLabel from '../ui/SectionLabel';
+import { FadeRise } from '../ui/motion';
 import { productionApi } from '../../api/productionApi';
 
 const useDebounce = (callback, delay) => {
@@ -277,24 +279,31 @@ const ProductionCalculator = () => {
                             key={tab.key}
                             onClick={() => setActiveTab(tab.key)}
                             style={{
+                                position: 'relative',
                                 padding: '8px 16px', border: 'none', cursor: 'pointer',
                                 fontFamily: 'var(--sans)', fontSize: '13px',
                                 fontWeight: activeTab === tab.key ? 500 : 400,
                                 backgroundColor: 'transparent',
                                 color: activeTab === tab.key ? 'var(--ink)' : 'var(--muted)',
-                                borderBottom: `2px solid ${activeTab === tab.key ? 'var(--primary)' : 'transparent'}`,
                                 marginBottom: '-1px',
-                                transition: 'color 150ms, border-color 150ms',
+                                transition: 'color 150ms',
                             }}
                         >
                             {tab.label}
+                            {activeTab === tab.key && (
+                                <m.span
+                                    layoutId="production-tabs-underline"
+                                    transition={{ type: 'spring', stiffness: 500, damping: 40 }}
+                                    style={{ position: 'absolute', left: 0, right: 0, bottom: 0, height: 2, background: 'var(--primary)' }}
+                                />
+                            )}
                         </button>
                     ))}
                 </div>
 
                 {/* Manual input */}
                 {activeTab === 'manual' && (
-                    <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+                    <FadeRise style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
                         <div ref={searchContainerRef} style={{ position: 'relative' }}>
                             <Search style={{ position: 'absolute', left: '12px', top: '50%', transform: 'translateY(-50%)', width: 14, height: 14, color: 'var(--muted)', pointerEvents: 'none' }} />
                             <input
@@ -398,12 +407,12 @@ const ProductionCalculator = () => {
                                 <p style={{ fontFamily: 'var(--sans)', fontSize: '13px', color: 'var(--muted)', margin: 0 }}>Добавьте товары для расчёта</p>
                             </div>
                         )}
-                    </div>
+                    </FadeRise>
                 )}
 
                 {/* File upload */}
                 {activeTab === 'upload' && (
-                    <div>
+                    <FadeRise>
                         <input ref={fileInputRef} type="file" accept=".xlsx,.xls" onChange={handleFileInputChange} style={{ display: 'none' }} />
                         <div
                             onClick={() => !calculating && fileInputRef.current?.click()}
@@ -431,7 +440,7 @@ const ProductionCalculator = () => {
                                 Файл должен содержать колонки: Артикул, Наименование, Количество
                             </p>
                         </div>
-                    </div>
+                    </FadeRise>
                 )}
             </section>
 

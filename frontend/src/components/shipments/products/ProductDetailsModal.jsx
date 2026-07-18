@@ -1,11 +1,12 @@
 import { useState, useEffect } from 'react';
-import { createPortal } from 'react-dom';
 import PropTypes from 'prop-types';
 import { X, ChevronRight, Loader2 } from 'lucide-react';
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
 import { formatDateTime } from '../../../utils/formatters';
+import { CHART_ANIMATION } from '../../../utils/chartAnimation';
 import SectionLabel from '../../ui/SectionLabel';
 import StatCard from '../../ui/StatCard';
+import { ModalShell } from '../../ui/motion';
 import { productsApi } from '../../../api/productsApi';
 
 const fmt = (n) => (n ?? 0).toLocaleString('ru-RU');
@@ -87,8 +88,6 @@ const ProductDetailsModal = ({ product, visible, onClose, dateRange }) => {
         return () => ctrl.abort();
     }, [product, visible, dateRange]);
 
-    if (!visible) return null;
-
     const chartData = details?.monthly_dynamics?.map(item => ({
         month: new Date(item.month).toLocaleDateString('ru', { month: 'short', year: '2-digit' }),
         quantity: item.quantity,
@@ -100,10 +99,8 @@ const ProductDetailsModal = ({ product, visible, onClose, dateRange }) => {
         return d !== 0 ? d : b.number.localeCompare(a.number, undefined, { numeric: true });
     });
 
-    const modal = (
-        <div style={{ position: 'fixed', inset: 0, zIndex: 9999, display: 'flex', alignItems: 'flex-start', justifyContent: 'center', padding: '40px 16px' }}>
-            <div onClick={onClose} style={{ position: 'absolute', inset: 0, background: 'rgba(20,20,19,0.55)' }} />
-            <div style={{ position: 'relative', background: 'var(--canvas)', borderRadius: 16, border: '1px solid var(--hairline)', width: '100%', maxWidth: 1000, maxHeight: 'calc(100vh - 80px)', display: 'flex', flexDirection: 'column', boxShadow: '0 8px 40px rgba(20,20,19,0.18)' }}>
+    return (
+        <ModalShell open={visible} onClose={onClose} maxWidth={1000}>
                 {/* Header */}
                 <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', padding: '20px 24px 16px', borderBottom: '1px solid var(--hairline)', flexShrink: 0 }}>
                     <div style={{ display: 'flex', alignItems: 'baseline', gap: 10, minWidth: 0 }}>
@@ -150,8 +147,8 @@ const ProductDetailsModal = ({ product, visible, onClose, dateRange }) => {
                                                 <YAxis yAxisId="qty" tick={{ fontFamily: 'var(--sans)', fontSize: 11, fill: 'var(--muted)' }} tickFormatter={fmt} width={50} />
                                                 <YAxis yAxisId="rev" orientation="right" tick={{ fontFamily: 'var(--sans)', fontSize: 11, fill: 'var(--muted)' }} tickFormatter={v => `${(v / 1000).toFixed(0)}k`} width={44} />
                                                 <Tooltip content={<ChartTooltip />} />
-                                                <Line yAxisId="qty" type="monotone" dataKey="quantity" name="Количество" stroke="var(--primary)" strokeWidth={2} dot={{ r: 3, fill: 'var(--primary)' }} activeDot={{ r: 5 }} />
-                                                <Line yAxisId="rev" type="monotone" dataKey="revenue" name="Выручка" stroke="#5a8a6a" strokeWidth={2} dot={{ r: 3, fill: '#5a8a6a' }} activeDot={{ r: 5 }} />
+                                                <Line {...CHART_ANIMATION} yAxisId="qty" type="monotone" dataKey="quantity" name="Количество" stroke="var(--primary)" strokeWidth={2} dot={{ r: 3, fill: 'var(--primary)' }} activeDot={{ r: 5 }} />
+                                                <Line {...CHART_ANIMATION} yAxisId="rev" type="monotone" dataKey="revenue" name="Выручка" stroke="#5a8a6a" strokeWidth={2} dot={{ r: 3, fill: '#5a8a6a' }} activeDot={{ r: 5 }} />
                                             </LineChart>
                                         </ResponsiveContainer>
                                     </div>
@@ -188,11 +185,8 @@ const ProductDetailsModal = ({ product, visible, onClose, dateRange }) => {
                         </div>
                     )}
                 </div>
-            </div>
-        </div>
+        </ModalShell>
     );
-
-    return createPortal(modal, document.body);
 };
 
 ProductDetailsModal.propTypes = {

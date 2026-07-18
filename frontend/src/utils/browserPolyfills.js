@@ -13,7 +13,7 @@ const fallbackRandomUUID = () => {
 
 if (typeof globalThis.crypto?.randomUUID !== 'function') {
   // Direct assignment works when Object.defineProperty fails on non-configurable prototype getter
-  try { globalThis.crypto.randomUUID = fallbackRandomUUID; } catch (_) {}
+  try { globalThis.crypto.randomUUID = fallbackRandomUUID; } catch { /* прототип может быть заморожен — фолбэк ниже */ }
 
   // If still not patched, replace the crypto object entirely
   if (typeof globalThis.crypto?.randomUUID !== 'function') {
@@ -27,6 +27,6 @@ if (typeof globalThis.crypto?.randomUUID !== 'function') {
           subtle: orig?.subtle,
         }),
       });
-    } catch (_) {}
+    } catch { /* defineProperty запрещён — оставляем как есть */ }
   }
 }

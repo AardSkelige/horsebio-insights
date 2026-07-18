@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import PropTypes from 'prop-types';
+import { m } from 'motion/react';
 import { ChevronRight } from 'lucide-react';
 
 const fmt = (n) => (n ?? 0).toLocaleString('ru-RU');
@@ -85,8 +86,15 @@ const MaterialsSection = ({ categories }) => {
             <div style={{ display: 'flex', gap: 4, marginBottom: 12, flexWrap: 'wrap' }}>
                 {tabs.map(tab => (
                     <button key={tab.key} onClick={() => setActiveTab(tab.key)}
-                        style={{ fontFamily: 'var(--sans)', fontSize: 12, fontWeight: 500, padding: '5px 12px', borderRadius: 6, border: tab.key === activeTab ? '1px solid var(--primary)' : '1px solid var(--hairline)', background: tab.key === activeTab ? 'var(--primary)' : 'var(--canvas)', color: tab.key === activeTab ? '#fff' : 'var(--body)', cursor: 'pointer' }}>
-                        {tab.label}
+                        style={{ position: 'relative', fontFamily: 'var(--sans)', fontSize: 12, fontWeight: 500, padding: '5px 12px', borderRadius: 6, border: tab.key === activeTab ? '1px solid transparent' : '1px solid var(--hairline)', background: 'transparent', color: tab.key === activeTab ? '#fff' : 'var(--body)', cursor: 'pointer', transition: 'color 150ms ease' }}>
+                        {tab.key === activeTab && (
+                            <m.span
+                                layoutId="materials-tabs-pill"
+                                transition={{ type: 'spring', stiffness: 500, damping: 40 }}
+                                style={{ position: 'absolute', inset: -1, borderRadius: 6, background: 'var(--primary)' }}
+                            />
+                        )}
+                        <span style={{ position: 'relative' }}>{tab.label}</span>
                     </button>
                 ))}
             </div>

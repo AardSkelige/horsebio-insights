@@ -1,11 +1,12 @@
 import { useState, useEffect } from 'react';
-import { createPortal } from 'react-dom';
 import PropTypes from 'prop-types';
 import { X, ChevronRight, Loader2 } from 'lucide-react';
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
 import { formatDate } from '../../../utils/formatters';
+import { CHART_ANIMATION } from '../../../utils/chartAnimation';
 import SectionLabel from '../../ui/SectionLabel';
 import StatCard from '../../ui/StatCard';
+import { ModalShell } from '../../ui/motion';
 import { materialsApi } from '../../../api/materialsApi';
 
 const fmt = (n) => (n ?? 0).toLocaleString('ru-RU');
@@ -99,8 +100,6 @@ const MaterialDetailsModal = ({ material, visible, onClose, dateRange }) => {
         return () => document.removeEventListener('keydown', handler);
     }, [visible, onClose]);
 
-    if (!visible) return null;
-
     const chartData = details?.monthly_usage?.map(item => ({
         month: new Date(item.month).toLocaleDateString('ru', { month: 'short', year: '2-digit' }),
         quantity: item.quantity,
@@ -114,10 +113,8 @@ const MaterialDetailsModal = ({ material, visible, onClose, dateRange }) => {
         return acc;
     }, {}) || {};
 
-    const modal = (
-        <div style={{ position: 'fixed', inset: 0, zIndex: 9999, display: 'flex', alignItems: 'flex-start', justifyContent: 'center', padding: '40px 16px 40px' }}>
-            <div onClick={onClose} style={{ position: 'absolute', inset: 0, background: 'rgba(20,20,19,0.55)' }} />
-            <div style={{ position: 'relative', background: 'var(--canvas)', borderRadius: 16, border: '1px solid var(--hairline)', width: '100%', maxWidth: 960, maxHeight: 'calc(100vh - 80px)', display: 'flex', flexDirection: 'column', boxShadow: '0 8px 40px rgba(20,20,19,0.18)' }}>
+    return (
+        <ModalShell open={visible} onClose={onClose} maxWidth={960}>
                 {/* Header */}
                 <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', padding: '20px 24px 16px', borderBottom: '1px solid var(--hairline)', flexShrink: 0 }}>
                     <div style={{ display: 'flex', alignItems: 'baseline', gap: 10, minWidth: 0 }}>
@@ -165,7 +162,7 @@ const MaterialDetailsModal = ({ material, visible, onClose, dateRange }) => {
                                                     contentStyle={{ fontFamily: 'var(--sans)', fontSize: 12, borderRadius: 8, border: '1px solid var(--hairline)', background: 'var(--canvas)' }}
                                                     formatter={(v) => [`${fmt(v)} ${details.material.uom}`, 'Количество']}
                                                 />
-                                                <Line type="monotone" dataKey="quantity" stroke="var(--primary)" strokeWidth={2} dot={{ r: 3, fill: 'var(--primary)' }} activeDot={{ r: 5 }} />
+                                                <Line {...CHART_ANIMATION} type="monotone" dataKey="quantity" stroke="var(--primary)" strokeWidth={2} dot={{ r: 3, fill: 'var(--primary)' }} activeDot={{ r: 5 }} />
                                             </LineChart>
                                         </ResponsiveContainer>
                                     </div>
@@ -205,11 +202,8 @@ const MaterialDetailsModal = ({ material, visible, onClose, dateRange }) => {
                         </div>
                     )}
                 </div>
-            </div>
-        </div>
+        </ModalShell>
     );
-
-    return createPortal(modal, document.body);
 };
 
 MaterialDetailsModal.propTypes = {

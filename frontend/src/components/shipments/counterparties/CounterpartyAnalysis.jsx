@@ -4,6 +4,7 @@ import CounterpartyTable from './CounterpartyTable';
 import CounterpartyStatistics from './CounterpartyStatistics';
 import CounterpartyDetailsModal from './CounterpartyDetailsModal';
 import SectionLabel from '../../ui/SectionLabel';
+import { FadeRise } from '../../ui/motion';
 import { counterpartiesApi } from '../../../api/counterpartiesApi';
 import { useAnalysisTable } from '../../../hooks/useAnalysisTable';
 
@@ -44,12 +45,15 @@ const CounterpartyAnalysis = () => {
             </div>
 
             {stats && (
-                <section>
-                    <SectionLabel>Статистика</SectionLabel>
-                    <CounterpartyStatistics stats={stats} />
-                </section>
+                <FadeRise>
+                    <section>
+                        <SectionLabel>Статистика</SectionLabel>
+                        <CounterpartyStatistics stats={stats} />
+                    </section>
+                </FadeRise>
             )}
 
+            <FadeRise delay={0.05}>
             <section>
                 <SectionLabel>Контрагенты</SectionLabel>
                 <CounterpartyFilterPanel filters={filters} onChange={handleFiltersChange} />
@@ -64,6 +68,7 @@ const CounterpartyAnalysis = () => {
                     onCounterpartyClick={handleItemClick}
                 />
             </section>
+            </FadeRise>
 
             {selectedCounterparty && (
                 <CounterpartyDetailsModal

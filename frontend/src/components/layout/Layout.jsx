@@ -1,5 +1,6 @@
 import { useLocation } from 'react-router-dom';
 import PropTypes from 'prop-types';
+import { m } from 'motion/react';
 import { X, Menu } from 'lucide-react';
 import { useState, useEffect, useRef } from 'react';
 import FloatingLoadingCard from '../common/FloatingLoadingCard';
@@ -208,16 +209,18 @@ const Layout = ({ children }) => {
             }} />
 
             {/* Data panel */}
-            <div ref={panelRef} style={{
-                position: 'fixed', top: 0, left: 0, right: 0, zIndex: 40,
-                backgroundColor: 'var(--canvas)',
-                borderBottom: '1px solid var(--hairline)',
-                boxShadow: '0 8px 32px rgba(20,20,19,0.10)',
-                transform: open ? 'translateY(0)' : 'translateY(-8px)',
-                opacity: open ? 1 : 0,
-                pointerEvents: open ? 'auto' : 'none',
-                transition: 'transform 200ms ease, opacity 200ms ease',
-            }}>
+            <m.div
+                ref={panelRef}
+                initial={false}
+                animate={open ? { y: 0, opacity: 1 } : { y: -12, opacity: 0 }}
+                transition={{ type: 'spring', stiffness: 380, damping: 32 }}
+                style={{
+                    position: 'fixed', top: 0, left: 0, right: 0, zIndex: 40,
+                    backgroundColor: 'var(--canvas)',
+                    borderBottom: '1px solid var(--hairline)',
+                    boxShadow: '0 8px 32px rgba(20,20,19,0.10)',
+                    pointerEvents: open ? 'auto' : 'none',
+                }}>
                 <div style={{ maxWidth: '1280px', margin: '0 auto', padding: '20px 24px', position: 'relative' }}>
                     <button
                         onClick={close}
@@ -235,7 +238,7 @@ const Layout = ({ children }) => {
                     </button>
                     <DataManagementCard />
                 </div>
-            </div>
+            </m.div>
 
             <FloatingLoadingCard />
         </div>

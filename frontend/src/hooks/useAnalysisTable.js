@@ -73,7 +73,9 @@ export function useAnalysisTable({ fetchFn, dataKey, defaultSort, defaultFilters
 
     const handlePageChange = (page) => setPagination(p => ({ ...p, current: page }));
     const handleItemClick = (item) => { setSelectedItem(item); setModalVisible(true); };
-    const handleModalClose = () => { setModalVisible(false); setSelectedItem(null); };
+    // selectedItem не обнуляем: модалка должна остаться смонтированной,
+    // чтобы отыграть exit-анимацию закрытия
+    const handleModalClose = () => setModalVisible(false);
 
     return {
         rows, stats, loading, filters, pagination, sortField, sortOrder,
