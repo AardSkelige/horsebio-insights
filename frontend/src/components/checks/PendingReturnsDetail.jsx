@@ -1,50 +1,120 @@
 import { useState, useEffect, useCallback } from 'react';
 import PropTypes from 'prop-types';
-import { ArrowLeft, ExternalLink, Loader2, PackageOpen } from 'lucide-react';
-import { checksApi, relTime, fmtRub, PENDING_RETURNS_HINT } from './checksShared';
+import { ArrowLeft, ExternalLink, Loader2, PackageOpen, ChevronRight } from 'lucide-react';
+import { checksApi, relTime, fmtRub, plural, PENDING_RETURNS_HINT } from './checksShared';
+import { AccountBadge } from './ScriptCard';
 import InfoTip from './InfoTip';
 
 const HEALTH_ID = 'horsebio_health_check';
+
+// Корзины возраста для ленты: [от, до) дней, цвет, подпись
+const BUCKETS = [
+    { from: 0, to: 10, color: '#ecd9cf', label: 'до 10 дней', darkText: true },
+    { from: 10, to: 20, color: '#dcae99', label: '10–20 дней' },
+    { from: 20, to: 30, color: '#cc785c', label: '20–30 дней' },
+    { from: 30, to: Infinity, color: 'var(--warning)', label: '⚠ дольше 30', warn: true },
+];
 
 const numStyle = (color, size = 26) => ({
     fontFamily: 'var(--serif)', fontSize: size, fontWeight: 400, letterSpacing: '-0.02em',
     lineHeight: 1.15, color, fontVariantNumeric: 'lining-nums', fontFeatureSettings: '"lnum" 1',
 });
 
-function Row({ item }) {
-    const overdue = item.severity === 'warning';
+/** Плоская лента: вся зависшая сумма, разбитая по возрасту возвратов. */
+function AgeStrip({ items }) {
+    const buckets = BUCKETS.map((b) => {
+        const inb = items.filter((it) => (it.age_days ?? 0) >= b.from && (it.age_days ?? 0) < b.to);
+        return { ...b, count: inb.length, sum: inb.reduce((acc, it) => acc + (it.sum_rub || 0), 0) };
+    }).filter((b) => b.count > 0);
+    const total = buckets.reduce((acc, b) => acc + b.sum, 0);
+    if (total <= 0 || buckets.length === 0) return null;
+
     return (
-        <div style={{
-            display: 'flex', alignItems: 'center', gap: 12, padding: '10px 14px',
-            borderTop: '1px solid var(--hairline-soft)',
-            background: overdue ? 'rgba(176,138,31,0.05)' : 'transparent',
-        }}>
-            <span style={{ width: 7, height: 7, borderRadius: 999, flexShrink: 0, background: overdue ? '#b08a1f' : 'var(--muted-soft)' }} />
-            <div style={{ minWidth: 0, flex: 1 }}>
-                <div style={{ fontSize: 13.5, fontWeight: 600, color: 'var(--ink)' }}>{item.object}</div>
-                <div style={{ fontSize: 12.5, color: 'var(--muted)', marginTop: 2 }}>{item.detail}</div>
+        <div style={{ marginTop: 18 }}>
+            <div style={{ fontSize: 11, fontWeight: 700, letterSpacing: '0.07em', textTransform: 'uppercase', color: 'var(--muted)', marginBottom: 8 }}>
+                Сколько дней уже едут — по сумме
             </div>
-            <div style={{ ...numStyle(overdue ? '#b08a1f' : 'var(--ink)', 16), flexShrink: 0 }}>
-                {fmtRub(item.sum_rub)}
+            <div style={{ display: 'flex', gap: 2, height: 34, borderRadius: 8, overflow: 'hidden' }}>
+                {buckets.map((b) => (
+                    <div key={b.label} title={`${b.label}: ${b.count} ${plural(b.count, 'возврат', 'возврата', 'возвратов')} · ${fmtRub(b.sum)}`}
+                        style={{ flex: Math.max(b.sum, total * 0.04), position: 'relative', background: b.color, minWidth: 0 }}>
+                        <span style={{
+                            position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center',
+                            fontSize: 11.5, fontWeight: 700, whiteSpace: 'nowrap', overflow: 'hidden',
+                            color: b.darkText ? '#6b4632' : '#fff',
+                            textShadow: b.darkText ? 'none' : '0 1px 2px rgba(0,0,0,0.18)',
+                        }}>{fmtRub(b.sum)}</span>
+                    </div>
+                ))}
             </div>
-            {item.ms_href && (
-                <a href={item.ms_href} target="_blank" rel="noreferrer" style={{
-                    display: 'inline-flex', alignItems: 'center', gap: 4, padding: '4px 9px', borderRadius: 7,
-                    background: 'var(--surface-soft)', color: 'var(--muted)', fontSize: 12, fontWeight: 600,
-                    textDecoration: 'none', whiteSpace: 'nowrap', flexShrink: 0,
-                }}>
-                    <ExternalLink size={13} /> МС
-                </a>
-            )}
+            <div style={{ display: 'flex', gap: 2, marginTop: 7 }}>
+                {buckets.map((b) => (
+                    <div key={b.label} style={{ flex: Math.max(b.sum, total * 0.04), fontSize: 11, color: 'var(--muted)', lineHeight: 1.45, minWidth: 0 }}>
+                        <b style={{ display: 'block', fontWeight: 600, color: b.warn ? '#8a5a13' : 'var(--ink)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{b.label}</b>
+                        <span style={{ whiteSpace: 'nowrap' }}>{b.count} {plural(b.count, 'возврат', 'возврата', 'возвратов')}</span>
+                    </div>
+                ))}
+            </div>
         </div>
     );
 }
-Row.propTypes = { item: PropTypes.object.isRequired };
+AgeStrip.propTypes = { items: PropTypes.array.isRequired };
 
-/** Деталка индикатора «Возвраты в пути»: список черновиков возвратов из последнего
- *  запуска хелс-чека, просроченные сверху. */
+/** Таблица возвратов: № | маркетплейс/контрагент | создан | едет уже | сумма | МС */
+function ReturnsTable({ items, warn }) {
+    return (
+        <div style={{ overflowX: 'auto' }}>
+            <table style={{ borderCollapse: 'collapse', width: '100%', fontSize: 13, fontVariantNumeric: 'tabular-nums', background: 'var(--canvas)' }}>
+                <thead>
+                    <tr>
+                        {['Возврат', 'Откуда', 'Создан', 'Едет уже', 'Сумма', ''].map((h, i) => (
+                            <th key={i} style={{
+                                textAlign: i >= 3 && i <= 4 ? 'right' : 'left',
+                                fontSize: 10.5, fontWeight: 700, letterSpacing: '0.07em', textTransform: 'uppercase',
+                                color: 'var(--muted-soft)', padding: '8px 12px', borderBottom: '1px solid var(--hairline)',
+                            }}>{h}</th>
+                        ))}
+                    </tr>
+                </thead>
+                <tbody>
+                    {items.map((it) => (
+                        <tr key={it.ms_id || it.object}>
+                            <td style={td()}><span style={{ fontWeight: 600, color: 'var(--ink)' }}>{it.object}</span></td>
+                            <td style={td()}>{it.agent || '—'}</td>
+                            <td style={td()}>{it.moment || ''}</td>
+                            <td style={{ ...td(), textAlign: 'right', whiteSpace: 'nowrap', color: warn ? '#8a5a13' : 'var(--body)', fontWeight: warn ? 600 : 400 }}>
+                                {it.age_days} {plural(it.age_days ?? 0, 'день', 'дня', 'дней')}
+                            </td>
+                            <td style={{ ...td(), textAlign: 'right', whiteSpace: 'nowrap' }}>{fmtRub(it.sum_rub)}</td>
+                            <td style={{ ...td(), textAlign: 'right' }}>
+                                {it.ms_href && (
+                                    <a href={it.ms_href} target="_blank" rel="noreferrer" style={{
+                                        display: 'inline-flex', alignItems: 'center', gap: 4, padding: '3px 8px', borderRadius: 7,
+                                        background: 'var(--surface-soft)', color: 'var(--muted)', fontSize: 12, fontWeight: 600,
+                                        textDecoration: 'none', whiteSpace: 'nowrap',
+                                    }}>
+                                        <ExternalLink size={12} /> МС
+                                    </a>
+                                )}
+                            </td>
+                        </tr>
+                    ))}
+                </tbody>
+            </table>
+        </div>
+    );
+}
+ReturnsTable.propTypes = { items: PropTypes.array.isRequired, warn: PropTypes.bool };
+
+function td() {
+    return { padding: '8px 12px', borderBottom: '1px solid var(--hairline-soft)', color: 'var(--body)', verticalAlign: 'top' };
+}
+
+/** Деталка «Возвратов в пути»: сводка (две плитки + лента возраста), таблица застрявших,
+ *  свёрнутая таблица едущих в срок. Формат C1. */
 export default function PendingReturnsDetail({ onBack }) {
     const [data, setData] = useState(undefined); // undefined=loading, null=нет данных
+    const [showOnTime, setShowOnTime] = useState(false);
 
     const load = useCallback(async () => {
         try {
@@ -59,31 +129,38 @@ export default function PendingReturnsDetail({ onBack }) {
     const items = [...(cat?.items || [])].sort((a, b) => (b.age_days || 0) - (a.age_days || 0));
     const pending = data?.summary?.pending_returns || {};
     const warnDays = pending.warn_days || 30;
-    const overdueItems = items.filter((it) => it.severity === 'warning');
+    const overdue = items.filter((it) => (it.age_days || 0) >= warnDays);
+    const onTime = items.filter((it) => (it.age_days || 0) < warnDays);
 
     return (
-        <div style={{ maxWidth: 820, margin: '0 auto' }}>
+        <div style={{ maxWidth: 900, margin: '0 auto' }}>
             <button onClick={onBack} style={{
-                display: 'inline-flex', alignItems: 'center', gap: 6, marginBottom: 18,
-                background: 'none', border: 'none', color: 'var(--muted)', fontSize: 13, fontWeight: 600, cursor: 'pointer',
+                display: 'inline-flex', alignItems: 'center', gap: 6, marginBottom: 16,
+                background: 'none', border: 'none', color: 'var(--muted)', fontSize: 13, fontWeight: 600, cursor: 'pointer', padding: 0,
             }}>
                 <ArrowLeft size={15} /> Все проверки
             </button>
 
-            <header style={{ marginBottom: 20 }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-                    <PackageOpen size={24} style={{ color: 'var(--primary)' }} />
-                    <h1 style={{ fontFamily: 'var(--serif)', fontSize: 26, fontWeight: 600, color: 'var(--ink)', margin: 0 }}>
+            {/* Шапка — как строка на главной */}
+            <div style={{ display: 'flex', alignItems: 'flex-start', gap: 12, marginBottom: 4 }}>
+                <PackageOpen size={20} style={{ color: 'var(--muted)', flexShrink: 0, marginTop: 4 }} />
+                <div style={{ minWidth: 0, flex: 1 }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 9, flexWrap: 'wrap', fontFamily: 'var(--serif)', fontSize: 24, fontWeight: 600, color: 'var(--ink)', lineHeight: 1.15 }}>
                         Возвраты в пути
-                    </h1>
-                    <InfoTip text={PENDING_RETURNS_HINT} width={320} />
+                        <AccountBadge account="HorseBio" />
+                        <InfoTip text={PENDING_RETURNS_HINT} width={320} />
+                    </div>
+                    <div style={{ fontSize: 12.5, color: 'var(--muted)', marginTop: 5, lineHeight: 1.5 }}>
+                        <div><b style={{ color: 'var(--body)', fontWeight: 600 }}>Что проверяем:</b> черновики возвратов не висят без товара дольше {warnDays} дней</div>
+                        <div><b style={{ color: 'var(--body)', fontWeight: 600 }}>Как:</b> робот создал черновик, когда маркетплейс объявил возврат; проводим, когда товар доехал</div>
+                    </div>
+                    {data?.finished_at && (
+                        <div style={{ fontSize: 12, color: 'var(--muted-soft)', marginTop: 6 }}>
+                            по данным Health Check · {relTime(data.finished_at)}
+                        </div>
+                    )}
                 </div>
-                {data?.finished_at && (
-                    <p style={{ color: 'var(--muted)', marginTop: 6, fontSize: 13 }}>
-                        По данным хелс-чека — {relTime(data.finished_at)}
-                    </p>
-                )}
-            </header>
+            </div>
 
             {data === undefined && (
                 <div style={{ display: 'flex', gap: 8, color: 'var(--muted)', padding: 30, justifyContent: 'center' }}>
@@ -92,43 +169,60 @@ export default function PendingReturnsDetail({ onBack }) {
             )}
             {data === null && (
                 <div style={{ textAlign: 'center', padding: 50, color: 'var(--muted)' }}>
-                    Данных пока нет — запустите хелс-чек.
+                    Данных пока нет — запустите Health Check.
                 </div>
             )}
 
             {data && (
                 <>
-                    <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap', marginBottom: 18 }}>
-                        <div style={statCard()}>
-                            <div style={statLabel()}>Ждут товара</div>
-                            <div style={numStyle('var(--ink)')}>{pending.count ?? items.length}</div>
+                    <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap', marginTop: 16 }}>
+                        <div style={kpi()}>
+                            <div style={kpiLabel()}>Едут к нам</div>
+                            <div style={numStyle('var(--ink)')}>{items.length}</div>
+                            <div style={kpiSub()}>{plural(items.length, 'возврат', 'возврата', 'возвратов')} с ВБ и Озона</div>
                         </div>
-                        <div style={statCard()}>
-                            <div style={statLabel()}>Зависло денег</div>
-                            <div style={numStyle('var(--ink)')}>{fmtRub(pending.total_rub)}</div>
+                        <div style={kpi()}>
+                            <div style={kpiLabel()}>Денег в дороге</div>
+                            <div style={numStyle('var(--ink)')}>{fmtRub(pending.total_rub ?? items.reduce((a, it) => a + (it.sum_rub || 0), 0))}</div>
+                            <div style={kpiSub()}>вернутся на склад товаром</div>
                         </div>
-                        {(pending.overdue > 0 || overdueItems.length > 0) && (
-                            <div style={{ ...statCard(), background: 'rgba(176,138,31,0.08)' }}>
-                                <div style={{ ...statLabel(), color: '#b08a1f' }}>Дольше {warnDays} дн.</div>
-                                <div style={numStyle('#b08a1f')}>
-                                    {pending.overdue ?? overdueItems.length} · {fmtRub(pending.overdue_rub)}
-                                </div>
-                            </div>
-                        )}
                     </div>
+
+                    <AgeStrip items={items} />
 
                     {items.length === 0 ? (
                         <div style={{ textAlign: 'center', padding: 40, color: 'var(--success)', fontWeight: 600 }}>
-                            ✓ Непроведённых возвратов нет
+                            ✓ Все возвраты дошли — в ожидании ничего нет
                         </div>
                     ) : (
-                        <div style={{ background: 'var(--surface-card)', border: '1px solid var(--hairline)', borderRadius: 12 }}>
-                            <div style={{ padding: '10px 14px', fontSize: 12, color: 'var(--muted)' }}>
-                                Старые сверху. Висит дольше {warnDays} дней — проверить статус возврата в кабинете маркетплейса.
-                                Товар пришёл на склад — провести документ в МойСклад.
-                            </div>
-                            {items.map((it) => <Row key={it.ms_id || it.object} item={it} />)}
-                        </div>
+                        <>
+                            {overdue.length > 0 && (
+                                <div style={sect()}>
+                                    <div style={sectHead()}>
+                                        <span style={{ width: 9, height: 9, borderRadius: 999, background: 'var(--warning)', flexShrink: 0 }} />
+                                        Застряли дольше {warnDays} дней — проверить в кабинете маркетплейса
+                                        <span style={{ marginLeft: 'auto', fontSize: 12, fontWeight: 700, color: '#8a5a13', background: 'rgba(176,138,31,0.12)', padding: '1px 9px', borderRadius: 999 }}>
+                                            {overdue.length}
+                                        </span>
+                                    </div>
+                                    <ReturnsTable items={overdue} warn />
+                                </div>
+                            )}
+                            {onTime.length > 0 && (
+                                <div style={sect()}>
+                                    <button onClick={() => setShowOnTime((v) => !v)} style={{
+                                        ...sectHead(), width: '100%', background: 'none', border: 'none', cursor: 'pointer', textAlign: 'left',
+                                    }}>
+                                        <ChevronRight size={15} style={{ color: 'var(--muted-soft)', transform: showOnTime ? 'rotate(90deg)' : 'none', transition: 'transform 0.15s', flexShrink: 0 }} />
+                                        Едут в срок
+                                        <span style={{ marginLeft: 'auto', fontSize: 12, fontWeight: 700, color: 'var(--muted)', background: 'var(--surface-soft)', padding: '1px 9px', borderRadius: 999 }}>
+                                            {onTime.length}
+                                        </span>
+                                    </button>
+                                    {showOnTime && <ReturnsTable items={onTime} />}
+                                </div>
+                            )}
+                        </>
                     )}
                 </>
             )}
@@ -136,17 +230,20 @@ export default function PendingReturnsDetail({ onBack }) {
     );
 }
 
-function statCard() {
-    return {
-        minWidth: 150, padding: '14px 18px', borderRadius: 12,
-        background: 'var(--surface-card)', border: '1px solid var(--hairline)',
-    };
+function kpi() {
+    return { background: 'var(--surface-card)', border: '1px solid var(--hairline)', borderRadius: 12, padding: '12px 18px', minWidth: 160 };
 }
-function statLabel() {
-    return {
-        fontFamily: 'var(--sans)', fontSize: 11, fontWeight: 500, letterSpacing: '0.1em',
-        textTransform: 'uppercase', color: 'var(--muted)', marginBottom: 8,
-    };
+function kpiLabel() {
+    return { fontSize: 10.5, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.08em', color: 'var(--muted)', marginBottom: 5 };
+}
+function kpiSub() {
+    return { fontSize: 11.5, color: 'var(--muted-soft)', marginTop: 3 };
+}
+function sect() {
+    return { background: 'var(--surface-card)', border: '1px solid var(--hairline)', borderRadius: 12, marginTop: 14, overflow: 'hidden' };
+}
+function sectHead() {
+    return { display: 'flex', alignItems: 'center', gap: 9, padding: '11px 14px', fontSize: 13.5, fontWeight: 600, color: 'var(--ink)', borderBottom: '1px solid var(--hairline)' };
 }
 
 PendingReturnsDetail.propTypes = { onBack: PropTypes.func.isRequired };

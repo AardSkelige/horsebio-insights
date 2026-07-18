@@ -7,8 +7,9 @@ import { SEV, sevOf, relTime, plural } from './checksShared';
 import InfoTip from './InfoTip';
 import './ScriptCard.css';
 
-// Что проверяем / как проверяем / подробности в «?» — по каждому скрипту
-const SCRIPT_META = {
+// Что проверяем / как проверяем / подробности в «?» — по каждому скрипту.
+// Экспортируется: шапка деталки (CheckDetail) показывает те же тексты, что и список.
+export const SCRIPT_META = {
     horsebio_health_check: {
         Icon: Activity,
         what: 'Себестоимость посчитана верно, в документах МойСклад порядок',

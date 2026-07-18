@@ -1,11 +1,11 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import PropTypes from 'prop-types';
 import { m } from 'motion/react';
-import { ArrowLeft, Play, Square, Loader2, CheckCircle, AlertCircle, Clock, History } from 'lucide-react';
-import { checksApi, relTime, fmtDuration } from './checksShared';
+import { ArrowLeft, Play, Square, Loader2, Activity } from 'lucide-react';
+import { checksApi, relTime, fmtDuration, plural } from './checksShared';
+import { SCRIPT_META, AccountBadge } from './ScriptCard';
 import HealthResults from './HealthResults';
 import ExceptionsPanel from './ExceptionsPanel';
-import RunTimeline from './RunTimeline';
 import ScriptLogPanel from './ScriptLogPanel';
 import RunningPanel from './RunningPanel';
 import InfoTip from './InfoTip';
@@ -16,7 +16,6 @@ export default function CheckDetail({ scriptId, initial, onBack }) {
     const [tab, setTab] = useState('check'); // check | exceptions (только health)
     const [runsData, setRunsData] = useState(null);
     const [running, setRunning] = useState(initial?.is_running || false);
-    const [selectedRun, setSelectedRun] = useState(null); // null = последний
     const [busy, setBusy] = useState(false);
     const pollRef = useRef(null);
 
@@ -43,7 +42,7 @@ export default function CheckDetail({ scriptId, initial, onBack }) {
 
     const handleRun = async () => {
         setBusy(true);
-        try { await checksApi.run(scriptId); setSelectedRun(null); setRunning(true); await loadRuns(); }
+        try { await checksApi.run(scriptId); setRunning(true); await loadRuns(); }
         catch (e) { alert(e.message); }
         finally { setBusy(false); }
     };
@@ -53,45 +52,46 @@ export default function CheckDetail({ scriptId, initial, onBack }) {
         catch (e) { alert(e.message); }
         finally { setBusy(false); }
     };
-    const handleDeleteRun = async (runId) => {
-        try {
-            await checksApi.removeRun(scriptId, runId);
-            if (selectedRun === runId) setSelectedRun(null);
-            await loadRuns();
-        } catch (e) { alert(e.message); }
-    };
 
     const runs = runsData?.runs || [];
     const latest = runs[0];
+    const meta = SCRIPT_META[scriptId] || {};
+    const Icon = meta.Icon || Activity;
 
-    // Основная панель: при запуске — живой лог; иначе результат/лог выбранного запуска
+    // Основная панель: при запуске — живой лог; иначе последний результат/лог
     let main;
     if (running) {
         main = <RunningPanel scriptId={scriptId} onFinished={loadRuns} />;
     } else if (isStructured) {
-        main = <HealthResults scriptId={scriptId} runId={selectedRun} running={false} />;
+        main = <HealthResults scriptId={scriptId} runId={null} running={false} />;
     } else {
-        main = <ScriptLogPanel scriptId={scriptId} runId={selectedRun} />;
+        main = <ScriptLogPanel scriptId={scriptId} runId={null} />;
     }
 
     return (
-        <div style={{ maxWidth: 1200, margin: '0 auto' }}>
-            <button onClick={onBack} style={{ display: 'inline-flex', alignItems: 'center', gap: 6, background: 'none', border: 'none', color: 'var(--muted)', fontSize: 13, fontWeight: 600, cursor: 'pointer', marginBottom: 14, padding: 0 }}>
+        <div style={{ maxWidth: 1100, margin: '0 auto' }}>
+            <button onClick={onBack} style={{ display: 'inline-flex', alignItems: 'center', gap: 6, background: 'none', border: 'none', color: 'var(--muted)', fontSize: 13, fontWeight: 600, cursor: 'pointer', marginBottom: 16, padding: 0 }}>
                 <ArrowLeft size={16} /> Все проверки
             </button>
 
-            {/* Шапка */}
-            <div style={{ background: 'var(--surface-card)', border: '1px solid var(--hairline)', borderRadius: 14, padding: 18, marginBottom: 18, display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 16, flexWrap: 'wrap' }}>
-                <div>
-                    <div style={{ fontFamily: 'var(--serif)', fontSize: 22, fontWeight: 600, color: 'var(--ink)' }}>{initial?.name || scriptId}</div>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: 14, marginTop: 6, fontSize: 13, color: 'var(--muted)', flexWrap: 'wrap' }}>
-                        <StatusBadge running={running} latest={latest} />
-                        {latest && (
-                            <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5 }}>
-                                <Clock size={13} /> {relTime(latest.finished_at)}{latest.duration_sec != null && ` · ${fmtDuration(latest.duration_sec)}`}
-                            </span>
-                        )}
-                        <span style={{ color: 'var(--muted-soft)' }}>{initial?.schedule}</span>
+            {/* Шапка — та же строка, что на главной странице проверок */}
+            <div style={{ display: 'flex', alignItems: 'flex-start', gap: 12, marginBottom: 20 }}>
+                <Icon size={20} style={{ color: 'var(--muted)', flexShrink: 0, marginTop: 4 }} />
+                <div style={{ minWidth: 0, flex: 1 }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 9, flexWrap: 'wrap', fontFamily: 'var(--serif)', fontSize: 24, fontWeight: 600, color: 'var(--ink)', lineHeight: 1.15 }}>
+                        {initial?.name || scriptId}
+                        {initial?.account && <AccountBadge account={initial.account} />}
+                        {meta.hint && <InfoTip text={meta.hint} width={310} />}
+                    </div>
+                    {meta.what && (
+                        <div style={{ fontSize: 12.5, color: 'var(--muted)', marginTop: 5, lineHeight: 1.5 }}>
+                            <div><b style={{ color: 'var(--body)', fontWeight: 600 }}>Что проверяем:</b> {meta.what}</div>
+                            <div><b style={{ color: 'var(--body)', fontWeight: 600 }}>Как:</b> {meta.how}</div>
+                        </div>
+                    )}
+                    <div style={{ display: 'flex', gap: 14, flexWrap: 'wrap', fontSize: 12, color: 'var(--muted-soft)', marginTop: 6 }}>
+                        <RunSummary running={running} latest={latest} />
+                        {initial?.schedule && <span>{initial.schedule.toLowerCase()}</span>}
                     </div>
                 </div>
                 {running ? (
@@ -109,28 +109,37 @@ export default function CheckDetail({ scriptId, initial, onBack }) {
                 </div>
             )}
 
-            {isHealth && tab === 'exceptions' ? (
-                <ExceptionsPanel />
-            ) : (
-                <div className="checks-detail-grid">
-                    <div style={{ minWidth: 0 }}>{main}</div>
-                    <aside>
-                        <div style={{ display: 'inline-flex', alignItems: 'center', gap: 7, fontSize: 12, fontWeight: 700, letterSpacing: 0.5, textTransform: 'uppercase', color: 'var(--muted)', marginBottom: 12 }}>
-                            <History size={14} /> История
-                            <InfoTip text="Точки — счётчики находок по уровням (критичные / важные / предупреждения). Стрелка ↓ зелёным = находок стало меньше к прошлому запуску, ↑ = больше." />
-                        </div>
-                        <RunTimeline
-                            runsData={runsData}
-                            selectedRun={selectedRun}
-                            onSelect={(runId) => { setSelectedRun(runId); setTab('check'); }}
-                            onDelete={handleDeleteRun}
-                        />
-                    </aside>
-                </div>
-            )}
+            {isHealth && tab === 'exceptions' ? <ExceptionsPanel /> : main}
         </div>
     );
 }
+
+/** Статус и время последнего запуска одной строкой: «● 3 проблемы · сегодня 09:00 · 13с» */
+function RunSummary({ running, latest }) {
+    if (running) {
+        return <span style={{ color: 'var(--primary)', fontWeight: 600, display: 'inline-flex', alignItems: 'center', gap: 5 }}><Loader2 size={13} className="animate-spin" /> Выполняется…</span>;
+    }
+    if (!latest) return <span>Не запускался</span>;
+    const s = latest.summary || {};
+    const problems = (s.critical || 0) + (s.important || 0) + (s.warnings || 0);
+    const failed = latest.exit_code != null && latest.exit_code !== 0;
+    return (
+        <span style={{ display: 'inline-flex', gap: 14, flexWrap: 'wrap' }}>
+            {failed ? (
+                <span style={{ color: 'var(--error)', fontWeight: 700 }}>● запуск с ошибкой</span>
+            ) : problems > 0 ? (
+                <span style={{ color: 'var(--error)', fontWeight: 700 }}>● {problems} {plural(problems, 'проблема', 'проблемы', 'проблем')}</span>
+            ) : (
+                <span style={{ color: 'var(--success)', fontWeight: 700 }}>✓ всё чисто</span>
+            )}
+            <span>
+                запуск {relTime(latest.finished_at)}
+                {latest.duration_sec != null && ` · ${fmtDuration(latest.duration_sec)}`}
+            </span>
+        </span>
+    );
+}
+RunSummary.propTypes = { running: PropTypes.bool, latest: PropTypes.object };
 
 function Seg({ active, onClick, children }) {
     return (
@@ -153,16 +162,8 @@ function Seg({ active, onClick, children }) {
 }
 Seg.propTypes = { active: PropTypes.bool, onClick: PropTypes.func, children: PropTypes.node };
 
-function StatusBadge({ running, latest }) {
-    if (running) return <span style={{ color: 'var(--primary)', fontWeight: 600, display: 'inline-flex', alignItems: 'center', gap: 5 }}><Loader2 size={14} className="animate-spin" /> Выполняется</span>;
-    if (!latest) return <span style={{ color: 'var(--muted-soft)' }}>Не запускался</span>;
-    if (latest.exit_code === 0 || latest.exit_code == null) return <span style={{ color: 'var(--success)', fontWeight: 600, display: 'inline-flex', alignItems: 'center', gap: 5 }}><CheckCircle size={14} /> Успешно</span>;
-    return <span style={{ color: 'var(--error)', fontWeight: 600, display: 'inline-flex', alignItems: 'center', gap: 5 }}><AlertCircle size={14} /> Ошибка</span>;
-}
-StatusBadge.propTypes = { running: PropTypes.bool, latest: PropTypes.object };
-
 function btnStyle(color) {
-    return { display: 'inline-flex', alignItems: 'center', gap: 7, padding: '9px 18px', borderRadius: 10, background: color, color: '#fff', border: 'none', fontSize: 14, fontWeight: 600, cursor: 'pointer' };
+    return { display: 'inline-flex', alignItems: 'center', gap: 7, padding: '9px 18px', borderRadius: 10, background: color, color: '#fff', border: 'none', fontSize: 14, fontWeight: 600, cursor: 'pointer', flexShrink: 0 };
 }
 
 CheckDetail.propTypes = {
