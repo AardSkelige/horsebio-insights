@@ -214,13 +214,13 @@ class SeasonalAnalysisTests(BaseViewTestCase):
 class CashFlowTests(BaseViewTestCase):
     """Tests for cash flow endpoints."""
 
-    @patch('api.services.cash_flow.get_operations_data')
-    @patch('api.services.cash_flow.get_sales_channels')
-    @patch('api.services.cash_flow.get_payments_by_channels')
-    @patch('api.services.cash_flow.get_expense_items')
-    @patch('api.services.cash_flow.get_expense_categories_by_api')
-    @patch('api.services.cash_flow.get_income_channels_from_payments')
-    @patch('api.services.cash_flow.calculate_initial_balance')
+    @patch('api.views.cash_flow.get_operations_data')
+    @patch('api.views.cash_flow.get_sales_channels')
+    @patch('api.views.cash_flow.get_payments_by_channels')
+    @patch('api.views.cash_flow.get_expense_items')
+    @patch('api.views.cash_flow.get_expense_categories_by_api')
+    @patch('api.views.cash_flow.get_income_channels_from_payments')
+    @patch('api.views.cash_flow.calculate_initial_balance')
     def test_cash_flow_report(self, mock_balance, mock_income, mock_expense_cat,
                               mock_expense_items, mock_payments, mock_channels, mock_ops):
         """Test POST /api/analysis/cash-flow/ endpoint."""
@@ -249,14 +249,14 @@ class CashFlowTests(BaseViewTestCase):
         data = json.loads(response.content)
         self.assertTrue(data.get('success', False))
 
-    @patch('api.services.cash_flow.get_operations_data')
-    @patch('api.services.cash_flow.get_sales_channels')
-    @patch('api.services.cash_flow.get_payments_by_channels')
-    @patch('api.services.cash_flow.get_expense_items')
-    @patch('api.services.cash_flow.get_expense_categories_by_api')
-    @patch('api.services.cash_flow.get_income_channels_from_payments')
-    @patch('api.services.cash_flow.calculate_initial_balance')
-    @patch('api.services.cash_flow.export_to_excel')
+    @patch('api.views.cash_flow.get_operations_data')
+    @patch('api.views.cash_flow.get_sales_channels')
+    @patch('api.views.cash_flow.get_payments_by_channels')
+    @patch('api.views.cash_flow.get_expense_items')
+    @patch('api.views.cash_flow.get_expense_categories_by_api')
+    @patch('api.views.cash_flow.get_income_channels_from_payments')
+    @patch('api.views.cash_flow.calculate_initial_balance')
+    @patch('api.views.cash_flow.export_to_excel')
     def test_cash_flow_export(self, mock_excel, mock_balance, mock_income, mock_expense_cat,
                               mock_expense_items, mock_payments, mock_channels, mock_ops):
         """Test POST /api/analysis/cash-flow/export/ endpoint."""
