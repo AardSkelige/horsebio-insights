@@ -1,6 +1,50 @@
 import PropTypes from 'prop-types';
-import { Loader2, CheckCircle, AlertCircle, Circle, ChevronRight, Clock } from 'lucide-react';
+import {
+    Loader2, CheckCircle, AlertCircle, Circle, ChevronRight, Clock,
+    Activity, Banknote, PackagePlus, CalendarClock,
+} from 'lucide-react';
 import { SEV, sevOf, relTime, plural } from './checksShared';
+import InfoTip from './InfoTip';
+
+// Что проверяем / как проверяем / подробности в «?» — по каждому скрипту
+const SCRIPT_META = {
+    horsebio_health_check: {
+        Icon: Activity,
+        what: 'Себестоимость посчитана верно, в документах МойСклад порядок',
+        how: '13 проверок за один запуск — от сравнения FIFO с приёмками до кодов товаров',
+        hint: 'Список проверок: отклонения FIFO vs приёмка · отрицательные остатки · оприходования '
+            + '(внутренние склады, цена не по приёмке, нулевые цены) · списания · инвентаризации · '
+            + 'перемещения · приёмки · возвраты с нулевой себестоимостью · скачки цен в приёмках · '
+            + 'коды товаров · незавершённые черновики. Внутри — сетка со статусом каждой проверки.',
+    },
+    horsebio_buy_prices: {
+        Icon: Banknote,
+        what: 'Закупочная цена (buyPrice) каждого товара соответствует реальной FIFO-себестоимости',
+        how: 'Робот сверяет цены и обновляет разошедшиеся',
+        hint: 'buyPrice используется отчётами о прибыли. Если приёмки изменили FIFO-себестоимость, '
+            + 'робот подтянет закупочную цену — прибыль в отчётах останется честной.',
+    },
+    horsebio_returns: {
+        Icon: PackagePlus,
+        what: 'Каждый возврат ВБ/Озон оформлен документом в МойСклад',
+        how: 'Робот следит за статусами заказов и сам создаёт черновики возвратов',
+        hint: 'Когда интеграция маркетплейса ставит заказу статус «возврат», робот находит отгрузку '
+            + 'и создаёт черновик возврата. Так видно, какой товар должен вернуться и сколько денег в нём. '
+            + 'Черновик проводят, когда товар физически приходит на склад.',
+    },
+    horsebio_deadlines: {
+        Icon: CalendarClock,
+        what: 'Счета поставщикам оплачены вовремя',
+        how: 'Сверяем сроки оплат: предупреждаем о просроченных и скоро истекающих',
+        hint: 'Критичные — уже просроченные оплаты, важные — истекают в ближайшие дни.',
+    },
+    starpony_cost_prices: {
+        Icon: Banknote,
+        what: 'Тип цены «Себестоимость» соответствует FIFO',
+        how: 'Робот копирует FIFO-себестоимость в тип цены у товаров с остатками',
+        hint: 'StarPony использует тип цены «Себестоимость» в отчётах — робот держит его актуальным.',
+    },
+};
 
 // Подписи severity с русским склонением
 const SEV_WORDS = {
@@ -25,6 +69,8 @@ function SeverityChip({ sev, count }) {
 }
 SeverityChip.propTypes = { sev: PropTypes.string, count: PropTypes.number };
 
+/** Правая часть строки: полезные цифры вместо голого «ОК».
+ *  Проверки — severity-чипы; роботы — ненулевые счётчики последнего запуска. */
 function StatusLine({ script }) {
     if (script.is_running) {
         return (
@@ -33,19 +79,29 @@ function StatusLine({ script }) {
             </span>
         );
     }
-    if (script.structured && script.summary) {
-        const s = script.summary;
+    const s = script.summary;
+    if (script.structured && s) {
         const total = (s.critical || 0) + (s.important || 0) + (s.warnings || 0);
-        if (total === 0) {
-            return <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6, color: 'var(--success)', fontSize: 13, fontWeight: 600 }}><CheckCircle size={14} /> ОК</span>;
+        if (total > 0) {
+            return (
+                <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', justifyContent: 'flex-end' }}>
+                    {s.critical ? <SeverityChip sev="critical" count={s.critical} /> : null}
+                    {s.important ? <SeverityChip sev="important" count={s.important} /> : null}
+                    {s.warnings ? <SeverityChip sev="warning" count={s.warnings} /> : null}
+                </div>
+            );
         }
-        return (
-            <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', justifyContent: 'flex-end' }}>
-                {s.critical ? <SeverityChip sev="critical" count={s.critical} /> : null}
-                {s.important ? <SeverityChip sev="important" count={s.important} /> : null}
-                {s.warnings ? <SeverityChip sev="warning" count={s.warnings} /> : null}
-            </div>
-        );
+        // Роботы: показать содержательные счётчики («Уже актуальны: 488»)
+        const stats = (Array.isArray(s.stats) ? s.stats : [])
+            .filter((st) => st.value > 0 && st.label !== 'Ошибки').slice(0, 2);
+        if (stats.length > 0) {
+            return (
+                <span style={{ fontSize: 12.5, fontWeight: 600, color: 'var(--success)', whiteSpace: 'nowrap' }}>
+                    ✓ {stats.map((st) => `${st.label.toLowerCase()}: ${st.value}`).join(' · ')}
+                </span>
+            );
+        }
+        return <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6, color: 'var(--success)', fontSize: 13, fontWeight: 600 }}><CheckCircle size={14} /> Всё чисто</span>;
     }
     const code = script.last_run?.exit_code;
     if (code == null) {
@@ -58,8 +114,7 @@ function StatusLine({ script }) {
 }
 StatusLine.propTypes = { script: PropTypes.object.isRequired };
 
-/** Мини-сводка внутренних проверок хелс-чека: проблемные поимённо, чистые одним счётчиком.
- *  Отвечает на вопрос «что именно проверяется и где проблемы» прямо в списке. */
+/** Мини-сводка внутренних проверок хелс-чека: проблемные поимённо, чистые одним счётчиком. */
 function HealthChecksStrip({ checks }) {
     const problems = checks.filter((c) => c.status === 'problems');
     const clean = checks.filter((c) => c.status === 'ok').length;
@@ -87,8 +142,21 @@ function HealthChecksStrip({ checks }) {
 }
 HealthChecksStrip.propTypes = { checks: PropTypes.array.isRequired };
 
-/** Строка-плашка скрипта на всю ширину: название и суть слева, статус и время справа. */
+export function accountBadge(account) {
+    return (
+        <span style={{
+            fontSize: 10.5, fontWeight: 700, letterSpacing: '0.04em', color: 'var(--muted)',
+            padding: '1px 7px', borderRadius: 6, background: 'var(--surface-soft)',
+            textTransform: 'uppercase', whiteSpace: 'nowrap', flexShrink: 0,
+        }}>{account}</span>
+    );
+}
+
+/** Строка скрипта: иконка, название, бейдж аккаунта, «?», ниже — что и как проверяем,
+ *  справа — содержательные цифры и время. Единый формат для всех строк страницы. */
 export default function ScriptCard({ script, onOpen }) {
+    const meta = SCRIPT_META[script.id] || {};
+    const Icon = meta.Icon || Activity;
     const healthChecks = script.is_health && Array.isArray(script.summary?.checks)
         ? script.summary.checks : null;
     return (
@@ -109,8 +177,20 @@ export default function ScriptCard({ script, onOpen }) {
         >
             <div style={{ display: 'flex', alignItems: 'center', gap: 14 }}>
                 <div style={{ minWidth: 0, flex: 1 }}>
-                    <div style={{ fontSize: 14.5, fontWeight: 600, color: 'var(--ink)', lineHeight: 1.3 }}>{script.name}</div>
-                    <div style={{ fontSize: 12, color: 'var(--muted)', marginTop: 2, lineHeight: 1.4 }}>{script.description}</div>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 7, fontSize: 14.5, fontWeight: 600, color: 'var(--ink)', lineHeight: 1.3 }}>
+                        <Icon size={16} style={{ color: 'var(--muted)', flexShrink: 0 }} />
+                        {script.name}
+                        {accountBadge(script.account)}
+                        {meta.hint && <InfoTip text={meta.hint} width={310} />}
+                    </div>
+                    <div style={{ fontSize: 12, color: 'var(--muted)', marginTop: 3, lineHeight: 1.45 }}>
+                        {meta.what ? (
+                            <>
+                                <div><b style={{ color: 'var(--body)', fontWeight: 600 }}>Что проверяем:</b> {meta.what}</div>
+                                <div><b style={{ color: 'var(--body)', fontWeight: 600 }}>Как:</b> {meta.how}</div>
+                            </>
+                        ) : script.description}
+                    </div>
                 </div>
                 <StatusLine script={script} />
                 <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5, fontSize: 12, color: 'var(--muted-soft)', whiteSpace: 'nowrap', flexShrink: 0 }}>

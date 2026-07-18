@@ -3,7 +3,7 @@ import { useNavigate, useParams } from 'react-router-dom';
 import { Loader2, ShieldCheck, PackageOpen, ChevronRight } from 'lucide-react';
 import PropTypes from 'prop-types';
 import { checksApi, plural, fmtRub, PENDING_RETURNS_HINT } from './checksShared';
-import ScriptCard from './ScriptCard';
+import ScriptCard, { accountBadge } from './ScriptCard';
 import CheckDetail from './CheckDetail';
 import PendingReturnsDetail from './PendingReturnsDetail';
 import InfoTip from './InfoTip';
@@ -32,13 +32,15 @@ function PendingReturnsRow({ pending, onOpen }) {
         >
             <div style={{ display: 'flex', alignItems: 'center', gap: 14 }}>
                 <div style={{ minWidth: 0, flex: 1 }}>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 14.5, fontWeight: 600, color: 'var(--ink)', lineHeight: 1.3 }}>
-                        <PackageOpen size={16} style={{ color: 'var(--muted)' }} />
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 7, fontSize: 14.5, fontWeight: 600, color: 'var(--ink)', lineHeight: 1.3 }}>
+                        <PackageOpen size={16} style={{ color: 'var(--muted)', flexShrink: 0 }} />
                         Возвраты в пути
+                        {accountBadge('HorseBio')}
                         <InfoTip text={PENDING_RETURNS_HINT} width={300} />
                     </div>
-                    <div style={{ fontSize: 12, color: 'var(--muted)', marginTop: 2, lineHeight: 1.4 }}>
-                        Проверка сроков: созданные черновики не должны висеть без товара дольше {warn_days} дней
+                    <div style={{ fontSize: 12, color: 'var(--muted)', marginTop: 3, lineHeight: 1.45 }}>
+                        <div><b style={{ color: 'var(--body)', fontWeight: 600 }}>Что проверяем:</b> черновики возвратов не висят без товара дольше {warn_days} дней</div>
+                        <div><b style={{ color: 'var(--body)', fontWeight: 600 }}>Как:</b> считаем возраст и сумму каждого непроведённого возврата</div>
                     </div>
                 </div>
                 {count === 0 ? (
@@ -102,20 +104,18 @@ export default function ChecksPage() {
     // встроен в карточку робота возвратов (horsebio_returns)
     const pendingReturns = (scripts || []).find((s) => s.is_health)?.summary?.pending_returns;
 
-    // Группировка: аккаунт → тема (в порядке TOPIC_ORDER)
-    const groups = [];
+    // Группировка по темам (аккаунт — бейдж в строке, не секция)
+    const topics = [];
     (scripts || []).forEach((s) => {
-        let g = groups.find((x) => x.account === s.account);
-        if (!g) { g = { account: s.account, topics: [] }; groups.push(g); }
         const topic = s.topic || '';
-        let t = g.topics.find((x) => x.topic === topic);
-        if (!t) { t = { topic, items: [] }; g.topics.push(t); }
+        let t = topics.find((x) => x.topic === topic);
+        if (!t) { t = { topic, items: [] }; topics.push(t); }
         t.items.push(s);
     });
-    groups.forEach((g) => g.topics.sort((a, b) => {
+    topics.sort((a, b) => {
         const ia = TOPIC_ORDER.indexOf(a.topic), ib = TOPIC_ORDER.indexOf(b.topic);
         return (ia === -1 ? 99 : ia) - (ib === -1 ? 99 : ib);
-    }));
+    });
 
     return (
         <div style={{ maxWidth: 1100, margin: '0 auto' }}>
@@ -143,33 +143,25 @@ export default function ChecksPage() {
                 </div>
             )}
 
-            {groups.map((g) => (
-                <section key={g.account} style={{ marginBottom: 32 }}>
-                    <h2 style={{
-                        fontSize: 12, fontWeight: 700, letterSpacing: 0.6, textTransform: 'uppercase',
-                        color: 'var(--muted)', marginBottom: 14,
-                    }}>{g.account}</h2>
-                    {g.topics.map((t) => (
-                        <div key={t.topic || 'other'} style={{ marginBottom: 18 }}>
-                            {t.topic && (
-                                <h3 style={{
-                                    fontSize: 11, fontWeight: 600, letterSpacing: '0.08em', textTransform: 'uppercase',
-                                    color: 'var(--muted-soft)', margin: '0 0 8px',
-                                }}>{t.topic}</h3>
-                            )}
-                            <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-                                {t.items.map((s) => (
-                                    <ScriptCard key={s.id} script={s} onOpen={(id) => navigate(`/checks/${id}`)} />
-                                ))}
-                                {t.topic === 'Возвраты' && pendingReturns && (
-                                    <PendingReturnsRow
-                                        pending={pendingReturns}
-                                        onOpen={() => navigate('/checks/pending-returns')}
-                                    />
-                                )}
-                            </div>
-                        </div>
-                    ))}
+            {topics.map((t) => (
+                <section key={t.topic || 'other'} style={{ marginBottom: 24 }}>
+                    {t.topic && (
+                        <h2 style={{
+                            fontSize: 12, fontWeight: 700, letterSpacing: 0.6, textTransform: 'uppercase',
+                            color: 'var(--muted)', marginBottom: 10,
+                        }}>{t.topic}</h2>
+                    )}
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                        {t.items.map((s) => (
+                            <ScriptCard key={s.id} script={s} onOpen={(id) => navigate(`/checks/${id}`)} />
+                        ))}
+                        {t.topic === 'Возвраты' && pendingReturns && (
+                            <PendingReturnsRow
+                                pending={pendingReturns}
+                                onOpen={() => navigate('/checks/pending-returns')}
+                            />
+                        )}
+                    </div>
                 </section>
             ))}
         </div>

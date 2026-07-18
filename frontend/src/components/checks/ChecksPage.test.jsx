@@ -56,12 +56,12 @@ beforeEach(() => {
 });
 
 describe('ChecksPage — список', () => {
-    it('показывает карточки, сгруппированные по аккаунтам', async () => {
+    it('показывает строки скриптов с бейджами аккаунтов', async () => {
         renderAt('/checks');
         expect(await screen.findByText('Проверка данных')).toBeInTheDocument();
         expect(screen.getByText('Мониторинг возвратов')).toBeInTheDocument();
-        expect(screen.getByRole('heading', { name: 'HorseBio' })).toBeInTheDocument();
-        expect(screen.getByRole('heading', { name: 'StarPony' })).toBeInTheDocument();
+        expect(screen.getByText('HorseBio')).toBeInTheDocument();
+        expect(screen.getByText('StarPony')).toBeInTheDocument();
     });
 
     it('показывает ошибку, если API недоступен', async () => {
