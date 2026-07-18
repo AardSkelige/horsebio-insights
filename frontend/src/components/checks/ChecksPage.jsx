@@ -101,10 +101,7 @@ export default function ChecksPage() {
                                     color: 'var(--muted-soft)', margin: '0 0 8px',
                                 }}>{t.topic}</h3>
                             )}
-                            <div style={{
-                                display: 'grid', gap: 14,
-                                gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))',
-                            }}>
+                            <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
                                 {t.items.map((s) => (
                                     <ScriptCard
                                         key={s.id}

@@ -788,8 +788,9 @@ class ReportingMixin:
                     'overdue_rub': round(sum(p['sum_rub'] for p in self.stats['pending_returns'] if p['overdue']), 2),
                     'warn_days': self.PENDING_RETURN_WARN_DAYS,
                 },
+                # Внутри summary, потому что ingest сохраняет в БД только summary и categories
+                'checks': checks_grid,
             },
-            'checks': checks_grid,
             'categories': categories,
         }
 

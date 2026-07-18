@@ -96,6 +96,23 @@ function StatsRow({ stats, onJump }) {
 }
 StatsRow.propTypes = { stats: PropTypes.array.isRequired, onJump: PropTypes.func };
 
+// Суть каждой проверки простым языком — подсказка «?» на плитке
+const CHECK_HINTS = {
+    deviations: 'Себестоимость остатка (FIFO) сравнивается с ценой последней приёмки. Сильное расхождение — возможна ошибка в документах, либо цены реально изменились.',
+    negative_stock: 'Товары с минусовым остатком на складе. Так не бывает физически — значит, в документах ошибка.',
+    enters: 'Оприходования на внутренних складах. Обычно товар туда попадает перемещением; оприходование — сигнал проверить, не дублируется ли остаток.',
+    enter_prices: 'Свежие оприходования, где цена не совпадает с ценой приёмки на тот момент — искажают себестоимость.',
+    enter_zero: 'Оприходования с нулевой ценой позиций — занижают себестоимость и прибыль считается неверно.',
+    losses: 'Списания с нарушениями: без описания, с нулевой ценой или без ячейки.',
+    inventories: 'Инвентаризации с расхождениями остатков или проблемами цен (нулевые, аномальные).',
+    moves: 'Перемещения с нарушениями: нет ячейки, нетипичное направление, крупные без описания.',
+    supplies: 'Приёмки с нарушениями: нулевые цены, неожиданный склад, доставка отдельной позицией.',
+    salesreturns: 'Возвраты покупателей с нулевой себестоимостью — портят прибыль в отчётах.',
+    supply_jumps: 'Цена в последней приёмке сильно отличается от средней по прошлым. Либо опечатка в документе, либо реально новые условия у поставщика.',
+    codes: 'Коды товаров: отсутствующие, дублирующиеся или не по шаблону своей группы.',
+    stale_drafts: 'Непроведённые документы (черновики), забытые дольше 7 дней.',
+};
+
 // Сетка статусов всех проверок хелс-чека, включая чистые: видно, что «Списания ✓»
 // проверялись и проблем нет, а не просто отсутствуют в отчёте
 function ChecksGrid({ checks, onJump }) {
@@ -126,6 +143,7 @@ function ChecksGrid({ checks, onJump }) {
                         <span style={{ fontSize: 12, fontWeight: 600, color: 'var(--ink)', lineHeight: 1.25, minWidth: 0 }}>
                             {ch.title}
                         </span>
+                        {CHECK_HINTS[ch.id] && <InfoTip text={CHECK_HINTS[ch.id]} width={270} />}
                         <span style={{ marginLeft: 'auto', fontSize: 12, fontWeight: 700, flexShrink: 0, color: clean ? 'var(--success)' : skipped ? 'var(--muted)' : c.color }}>
                             {clean ? 'чисто' : skipped ? '—' : ch.count}
                         </span>
@@ -381,8 +399,8 @@ export default function HealthResults({ scriptId, runId, running }) {
             {Array.isArray(data.summary?.stats) && data.summary.stats.length > 0
                 ? <StatsRow stats={data.summary.stats} onJump={handleJump} />
                 : <SummaryBar summary={data.summary || {}} />}
-            {Array.isArray(data.checks) && data.checks.length > 0 && (
-                <ChecksGrid checks={data.checks} onJump={handleJump} />
+            {Array.isArray(data.summary?.checks) && data.summary.checks.length > 0 && (
+                <ChecksGrid checks={data.summary.checks} onJump={handleJump} />
             )}
             {visibleCats.length === 0 ? (
                 Array.isArray(data.summary?.stats) && data.summary.stats.length > 0 ? (
