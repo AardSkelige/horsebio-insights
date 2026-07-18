@@ -1,9 +1,18 @@
 import PropTypes from 'prop-types';
-import { Loader2, CheckCircle, AlertCircle, Circle, ChevronRight, Clock } from 'lucide-react';
-import { SEV, relTime } from './checksShared';
+import { Loader2, CheckCircle, AlertCircle, Circle, ChevronRight, Clock, PackageOpen } from 'lucide-react';
+import { SEV, relTime, plural, fmtRub, PENDING_RETURNS_HINT } from './checksShared';
+import InfoTip from './InfoTip';
+
+// Подписи severity с русским склонением
+const SEV_WORDS = {
+    critical:  ['критичная', 'критичные', 'критичных'],
+    important: ['важная', 'важные', 'важных'],
+    warning:   ['предупреждение', 'предупреждения', 'предупреждений'],
+};
 
 function SeverityChip({ sev, count }) {
     const c = SEV[sev];
+    const w = SEV_WORDS[sev];
     return (
         <span style={{
             display: 'inline-flex', alignItems: 'center', gap: 5,
@@ -11,7 +20,7 @@ function SeverityChip({ sev, count }) {
             color: c.color, background: c.bg,
         }}>
             <span style={{ width: 7, height: 7, borderRadius: 999, background: c.color }} />
-            {count}
+            {count} {w ? plural(count, ...w) : ''}
         </span>
     );
 }
@@ -50,10 +59,48 @@ function StatusLine({ script }) {
 }
 StatusLine.propTypes = { script: PropTypes.object.isRequired };
 
-export default function ScriptCard({ script, onOpen }) {
+/** Индикатор внутри карточки возвратов: сколько черновиков ждёт товара и на какую сумму.
+ *  Клик — страница со списком (останавливаем всплытие, чтобы не открыть деталку скрипта). */
+function PendingBlock({ pending, onOpen }) {
+    const { count = 0, total_rub = 0, overdue = 0, overdue_rub = 0, warn_days = 30 } = pending;
+    if (count === 0) {
+        return (
+            <div style={{ fontSize: 12.5, color: 'var(--success)', fontWeight: 600 }}>
+                Все возвраты дошли — в ожидании ничего нет
+            </div>
+        );
+    }
     return (
-        <button
+        <div
+            onClick={(e) => { e.stopPropagation(); onOpen?.(); }}
+            title="Открыть список ожидающих возвратов"
+            style={{
+                display: 'flex', flexDirection: 'column', gap: 6, padding: '10px 12px',
+                borderRadius: 10, background: 'var(--surface-soft)', cursor: 'pointer',
+            }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12.5, color: 'var(--ink)', fontWeight: 600 }}>
+                <PackageOpen size={14} style={{ color: 'var(--muted)', flexShrink: 0 }} />
+                <span>Ждут товара: {count} {plural(count, 'возврат', 'возврата', 'возвратов')} · {fmtRub(total_rub)}</span>
+                <InfoTip text={PENDING_RETURNS_HINT} width={300} />
+                <ChevronRight size={14} style={{ color: 'var(--muted-soft)', marginLeft: 'auto', flexShrink: 0 }} />
+            </div>
+            {overdue > 0 && (
+                <div style={{ fontSize: 12, fontWeight: 600, color: '#b08a1f' }}>
+                    ⚠ {overdue} {plural(overdue, 'висит', 'висят', 'висят')} дольше {warn_days} дн. · {fmtRub(overdue_rub)}
+                </div>
+            )}
+        </div>
+    );
+}
+PendingBlock.propTypes = { pending: PropTypes.object.isRequired, onOpen: PropTypes.func };
+
+export default function ScriptCard({ script, onOpen, pending, onOpenPending }) {
+    return (
+        <div
+            role="button"
+            tabIndex={0}
             onClick={() => onOpen(script.id)}
+            onKeyDown={(e) => { if (e.key === 'Enter') onOpen(script.id); }}
             className="group"
             style={{
                 textAlign: 'left', width: '100%',
@@ -74,6 +121,7 @@ export default function ScriptCard({ script, onOpen }) {
             </div>
 
             <StatusLine script={script} />
+            {pending && <PendingBlock pending={pending} onOpen={onOpenPending} />}
 
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8, marginTop: 'auto', paddingTop: 4 }}>
                 <span style={{
@@ -85,11 +133,13 @@ export default function ScriptCard({ script, onOpen }) {
                     {script.last_run ? relTime(script.last_run.finished_at) : script.schedule}
                 </span>
             </div>
-        </button>
+        </div>
     );
 }
 
 ScriptCard.propTypes = {
     script: PropTypes.object.isRequired,
     onOpen: PropTypes.func.isRequired,
+    pending: PropTypes.object,
+    onOpenPending: PropTypes.func,
 };

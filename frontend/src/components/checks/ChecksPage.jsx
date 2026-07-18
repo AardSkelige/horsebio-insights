@@ -4,8 +4,10 @@ import { Loader2, ShieldCheck } from 'lucide-react';
 import { checksApi } from './checksShared';
 import ScriptCard from './ScriptCard';
 import CheckDetail from './CheckDetail';
-import PendingReturnsCard from './PendingReturnsCard';
 import PendingReturnsDetail from './PendingReturnsDetail';
+
+// Порядок тем внутри аккаунта; скрипты без темы — в конец без заголовка
+const TOPIC_ORDER = ['Себестоимость', 'Возвраты', 'Оплаты', 'Производство'];
 
 export default function ChecksPage() {
     const [scripts, setScripts] = useState(null);
@@ -40,16 +42,24 @@ export default function ChecksPage() {
         return <CheckDetail scriptId={scriptId} initial={script} onBack={goBack} />;
     }
 
-    // Индикатор возвратов — из сводки последнего запуска хелс-чека
+    // Индикатор возвратов — из сводки последнего запуска хелс-чека;
+    // встроен в карточку робота возвратов (horsebio_returns)
     const pendingReturns = (scripts || []).find((s) => s.is_health)?.summary?.pending_returns;
 
-    // Группировка по аккаунтам с сохранением порядка появления
+    // Группировка: аккаунт → тема (в порядке TOPIC_ORDER)
     const groups = [];
     (scripts || []).forEach((s) => {
         let g = groups.find((x) => x.account === s.account);
-        if (!g) { g = { account: s.account, items: [] }; groups.push(g); }
-        g.items.push(s);
+        if (!g) { g = { account: s.account, topics: [] }; groups.push(g); }
+        const topic = s.topic || '';
+        let t = g.topics.find((x) => x.topic === topic);
+        if (!t) { t = { topic, items: [] }; g.topics.push(t); }
+        t.items.push(s);
     });
+    groups.forEach((g) => g.topics.sort((a, b) => {
+        const ia = TOPIC_ORDER.indexOf(a.topic), ib = TOPIC_ORDER.indexOf(b.topic);
+        return (ia === -1 ? 99 : ia) - (ib === -1 ? 99 : ib);
+    }));
 
     return (
         <div style={{ maxWidth: 1100, margin: '0 auto' }}>
@@ -77,22 +87,36 @@ export default function ChecksPage() {
                 </div>
             )}
 
-            <PendingReturnsCard pending={pendingReturns} onOpen={() => navigate('/checks/pending-returns')} />
-
             {groups.map((g) => (
-                <section key={g.account} style={{ marginBottom: 28 }}>
+                <section key={g.account} style={{ marginBottom: 32 }}>
                     <h2 style={{
                         fontSize: 12, fontWeight: 700, letterSpacing: 0.6, textTransform: 'uppercase',
-                        color: 'var(--muted)', marginBottom: 12,
+                        color: 'var(--muted)', marginBottom: 14,
                     }}>{g.account}</h2>
-                    <div style={{
-                        display: 'grid', gap: 14,
-                        gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))',
-                    }}>
-                        {g.items.map((s) => (
-                            <ScriptCard key={s.id} script={s} onOpen={(id) => navigate(`/checks/${id}`)} />
-                        ))}
-                    </div>
+                    {g.topics.map((t) => (
+                        <div key={t.topic || 'other'} style={{ marginBottom: 18 }}>
+                            {t.topic && (
+                                <h3 style={{
+                                    fontSize: 11, fontWeight: 600, letterSpacing: '0.08em', textTransform: 'uppercase',
+                                    color: 'var(--muted-soft)', margin: '0 0 8px',
+                                }}>{t.topic}</h3>
+                            )}
+                            <div style={{
+                                display: 'grid', gap: 14,
+                                gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))',
+                            }}>
+                                {t.items.map((s) => (
+                                    <ScriptCard
+                                        key={s.id}
+                                        script={s}
+                                        onOpen={(id) => navigate(`/checks/${id}`)}
+                                        pending={s.id === 'horsebio_returns' ? pendingReturns : undefined}
+                                        onOpenPending={() => navigate('/checks/pending-returns')}
+                                    />
+                                ))}
+                            </div>
+                        </div>
+                    ))}
                 </section>
             ))}
         </div>

@@ -1,9 +1,8 @@
 import { useState, useEffect, useCallback } from 'react';
 import PropTypes from 'prop-types';
 import { ArrowLeft, ExternalLink, Loader2, PackageOpen } from 'lucide-react';
-import { checksApi, relTime } from './checksShared';
+import { checksApi, relTime, fmtRub, PENDING_RETURNS_HINT } from './checksShared';
 import InfoTip from './InfoTip';
-import { PENDING_RETURNS_HINT, fmtRub } from './PendingReturnsCard';
 
 const HEALTH_ID = 'horsebio_health_check';
 

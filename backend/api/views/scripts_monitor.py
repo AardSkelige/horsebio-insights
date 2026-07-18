@@ -26,6 +26,7 @@ logger = logging.getLogger(__name__)
 SCRIPTS_CONFIG = [
     {
         'id': 'horsebio_health_check',
+        'topic': 'Себестоимость',
         'name': 'Health Check',
         'account': 'HorseBio',
         'schedule': 'Ежедн. в 09:00',
@@ -36,6 +37,7 @@ SCRIPTS_CONFIG = [
     },
     {
         'id': 'horsebio_buy_prices',
+        'topic': 'Себестоимость',
         'name': 'Закупочные цены',
         'account': 'HorseBio',
         'schedule': 'Каждые 5 ч с 09:00',
@@ -46,16 +48,18 @@ SCRIPTS_CONFIG = [
     },
     {
         'id': 'horsebio_returns',
-        'name': 'Возвраты',
+        'topic': 'Возвраты',
+        'name': 'Возвраты ВБ/Озон',
         'account': 'HorseBio',
         'schedule': 'Каждые 5 ч с 09:00',
-        'description': 'Мониторинг возвратов ВБ и Озон, создание документов',
+        'description': 'Робот: следит за статусами ВБ/Озон и создаёт черновики возвратов',
         'script': '/app/moysklad/horsebio/01_daemons/03_returns/scripts/01_monitor_returns.py',
         'args': [],
         'structured': True,
     },
     {
         'id': 'starpony_cost_prices',
+        'topic': 'Себестоимость',
         'name': 'Себестоимость',
         'account': 'StarPony',
         'schedule': 'Каждые 5 ч с 09:00',
@@ -66,6 +70,7 @@ SCRIPTS_CONFIG = [
     },
     {
         'id': 'horsebio_deadlines',
+        'topic': 'Оплаты',
         'name': 'Сроки оплаты',
         'account': 'HorseBio',
         'schedule': 'Ежедн. в 09:00',
@@ -76,6 +81,7 @@ SCRIPTS_CONFIG = [
     },
     {
         'id': 'starpony_deadlines',
+        'topic': 'Оплаты',
         'name': 'Сроки оплаты',
         'account': 'StarPony',
         'schedule': 'Ежедн. в 09:00',
@@ -86,6 +92,7 @@ SCRIPTS_CONFIG = [
     },
     {
         'id': 'starpony_production',
+        'topic': 'Производство',
         'name': 'Производственные задания',
         'account': 'StarPony',
         'schedule': 'Вручную',
@@ -449,6 +456,7 @@ def scripts_list(request):
         running = _is_running(sid)
         result.append({
             **{k: script[k] for k in ('id', 'name', 'account', 'schedule', 'description')},
+            'topic': script.get('topic', ''),
             'is_running': running,
             'last_run': latest,
             'script_exists': os.path.exists(script['script']),
