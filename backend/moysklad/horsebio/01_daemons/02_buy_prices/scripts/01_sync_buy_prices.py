@@ -275,10 +275,19 @@ def _export_results(updated, skipped_same, skipped_zero, errors, path):
     stats = [
         {"label": "Обновлено", "value": len(updated), "tone": "ok" if updated else "neutral"},
         {"label": "Уже актуальны", "value": len(skipped_same), "tone": "neutral"},
-        {"label": "Себестоимость 0", "value": len(skipped_zero), "tone": "neutral"},
+        {"label": "Себестоимость 0", "value": len(skipped_zero), "tone": "neutral",
+         **({"cat": "skipped_zero"} if skipped_zero else {})},
         {"label": "Ошибки", "value": len(errors), "tone": "critical" if errors else "neutral"},
     ]
     categories = []
+    if skipped_zero:
+        categories.append({
+            "key": "skipped_zero", "title": "Товары с нулевой себестоимостью", "severity": "info",
+            "kind": None, "ms_type": None, "count": len(skipped_zero),
+            "items": [{"key": "", "ms_id": "", "object": z["name"], "severity": "info",
+                       "detail": "FIFO-себестоимость нулевая — нет ни одной приёмки, обновлять нечего"}
+                      for z in skipped_zero],
+        })
     if updated:
         items = []
         for c in updated:

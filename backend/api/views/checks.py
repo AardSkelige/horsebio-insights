@@ -154,6 +154,7 @@ def _recent_changes(script_id):
             .order_by('-finished_at')[:60])
     merged = {}
     order = []
+    seen = set()
     for r in runs:
         day = r.finished_at.strftime('%d.%m') if r.finished_at else ''
         for cat in (r.findings or []):
@@ -163,6 +164,12 @@ def _recent_changes(script_id):
                                'kind': None, 'ms_type': None, 'items': []}
                 order.append(key)
             for it in cat.get('items', []):
+                # Состояния («товар без остатков») повторяются в каждом запуске —
+                # показываем один раз, с датой самого свежего появления
+                dedup = (key, it.get('object', ''), it.get('detail', ''))
+                if dedup in seen:
+                    continue
+                seen.add(dedup)
                 merged[key]['items'].append({
                     **it,
                     'detail': f"{day} · {it.get('detail', '')}" if day else it.get('detail', ''),

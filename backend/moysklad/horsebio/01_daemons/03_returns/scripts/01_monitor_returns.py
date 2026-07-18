@@ -431,6 +431,7 @@ class ReturnsMonitor:
                     "order_name": order.get("name", "?"),
                     "agent": order.get("agent", {}).get("name", ""),
                     "status_name": status_name,
+                    "order_date": (order.get("moment") or "")[:10],
                 })
 
         # Обновляем last_run после успешного прогона
@@ -468,7 +469,9 @@ def _export_results(counts, details, path):
 
     def cat(key, title, sev, src):
         items = [{"key": "", "ms_id": "", "object": f"Заказ №{d['order_name']}", "severity": sev,
-                  "detail": f"{d.get('agent', '')} · статус: {d.get('status_name', '')}"} for d in (details.get(src) or [])]
+                  "detail": f"{d.get('agent', '')} · статус: {d.get('status_name', '')}"
+                            + (f" · заказ от {d['order_date']}" if d.get('order_date') else '')}
+                 for d in (details.get(src) or [])]
         return {"key": key, "title": title, "severity": sev, "kind": None, "ms_type": None,
                 "count": len(items), "items": items} if items else None
 

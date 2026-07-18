@@ -10,8 +10,8 @@ const CAT_HINTS = {
 };
 const STAT_HINTS = {
     'Уже актуальны': 'Цены уже совпадают с FIFO — обновление не требуется.',
-    'Себестоимость 0': 'Товары с нулевой себестоимостью — пропущены.',
-    'Нет остатков': 'Нет остатков или FIFO = 0 — пропущены.',
+    'Себестоимость 0': 'У этих товаров FIFO-себестоимость нулевая: нет ни одной приёмки, обновлять нечего. Полный список — в секции ниже.',
+    'Нет остатков': 'Этих товаров нет на складе (или FIFO = 0) — их себестоимость не пересчитывается. Полный список — в секции ниже.',
     'Нет отгрузки': 'Заказ есть, но отгрузки нет — возврат создать не из чего.',
     'Не ВБ/Озон': 'Заказы не от ВБ/Озон — этим монитором не обрабатываются.',
     'Уже существуют': 'Возврат по заказу уже создан ранее.',
@@ -330,6 +330,9 @@ function Category({ cat, excKeys, excMap, onChanged }) {
         return true;
     };
     const visible = cat.items.filter((it) => !hidden.has(it.key || it.object) && !isAckExcepted(it));
+    // Длинные списки — порциями, чтобы не скроллить экран бесконечно
+    const PAGE = 20;
+    const [shown, setShown] = useState(PAGE);
     // Все находки ушли в исключения — категория схлопывается целиком
     if (visible.length === 0) return null;
 
@@ -354,7 +357,7 @@ function Category({ cat, excKeys, excMap, onChanged }) {
                 </span>
             </HeaderTag>
             <div style={{ display: open ? 'block' : 'none' }}>
-                {visible.map((it) => {
+                {visible.slice(0, shown).map((it) => {
                     const ekey = it.key || it.object;
                     const excepted = cat.kind && it.key && (excKeys[cat.kind] || []).includes(it.key);
                     // Прошлый разбор этого товара: причина исключения прямо в находке
@@ -377,6 +380,14 @@ function Category({ cat, excKeys, excMap, onChanged }) {
                         />
                     );
                 })}
+                {visible.length > shown && (
+                    <button onClick={() => setShown((n) => n + PAGE)} style={{
+                        width: '100%', padding: '9px 14px', border: 'none', borderTop: '1px solid var(--hairline-soft)',
+                        background: 'var(--surface-soft)', color: 'var(--primary)', fontSize: 12.5, fontWeight: 600, cursor: 'pointer',
+                    }}>
+                        Показать ещё {Math.min(PAGE, visible.length - shown)} из {visible.length - shown} оставшихся
+                    </button>
+                )}
             </div>
         </div>
     );

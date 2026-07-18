@@ -24,6 +24,8 @@ const numStyle = (color, size = 26) => ({
  *  Легенда — отдельным рядом чипов, не под сегментами: реальное распределение
  *  бывает очень неравномерным (один сегмент 90%), и подписи под узкими наезжают. */
 function AgeStrip({ items }) {
+    // Плавающий тултип у курсора (нативный title медленный и не в стиле приложения)
+    const [tip, setTip] = useState(null); // {x, y, text}
     const buckets = BUCKETS.map((b) => {
         const inb = items.filter((it) => (it.age_days ?? 0) >= b.from && (it.age_days ?? 0) < b.to);
         return { ...b, count: inb.length, sum: inb.reduce((acc, it) => acc + (it.sum_rub || 0), 0) };
@@ -33,12 +35,25 @@ function AgeStrip({ items }) {
 
     return (
         <div style={{ marginTop: 18 }}>
+            {tip && (
+                <div style={{
+                    position: 'fixed', left: tip.x + 14, top: tip.y + 16, zIndex: 50, pointerEvents: 'none',
+                    background: 'var(--surface-dark, #262521)', color: 'var(--on-dark, #f5f2ea)',
+                    fontSize: 12, fontWeight: 500, lineHeight: 1.4, borderRadius: 9, padding: '7px 11px',
+                    boxShadow: '0 6px 22px rgba(0,0,0,0.25)', whiteSpace: 'nowrap',
+                }}>{tip.text}</div>
+            )}
             <div style={{ fontSize: 11, fontWeight: 700, letterSpacing: '0.07em', textTransform: 'uppercase', color: 'var(--muted)', marginBottom: 8 }}>
                 Сколько дней уже едут — по сумме
             </div>
             <div style={{ display: 'flex', gap: 2, height: 30, borderRadius: 8, overflow: 'hidden' }}>
                 {buckets.map((b) => (
-                    <div key={b.label} title={`${b.label}: ${b.count} ${plural(b.count, 'возврат', 'возврата', 'возвратов')} · ${fmtRub(b.sum)}`}
+                    <div key={b.label}
+                        onMouseMove={(e) => setTip({
+                            x: e.clientX, y: e.clientY,
+                            text: `${b.label}: ${b.count} ${plural(b.count, 'возврат', 'возврата', 'возвратов')} · ${fmtRub(b.sum)}`,
+                        })}
+                        onMouseLeave={() => setTip(null)}
                         style={{ flex: b.sum, position: 'relative', background: b.color, minWidth: 14 }}>
                         {b.sum / total >= 0.14 && (
                             <span style={{
@@ -65,8 +80,22 @@ function AgeStrip({ items }) {
 }
 AgeStrip.propTypes = { items: PropTypes.array.isRequired };
 
+// Старые запуски не отдавали moment/agent отдельными полями — достаём из строки detail
+// («2026-04-21 · 43 дн · 1 912р · Wildberries»)
+function momentOf(it) {
+    if (it.moment) return it.moment;
+    return (it.detail || '').match(/\d{4}-\d{2}-\d{2}/)?.[0] || '';
+}
+function agentOf(it) {
+    if (it.agent) return it.agent;
+    const parts = (it.detail || '').split(' · ');
+    return parts.length >= 4 ? parts[3] : '';
+}
+
 /** Таблица возвратов: № | маркетплейс/контрагент | создан | едет уже | сумма | МС */
 function ReturnsTable({ items, warn }) {
+    const PAGE = 20;
+    const [shown, setShown] = useState(PAGE);
     return (
         <div style={{ overflowX: 'auto' }}>
             <table style={{ borderCollapse: 'collapse', width: '100%', fontSize: 13, fontVariantNumeric: 'tabular-nums', background: 'var(--canvas)' }}>
@@ -82,11 +111,11 @@ function ReturnsTable({ items, warn }) {
                     </tr>
                 </thead>
                 <tbody>
-                    {items.map((it) => (
+                    {items.slice(0, shown).map((it) => (
                         <tr key={it.ms_id || it.object}>
                             <td style={td()}><span style={{ fontWeight: 600, color: 'var(--ink)' }}>{it.object}</span></td>
-                            <td style={td()}>{it.agent || '—'}</td>
-                            <td style={td()}>{it.moment || ''}</td>
+                            <td style={td()}>{agentOf(it) || '—'}</td>
+                            <td style={td()}>{momentOf(it)}</td>
                             <td style={{ ...td(), textAlign: 'right', whiteSpace: 'nowrap', color: warn ? '#8a5a13' : 'var(--body)', fontWeight: warn ? 600 : 400 }}>
                                 {it.age_days} {plural(it.age_days ?? 0, 'день', 'дня', 'дней')}
                             </td>
@@ -106,6 +135,14 @@ function ReturnsTable({ items, warn }) {
                     ))}
                 </tbody>
             </table>
+            {items.length > shown && (
+                <button onClick={() => setShown((n) => n + PAGE)} style={{
+                    width: '100%', padding: '9px 12px', border: 'none', borderTop: '1px solid var(--hairline-soft)',
+                    background: 'var(--surface-soft)', color: 'var(--primary)', fontSize: 12.5, fontWeight: 600, cursor: 'pointer',
+                }}>
+                    Показать ещё {Math.min(PAGE, items.length - shown)} из {items.length - shown} оставшихся
+                </button>
+            )}
         </div>
     );
 }

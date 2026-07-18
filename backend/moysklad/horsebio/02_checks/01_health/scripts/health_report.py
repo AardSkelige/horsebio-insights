@@ -732,6 +732,8 @@ class ReportingMixin:
                 'severity': 'warning' if it['overdue'] else 'info',
                 'sum_rub': it['sum_rub'],
                 'age_days': it['age_days'],
+                'moment': it['moment'],
+                'agent': it['agent'],
                 'detail': f"{it['moment']} · {it['age_days']} дн · {money(it['sum_rub'])}"
                           + (f" · {it['agent']}" if it['agent'] else ''),
             }

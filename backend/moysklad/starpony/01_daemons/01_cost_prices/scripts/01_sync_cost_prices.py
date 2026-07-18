@@ -178,10 +178,19 @@ def _export_results(updated, skipped_same, skipped_zero, errors, path):
     stats = [
         {"label": "Обновлено", "value": len(updated), "tone": "ok" if updated else "neutral"},
         {"label": "Уже актуальны", "value": len(skipped_same), "tone": "neutral"},
-        {"label": "Нет остатков", "value": len(skipped_zero), "tone": "neutral"},
+        {"label": "Нет остатков", "value": len(skipped_zero), "tone": "neutral",
+         **({"cat": "skipped_zero"} if skipped_zero else {})},
         {"label": "Ошибки", "value": len(errors), "tone": "critical" if errors else "neutral"},
     ]
     categories = []
+    if skipped_zero:
+        categories.append({
+            "key": "skipped_zero", "title": "Товары без остатков", "severity": "info",
+            "kind": None, "ms_type": None, "count": len(skipped_zero),
+            "items": [{"key": "", "ms_id": "", "object": name, "severity": "info",
+                       "detail": "нет остатков на складе (или FIFO = 0) — себестоимость не пересчитывается"}
+                      for name in skipped_zero],
+        })
     if updated:
         items = []
         for c in updated:
