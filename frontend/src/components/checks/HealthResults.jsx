@@ -310,7 +310,9 @@ FindingRow.propTypes = { cat: PropTypes.object, item: PropTypes.object, excepted
 /** Секция находок одной проверки: проблемные развёрнуты, «норма» — свёрнута до строки. */
 function Category({ cat, excKeys, excMap, onChanged }) {
     const [hidden, setHidden] = useState(new Set());
-    const collapsible = cat.severity === 'ok';
+    // Сворачиваем только разобранные отклонения хелс-чека; у роботов ok-категории
+    // («Созданные возвраты») — основное содержимое, их прятать нельзя
+    const collapsible = cat.key === 'deviations_normal';
     const [open, setOpen] = useState(!collapsible);
     const c = sevOf(cat.severity);
 
@@ -412,11 +414,15 @@ export default function HealthResults({ scriptId, runId, running }) {
 
     const excKeys = data.exception_keys || {};
     const excMap = data.exceptions_map || {};
-    // Возвраты в пути — не находки чека, показываются отдельной строкой на /checks;
-    // «помечены нормой» — вниз, сначала реальные проблемы
-    const visibleCats = [...data.categories.filter((c) => c.key !== 'pending_returns')]
-        .sort((a, b) => (a.severity === 'ok') - (b.severity === 'ok'));
     const isRobot = Array.isArray(data.summary?.stats) && data.summary.stats.length > 0;
+    // Роботы: показываем слитые изменения за последние N дней (снимок одного запуска
+    // почти всегда пуст — интересное случается раз в несколько дней).
+    // Хелс-чек: снимок последнего запуска; «помечены нормой» — вниз.
+    const robotCats = data.recent_changes || [];
+    const visibleCats = isRobot && !runId
+        ? robotCats
+        : [...data.categories.filter((c) => c.key !== 'pending_returns')]
+            .sort((a, b) => (a.severity === 'ok') - (b.severity === 'ok'));
     return (
         <div>
             {runId && (
@@ -428,9 +434,14 @@ export default function HealthResults({ scriptId, runId, running }) {
             {Array.isArray(data.summary?.checks) && data.summary.checks.length > 0 && (
                 <ChecksGrid checks={data.summary.checks} onJump={handleJump} />
             )}
+            {isRobot && !runId && (
+                <div style={{ fontSize: 11, fontWeight: 700, letterSpacing: '0.07em', textTransform: 'uppercase', color: 'var(--muted)', margin: '4px 0 10px' }}>
+                    Что робот делал за последние {data.recent_days || 14} дней
+                </div>
+            )}
             {visibleCats.length === 0 ? (
                 <div style={{ textAlign: 'center', padding: 32, color: isRobot ? 'var(--muted)' : 'var(--success)', fontWeight: isRobot ? 400 : 600 }}>
-                    {isRobot ? 'Изменений нет — всё актуально' : '✓ Проблем не найдено'}
+                    {isRobot ? `Ничего не менялось за ${data.recent_days || 14} дней — всё актуально` : '✓ Проблем не найдено'}
                 </div>
             ) : (
                 visibleCats.map((cat) => (

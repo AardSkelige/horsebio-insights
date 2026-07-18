@@ -20,7 +20,9 @@ const numStyle = (color, size = 26) => ({
     lineHeight: 1.15, color, fontVariantNumeric: 'lining-nums', fontFeatureSettings: '"lnum" 1',
 });
 
-/** Плоская лента: вся зависшая сумма, разбитая по возрасту возвратов. */
+/** Плоская лента: вся зависшая сумма, разбитая по возрасту возвратов.
+ *  Легенда — отдельным рядом чипов, не под сегментами: реальное распределение
+ *  бывает очень неравномерным (один сегмент 90%), и подписи под узкими наезжают. */
 function AgeStrip({ items }) {
     const buckets = BUCKETS.map((b) => {
         const inb = items.filter((it) => (it.age_days ?? 0) >= b.from && (it.age_days ?? 0) < b.to);
@@ -34,24 +36,27 @@ function AgeStrip({ items }) {
             <div style={{ fontSize: 11, fontWeight: 700, letterSpacing: '0.07em', textTransform: 'uppercase', color: 'var(--muted)', marginBottom: 8 }}>
                 Сколько дней уже едут — по сумме
             </div>
-            <div style={{ display: 'flex', gap: 2, height: 34, borderRadius: 8, overflow: 'hidden' }}>
+            <div style={{ display: 'flex', gap: 2, height: 30, borderRadius: 8, overflow: 'hidden' }}>
                 {buckets.map((b) => (
                     <div key={b.label} title={`${b.label}: ${b.count} ${plural(b.count, 'возврат', 'возврата', 'возвратов')} · ${fmtRub(b.sum)}`}
-                        style={{ flex: Math.max(b.sum, total * 0.04), position: 'relative', background: b.color, minWidth: 0 }}>
-                        <span style={{
-                            position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center',
-                            fontSize: 11.5, fontWeight: 700, whiteSpace: 'nowrap', overflow: 'hidden',
-                            color: b.darkText ? '#6b4632' : '#fff',
-                            textShadow: b.darkText ? 'none' : '0 1px 2px rgba(0,0,0,0.18)',
-                        }}>{fmtRub(b.sum)}</span>
+                        style={{ flex: b.sum, position: 'relative', background: b.color, minWidth: 14 }}>
+                        {b.sum / total >= 0.14 && (
+                            <span style={{
+                                position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center',
+                                fontSize: 11.5, fontWeight: 700, whiteSpace: 'nowrap', overflow: 'hidden',
+                                color: b.darkText ? '#6b4632' : '#fff',
+                                textShadow: b.darkText ? 'none' : '0 1px 2px rgba(0,0,0,0.18)',
+                            }}>{fmtRub(b.sum)}</span>
+                        )}
                     </div>
                 ))}
             </div>
-            <div style={{ display: 'flex', gap: 2, marginTop: 7 }}>
+            <div style={{ display: 'flex', gap: '6px 18px', flexWrap: 'wrap', marginTop: 8 }}>
                 {buckets.map((b) => (
-                    <div key={b.label} style={{ flex: Math.max(b.sum, total * 0.04), fontSize: 11, color: 'var(--muted)', lineHeight: 1.45, minWidth: 0 }}>
-                        <b style={{ display: 'block', fontWeight: 600, color: b.warn ? '#8a5a13' : 'var(--ink)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{b.label}</b>
-                        <span style={{ whiteSpace: 'nowrap' }}>{b.count} {plural(b.count, 'возврат', 'возврата', 'возвратов')}</span>
+                    <div key={b.label} style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12, color: 'var(--muted)', whiteSpace: 'nowrap' }}>
+                        <span style={{ width: 10, height: 10, borderRadius: 3, background: b.color, flexShrink: 0 }} />
+                        <b style={{ fontWeight: 600, color: b.warn ? '#8a5a13' : 'var(--ink)' }}>{b.label}</b>
+                        <span>— {b.count} {plural(b.count, 'возврат', 'возврата', 'возвратов')} · {fmtRub(b.sum)}</span>
                     </div>
                 ))}
             </div>
@@ -133,7 +138,7 @@ export default function PendingReturnsDetail({ onBack }) {
     const onTime = items.filter((it) => (it.age_days || 0) < warnDays);
 
     return (
-        <div style={{ maxWidth: 900, margin: '0 auto' }}>
+        <div style={{ maxWidth: 1100, margin: '0 auto' }}>
             <button onClick={onBack} style={{
                 display: 'inline-flex', alignItems: 'center', gap: 6, marginBottom: 16,
                 background: 'none', border: 'none', color: 'var(--muted)', fontSize: 13, fontWeight: 600, cursor: 'pointer', padding: 0,

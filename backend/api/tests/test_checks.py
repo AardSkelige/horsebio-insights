@@ -123,3 +123,46 @@ class CleanupResolvedDeviationsTests(TestCase):
     def test_norma_never_deleted(self):
         cleanup_resolved_deviations([])
         self.assertTrue(HealthCheckException.objects.filter(key='1-215').exists())
+
+
+class RecentChangesTests(TestCase):
+    """GET results для роботов: слитые изменения запусков за 14 дней с датами."""
+
+    def setUp(self):
+        self.client = Client()
+        self.admin = User.objects.create_superuser('admin', 'admin@test.ru', 'pass')
+        self.client.force_login(self.admin)
+
+    def _mk_run(self, run_id, days_ago, findings):
+        r = CheckRunResult.objects.create(
+            script_id='horsebio_buy_prices', run_id=run_id, exit_code=0,
+            summary={'critical': 0, 'important': 0, 'warnings': 0, 'ok': 0,
+                     'stats': [{'label': 'Обновлено', 'value': len(findings), 'tone': 'neutral'}]},
+            findings=findings,
+        )
+        CheckRunResult.objects.filter(pk=r.pk).update(
+            finished_at=timezone.now() - timedelta(days=days_ago))
+        return r
+
+    def test_merges_runs_with_dates(self):
+        cat = lambda items: [{'key': 'updated', 'title': 'Обновлённые закупочные цены',
+                              'severity': 'info', 'items': items}]
+        self._mk_run('r1', 1, cat([{'key': '', 'object': 'Товар А', 'severity': 'info', 'detail': '1.00 → 2.00 ₽'}]))
+        self._mk_run('r2', 3, cat([{'key': '', 'object': 'Товар Б', 'severity': 'info', 'detail': '3.00 → 4.00 ₽'}]))
+        self._mk_run('r3', 20, cat([{'key': '', 'object': 'Старый', 'severity': 'info', 'detail': 'вне окна'}]))
+        self._mk_run('r4', 2, [])  # пустой запуск — не мешает
+
+        resp = self.client.get(reverse('api:checks_results', args=['horsebio_buy_prices']))
+        self.assertEqual(resp.status_code, 200)
+        recent = resp.json()['results']['recent_changes']
+        self.assertEqual(len(recent), 1)
+        objects = [i['object'] for i in recent[0]['items']]
+        self.assertEqual(objects, ['Товар А', 'Товар Б'])  # свежие сверху, r3 за окном
+        self.assertRegex(recent[0]['items'][0]['detail'], r'^\d{2}\.\d{2} · ')
+
+    def test_health_check_has_no_recent_changes(self):
+        CheckRunResult.objects.create(
+            script_id=HEALTH_CHECK_SCRIPT_ID, run_id='h1', exit_code=0,
+            summary={}, findings=[], finished_at=timezone.now())
+        resp = self.client.get(reverse('api:checks_results', args=[HEALTH_CHECK_SCRIPT_ID]))
+        self.assertNotIn('recent_changes', resp.json()['results'])

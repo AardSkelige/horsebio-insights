@@ -135,6 +135,48 @@ def checks_runs(request, script_id):
     return JsonResponse({'kind': 'log', 'runs': _get_runs(script_id), 'is_running': _is_running(script_id)})
 
 
+RECENT_CHANGES_DAYS = 14
+
+
+def _recent_changes(script_id):
+    """Слить находки запусков робота за RECENT_CHANGES_DAYS в категории с датами.
+
+    Роботы (закупочные цены, возвраты…) в каждом запуске отдают только «что сделал
+    сейчас» — чаще всего ничего. Смысл экрана — «что робот менял недавно», поэтому
+    деталка показывает объединение за две недели, каждая строка с датой запуска.
+    """
+    from datetime import timedelta
+    from django.utils import timezone
+
+    since = timezone.now() - timedelta(days=RECENT_CHANGES_DAYS)
+    runs = (CheckRunResult.objects
+            .filter(script_id=script_id, finished_at__gte=since)
+            .order_by('-finished_at')[:60])
+    merged = {}
+    order = []
+    for r in runs:
+        day = r.finished_at.strftime('%d.%m') if r.finished_at else ''
+        for cat in (r.findings or []):
+            key = cat.get('key', '')
+            if key not in merged:
+                merged[key] = {'key': key, 'title': cat.get('title', ''), 'severity': cat.get('severity', 'info'),
+                               'kind': None, 'ms_type': None, 'items': []}
+                order.append(key)
+            for it in cat.get('items', []):
+                merged[key]['items'].append({
+                    **it,
+                    'detail': f"{day} · {it.get('detail', '')}" if day else it.get('detail', ''),
+                })
+    out = []
+    _rank = {'critical': 3, 'important': 2, 'warning': 1}
+    for key in sorted(order, key=lambda k: -_rank.get(merged[k]['severity'], 0)):
+        cat = merged[key]
+        cat['items'] = cat['items'][:100]
+        cat['count'] = len(cat['items'])
+        out.append(cat)
+    return out
+
+
 @scripts_auth
 def checks_results(request, script_id):
     """GET /api/checks/scripts/{id}/results/?run_id= — структурированные находки."""
@@ -163,17 +205,21 @@ def checks_results(request, script_id):
                 'supply_doc': (extra or {}).get('supply_doc', ''),
             }
 
-    return JsonResponse({
-        'results': {
-            'run_id': crr.run_id,
-            'finished_at': crr.finished_at.strftime('%Y-%m-%d %H:%M:%S') if crr.finished_at else '',
-            'duration_sec': crr.duration_sec,
-            'summary': crr.summary or {},
-            'categories': crr.findings or [],
-            'exception_keys': exc_keys,
-            'exceptions_map': exc_map,
-        }
-    })
+    results = {
+        'run_id': crr.run_id,
+        'finished_at': crr.finished_at.strftime('%Y-%m-%d %H:%M:%S') if crr.finished_at else '',
+        'duration_sec': crr.duration_sec,
+        'summary': crr.summary or {},
+        'categories': crr.findings or [],
+        'exception_keys': exc_keys,
+        'exceptions_map': exc_map,
+    }
+    # Роботы: вместо «что сделал последний запуск» (обычно ничего) — слитые
+    # изменения за последние две недели с датами
+    if script_id != HEALTH_CHECK_SCRIPT_ID and not run_id:
+        results['recent_changes'] = _recent_changes(script_id)
+        results['recent_days'] = RECENT_CHANGES_DAYS
+    return JsonResponse({'results': results})
 
 
 @scripts_auth
