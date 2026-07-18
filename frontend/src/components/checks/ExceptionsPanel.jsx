@@ -7,6 +7,11 @@ const STATUS_COLOR = {
     'норма': '#5db872', 'исправлено': '#5c8acc', 'ошибка': '#c64545', 'ошибка-некритично': '#c47d2f',
 };
 
+// Типы, чьи исключения привязаны к документу (а не к товару)
+const DOC_KINDS = new Set(['enters', 'losses', 'inventories', 'moves', 'supplies', 'salesreturns', 'enter_zero']);
+// Окно сканирования документных проверок (doc_months = 3)
+const SCAN_WINDOW_DAYS = 90;
+
 function StatusBadge({ status }) {
     const c = STATUS_COLOR[status] || 'var(--muted)';
     return (
@@ -21,6 +26,25 @@ function shortDate(s) {
     return m ? `${m[3]}.${m[2]}.${m[1]}` : s;
 }
 
+function docDateOf(exc) {
+    return exc.extra?.date || exc.extra?.doc_date || '';
+}
+
+/** Документ вышел из окна сканирования — исключение больше ничего не глушит. */
+function isExpired(exc) {
+    if (!DOC_KINDS.has(exc.kind)) return false;
+    const d = docDateOf(exc);
+    if (!d) return false;
+    const parsed = new Date(d);
+    if (Number.isNaN(parsed.getTime())) return false;
+    return (Date.now() - parsed.getTime()) / 86400000 > SCAN_WINDOW_DAYS;
+}
+
+const chip = (color = 'var(--muted)') => ({
+    fontSize: 11, fontWeight: 600, color, background: 'var(--surface-soft)',
+    padding: '2px 8px', borderRadius: 6, whiteSpace: 'nowrap',
+});
+
 function ExceptionRow({ exc, first, onSaved, onRemove }) {
     const [editing, setEditing] = useState(false);
     const [value, setValue] = useState(exc.reason || '');
@@ -29,10 +53,16 @@ function ExceptionRow({ exc, first, onSaved, onRemove }) {
         ? (exc.extra?.ms_href || null)
         : msLink(KIND_MS_TYPE[exc.kind], exc.key);
     const status = exc.kind === 'deviations' ? exc.extra?.status : null;
-    // Скачки цен: разовое исключение (одна приёмка) или вечное (товар не проверяется)
+    // Скачки цен: разовое исключение (одна приёмка) или постоянное (товар не проверяется)
     const jumpScope = exc.kind === 'supply_jumps'
-        ? (exc.extra?.supply_doc ? `разовое · приёмка №${exc.extra.supply_doc}` : 'навсегда')
+        ? (exc.extra?.supply_doc ? `разовое (приёмка №${exc.extra.supply_doc})` : 'постоянное')
         : null;
+    const isDoc = DOC_KINDS.has(exc.kind);
+    // У документов единый вид номера: «№00051» независимо от того, как записан label
+    const rawLabel = exc.label || exc.key;
+    const label = isDoc && rawLabel && !rawLabel.startsWith('№') ? `№${rawLabel}` : rawLabel;
+    const docDate = docDateOf(exc);
+    const expired = isExpired(exc);
 
     const save = async () => {
         setSaving(true);
@@ -42,19 +72,29 @@ function ExceptionRow({ exc, first, onSaved, onRemove }) {
     };
 
     return (
-        <div style={{ display: 'flex', alignItems: 'flex-start', gap: 12, padding: '12px 16px', borderTop: first ? 'none' : '1px solid var(--hairline-soft)' }}>
+        <div style={{ display: 'flex', alignItems: 'flex-start', gap: 12, padding: '12px 16px', borderTop: first ? 'none' : '1px solid var(--hairline-soft)', opacity: expired ? 0.65 : 1 }}>
             <div style={{ flex: 1, minWidth: 0 }}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
-                    <span style={{ fontSize: 14, fontWeight: 600, color: 'var(--ink)' }}>{exc.label || exc.key}</span>
+                    <span style={{ fontSize: 14, fontWeight: 600, color: 'var(--ink)' }}>{label}</span>
                     {status && <StatusBadge status={status} />}
                     {jumpScope && (
-                        <span style={{ fontSize: 11, fontWeight: 600, color: exc.extra?.supply_doc ? 'var(--muted)' : '#b08a1f', background: 'var(--surface-soft)', padding: '2px 8px', borderRadius: 6, whiteSpace: 'nowrap' }}>
+                        <span style={chip(exc.extra?.supply_doc ? 'var(--muted)' : '#b08a1f')}
+                            title={exc.extra?.supply_doc
+                                ? 'Заглушен только этот скачок: новая приёмка с новым скачком снова попадёт в отчёт'
+                                : 'Товар исключён из проверки скачков полностью — цены по нему всегда пляшут'}>
                             {jumpScope}
                         </span>
                     )}
-                    <span style={{ fontSize: 11, fontWeight: 600, color: 'var(--muted)', background: 'var(--surface-soft)', padding: '2px 8px', borderRadius: 6, whiteSpace: 'nowrap' }} title={exc.created_by ? `добавил ${exc.created_by}` : ''}>
-                        {shortDate(exc.created_at)}
+                    {docDate && <span style={chip()}>документ от {shortDate(docDate)}</span>}
+                    <span style={chip()} title={exc.created_by ? `добавил ${exc.created_by}` : ''}>
+                        вердикт от {shortDate(exc.created_at)}
                     </span>
+                    {expired && (
+                        <span style={chip('var(--muted-soft)')}
+                            title={`Документ старше ${SCAN_WINDOW_DAYS} дней и больше не попадает в проверку — исключение ничего не глушит и скоро удалится автоматически`}>
+                            отработало
+                        </span>
+                    )}
                     {docLink && (
                         <a href={docLink} target="_blank" rel="noreferrer"
                             style={{ display: 'inline-flex', alignItems: 'center', gap: 3, fontSize: 11.5, color: 'var(--primary)', textDecoration: 'none' }}>
@@ -140,15 +180,28 @@ export default function ExceptionsPanel() {
         g.items.push(e);
     });
 
+    const expiredCount = items.filter(isExpired).length;
+
     return (
         <div>
+            <div style={{
+                fontSize: 12.5, color: 'var(--muted)', lineHeight: 1.55, marginBottom: 14,
+                padding: '10px 14px', background: 'var(--surface-soft)', borderRadius: 10,
+            }}>
+                Это твои вердикты по находкам: проверка читает их перед каждым запуском, чтобы не показывать
+                уже разобранное. Сюда заходят только перечитать или отменить вердикт — делать здесь ничего
+                не нужно. Записи с бейджем «отработало» уже ничего не глушат и удалятся автоматически.
+            </div>
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12, marginBottom: 16, flexWrap: 'wrap' }}>
                 <div style={{ position: 'relative', flex: 1, minWidth: 220, maxWidth: 380 }}>
                     <Search size={15} style={{ position: 'absolute', left: 11, top: 10, color: 'var(--muted-soft)' }} />
                     <input value={query} onChange={(e) => setQuery(e.target.value)} placeholder="Поиск по исключениям…"
                         style={{ width: '100%', padding: '8px 12px 8px 34px', borderRadius: 9, fontSize: 13, border: '1px solid var(--hairline)', background: 'var(--canvas)', color: 'var(--body)' }} />
                 </div>
-                <span style={{ fontSize: 13, color: 'var(--muted)' }}>Всего: {items.length}</span>
+                <span style={{ fontSize: 13, color: 'var(--muted)' }}>
+                    Всего: {items.length}
+                    {expiredCount > 0 && <span style={{ color: 'var(--muted-soft)' }}> · отработало: {expiredCount}</span>}
+                </span>
             </div>
 
             {groups.length === 0 ? (

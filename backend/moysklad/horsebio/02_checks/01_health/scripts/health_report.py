@@ -495,7 +495,22 @@ class ReportingMixin:
         _notes = self.deviations_notes_map
 
         def _is_normal(it):
-            return _notes.get(it.get('product_code', ''), {}).get('status') == 'норма'
+            """«Норма» действует, пока отклонение не выросло заметно с момента разбора.
+
+            deviation_pct в note — размер отклонения, когда его подтверждали.
+            Вырасло в 1.5 раза (плюс 2 п.п. буфера от шума на малых процентах) —
+            вердикт устарел, позиция снова попадает в проблемные."""
+            note = _notes.get(it.get('product_code', ''), {})
+            if note.get('status') != 'норма':
+                return False
+            ref = note.get('deviation_pct')
+            if ref:
+                try:
+                    if abs(it['deviation_pct']) > abs(float(ref)) * 1.5 + 2:
+                        return False
+                except (TypeError, ValueError):
+                    pass
+            return True
 
         _phref = getattr(self, '_product_uuid_href', {})
 
@@ -507,6 +522,9 @@ class ReportingMixin:
                 'key': it.get('product_code') or '', 'ms_id': it.get('product_id') or '',
                 'ms_href': _phref.get(it.get('product_id')) or '',
                 'object': it['product_name'], 'severity': sev,
+                # deviation_pct нужен UI: запоминается в исключении при разборе,
+                # чтобы снова флагать позицию, когда отклонение вырастет
+                'deviation_pct': round(it.get('deviation_pct', 0), 1),
                 'detail': head + f"{it['store_name']} · FIFO {money(it['current_cost'])} ↔ "
                           f"приёмка {money(it['last_supply_cost'])} · запас {it.get('stock', 0):,.0f} ед",
             }
@@ -517,7 +535,7 @@ class ReportingMixin:
             [_dev_item(it, 'critical') for it in self.stats['critical'] if not _is_normal(it)])
         add('important', 'Важные: отклонения FIFO vs приёмка', 'deviations', None,
             [_dev_item(it, 'important') for it in self.stats['important'] if not _is_normal(it)])
-        add('deviations_normal', 'Отклонения — помечены нормой', 'deviations', None,
+        add('deviations_normal', 'Отклонения, разобранные как норма', 'deviations', None,
             [_dev_item(it, 'ok') for it in (self.stats['critical'] + self.stats['important']) if _is_normal(it)])
 
         # 3. Оприходования с неправильной ценой (без исключений — информативно)

@@ -1,12 +1,12 @@
 import { useState, useEffect, useCallback } from 'react';
 import PropTypes from 'prop-types';
-import { ExternalLink, Plus, Check, Undo2, Loader2, ShieldCheck } from 'lucide-react';
+import { ExternalLink, Plus, Check, Undo2, Loader2, ShieldCheck, ChevronRight } from 'lucide-react';
 import { checksApi, SEV, sevOf, msLink, relTime } from './checksShared';
 import InfoTip from './InfoTip';
 
 // Подсказки по неочевидным категориям и стат-карточкам
 const CAT_HINTS = {
-    deviations_normal: 'Отклонения, подтверждённые как «норма» (исключение). Остаются в отчёте для контроля, но не считаются проблемой и не попадают в «Важные».',
+    deviations_normal: 'Товары, у которых остаток на складе числится по одной цене (FIFO), а последняя закупка была по другой — но ты уже разбирался и подтвердил: это не ошибка, обычно на складе просто лежат старые партии по прошлой цене. Если после разбора расхождение заметно вырастет, товар автоматически вернётся в проблемные.',
 };
 const STAT_HINTS = {
     'Уже актуальны': 'Цены уже совпадают с FIFO — обновление не требуется.',
@@ -188,7 +188,10 @@ function FindingRow({ cat, item, excepted, prevReason, onAdded }) {
         setState('busy');
         try {
             let extra = {};
-            if (cat.kind === 'deviations') extra = { status: 'норма', ms_id: item.ms_id || '', ms_href: item.ms_href || '' };
+            if (cat.kind === 'deviations') {
+                // deviation_pct — размер отклонения на момент разбора: вырастет заметно — снова флаг
+                extra = { status: 'норма', ms_id: item.ms_id || '', ms_href: item.ms_href || '', deviation_pct: item.deviation_pct ?? null };
+            }
             if (isJump && scope === 'once' && item.last_doc) extra = { supply_doc: item.last_doc };
             const res = await checksApi.addException({
                 kind: cat.kind, key: item.key, label: item.object, reason: reason.trim(), extra,
@@ -304,9 +307,11 @@ function FindingRow({ cat, item, excepted, prevReason, onAdded }) {
 }
 FindingRow.propTypes = { cat: PropTypes.object, item: PropTypes.object, excepted: PropTypes.bool, prevReason: PropTypes.string, onAdded: PropTypes.func };
 
-/** Секция находок одной проверки: всегда развёрнута, строки таблицей. */
+/** Секция находок одной проверки: проблемные развёрнуты, «норма» — свёрнута до строки. */
 function Category({ cat, excKeys, excMap, onChanged }) {
     const [hidden, setHidden] = useState(new Set());
+    const collapsible = cat.severity === 'ok';
+    const [open, setOpen] = useState(!collapsible);
     const c = sevOf(cat.severity);
 
     const excFor = (it) => (cat.kind && it.key ? (excMap[cat.kind] || {})[it.key] : undefined);
@@ -326,17 +331,27 @@ function Category({ cat, excKeys, excMap, onChanged }) {
     // Все находки ушли в исключения — категория схлопывается целиком
     if (visible.length === 0) return null;
 
+    const HeaderTag = collapsible ? 'button' : 'div';
     return (
         <div id={`cat-${cat.key}`} style={{ background: 'var(--surface-card)', border: '1px solid var(--hairline)', borderRadius: 12, marginBottom: 12, overflow: 'hidden' }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 9, padding: '11px 14px' }}>
+            <HeaderTag
+                onClick={collapsible ? () => setOpen((v) => !v) : undefined}
+                style={{
+                    display: 'flex', alignItems: 'center', gap: 9, padding: '11px 14px', width: '100%',
+                    background: 'none', border: 'none', textAlign: 'left',
+                    cursor: collapsible ? 'pointer' : 'default',
+                }}>
+                {collapsible && (
+                    <ChevronRight size={15} style={{ color: 'var(--muted-soft)', transform: open ? 'rotate(90deg)' : 'none', transition: 'transform 0.15s', flexShrink: 0 }} />
+                )}
                 <span style={{ width: 9, height: 9, borderRadius: 999, background: c.color, flexShrink: 0 }} />
                 <span style={{ fontSize: 13.5, fontWeight: 600, color: 'var(--ink)' }}>{cat.title}</span>
                 {CAT_HINTS[cat.key] && <InfoTip text={CAT_HINTS[cat.key]} />}
                 <span style={{ marginLeft: 'auto', fontSize: 12, fontWeight: 700, color: c.color, background: c.bg, padding: '1px 9px', borderRadius: 999 }}>
                     {visible.length}
                 </span>
-            </div>
-            <div>
+            </HeaderTag>
+            <div style={{ display: open ? 'block' : 'none' }}>
                 {visible.map((it) => {
                     const ekey = it.key || it.object;
                     const excepted = cat.kind && it.key && (excKeys[cat.kind] || []).includes(it.key);

@@ -117,7 +117,8 @@ def export_exceptions_to_json(data_dir=None):
         _write_json(os.path.join(data_dir, fname),
                     {'_comment': ACK_COMMENTS.get(kind, ''), 'acknowledged': items})
 
-    # Отклонения FIFO (notes-dict по product_code)
+    # Отклонения FIFO (notes-dict по product_code). deviation_pct — размер отклонения
+    # на момент разбора: скрипт снова флагает позицию, если отклонение заметно выросло.
     notes = {}
     for r in by_kind.get('deviations', []):
         extra = r.extra if isinstance(r.extra, dict) else {}
@@ -125,6 +126,7 @@ def export_exceptions_to_json(data_dir=None):
             'checked': extra.get('checked', ''),
             'status': extra.get('status', 'норма'),
             'note': r.reason,
+            'deviation_pct': extra.get('deviation_pct'),
         }
     _write_json(os.path.join(data_dir, DEVIATIONS_FILE), {
         '_comment': 'Объяснения отклонений FIFO vs приёмка. Позиции продолжают выводиться в отчёте, но со статусом и пояснением.',
