@@ -1,7 +1,6 @@
 import PropTypes from 'prop-types';
-import { Loader2, CheckCircle, AlertCircle, Circle, ChevronRight, Clock, PackageOpen } from 'lucide-react';
-import { SEV, relTime, plural, fmtRub, PENDING_RETURNS_HINT } from './checksShared';
-import InfoTip from './InfoTip';
+import { Loader2, CheckCircle, AlertCircle, Circle, ChevronRight, Clock } from 'lucide-react';
+import { SEV, sevOf, relTime, plural } from './checksShared';
 
 // Подписи severity с русским склонением
 const SEV_WORDS = {
@@ -59,43 +58,39 @@ function StatusLine({ script }) {
 }
 StatusLine.propTypes = { script: PropTypes.object.isRequired };
 
-/** Индикатор внутри строки возвратов: сколько черновиков ждёт товара и на какую сумму.
- *  Клик — страница со списком (останавливаем всплытие, чтобы не открыть деталку скрипта). */
-function PendingBlock({ pending, onOpen }) {
-    const { count = 0, total_rub = 0, overdue = 0, overdue_rub = 0, warn_days = 30 } = pending;
-    if (count === 0) {
-        return (
-            <div style={{ fontSize: 12.5, color: 'var(--success)', fontWeight: 600, marginTop: 10 }}>
-                Все возвраты дошли — в ожидании ничего нет
-            </div>
-        );
-    }
+/** Мини-сводка внутренних проверок хелс-чека: проблемные поимённо, чистые одним счётчиком.
+ *  Отвечает на вопрос «что именно проверяется и где проблемы» прямо в списке. */
+function HealthChecksStrip({ checks }) {
+    const problems = checks.filter((c) => c.status === 'problems');
+    const clean = checks.filter((c) => c.status === 'ok').length;
     return (
-        <div
-            onClick={(e) => { e.stopPropagation(); onOpen?.(); }}
-            title="Открыть список ожидающих возвратов"
-            style={{
-                display: 'flex', alignItems: 'center', gap: 14, flexWrap: 'wrap', marginTop: 10,
-                padding: '9px 12px', borderRadius: 10, background: 'var(--surface-soft)', cursor: 'pointer',
-            }}>
-            <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6, fontSize: 12.5, color: 'var(--ink)', fontWeight: 600 }}>
-                <PackageOpen size={14} style={{ color: 'var(--muted)', flexShrink: 0 }} />
-                Ждут товара: {count} {plural(count, 'возврат', 'возврата', 'возвратов')} · {fmtRub(total_rub)}
-                <InfoTip text={PENDING_RETURNS_HINT} width={300} />
-            </span>
-            {overdue > 0 && (
-                <span style={{ fontSize: 12, fontWeight: 600, color: '#b08a1f' }}>
-                    ⚠ {overdue} дольше {warn_days} дн. · {fmtRub(overdue_rub)}
+        <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap', marginTop: 9 }}>
+            {problems.map((c) => {
+                const s = sevOf(c.severity);
+                return (
+                    <span key={c.id} style={{
+                        display: 'inline-flex', alignItems: 'center', gap: 5, padding: '2px 9px',
+                        borderRadius: 999, fontSize: 12, fontWeight: 600, color: s.color, background: s.bg,
+                    }}>
+                        <span style={{ width: 6, height: 6, borderRadius: 999, background: s.color }} />
+                        {c.title} · {c.count}
+                    </span>
+                );
+            })}
+            {clean > 0 && (
+                <span style={{ fontSize: 12, fontWeight: 600, color: 'var(--success)' }}>
+                    ✓ {problems.length ? 'остальные ' : ''}{clean} {plural(clean, 'проверка чистая', 'проверки чистые', 'проверок чистые')}
                 </span>
             )}
-            <ChevronRight size={14} style={{ color: 'var(--muted-soft)', marginLeft: 'auto', flexShrink: 0 }} />
         </div>
     );
 }
-PendingBlock.propTypes = { pending: PropTypes.object.isRequired, onOpen: PropTypes.func };
+HealthChecksStrip.propTypes = { checks: PropTypes.array.isRequired };
 
 /** Строка-плашка скрипта на всю ширину: название и суть слева, статус и время справа. */
-export default function ScriptCard({ script, onOpen, pending, onOpenPending }) {
+export default function ScriptCard({ script, onOpen }) {
+    const healthChecks = script.is_health && Array.isArray(script.summary?.checks)
+        ? script.summary.checks : null;
     return (
         <div
             role="button"
@@ -124,7 +119,7 @@ export default function ScriptCard({ script, onOpen, pending, onOpenPending }) {
                 </span>
                 <ChevronRight size={17} style={{ color: 'var(--muted-soft)', flexShrink: 0 }} />
             </div>
-            {pending && <PendingBlock pending={pending} onOpen={onOpenPending} />}
+            {healthChecks && <HealthChecksStrip checks={healthChecks} />}
         </div>
     );
 }
@@ -132,6 +127,4 @@ export default function ScriptCard({ script, onOpen, pending, onOpenPending }) {
 ScriptCard.propTypes = {
     script: PropTypes.object.isRequired,
     onOpen: PropTypes.func.isRequired,
-    pending: PropTypes.object,
-    onOpenPending: PropTypes.func,
 };

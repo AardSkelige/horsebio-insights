@@ -1,13 +1,69 @@
 import { useState, useEffect, useCallback } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
-import { Loader2, ShieldCheck } from 'lucide-react';
-import { checksApi } from './checksShared';
+import { Loader2, ShieldCheck, PackageOpen, ChevronRight } from 'lucide-react';
+import PropTypes from 'prop-types';
+import { checksApi, plural, fmtRub, PENDING_RETURNS_HINT } from './checksShared';
 import ScriptCard from './ScriptCard';
 import CheckDetail from './CheckDetail';
 import PendingReturnsDetail from './PendingReturnsDetail';
+import InfoTip from './InfoTip';
 
 // Порядок тем внутри аккаунта; скрипты без темы — в конец без заголовка
 const TOPIC_ORDER = ['Себестоимость', 'Возвраты', 'Оплаты', 'Производство'];
+
+/** Строка-индикатор «Возвраты в пути» — самостоятельный пункт в теме «Возвраты»:
+ *  робот создаёт черновики, а этот пункт следит, сколько их ждёт товара и как долго. */
+function PendingReturnsRow({ pending, onOpen }) {
+    const { count = 0, total_rub = 0, overdue = 0, overdue_rub = 0, warn_days = 30 } = pending;
+    return (
+        <div
+            role="button"
+            tabIndex={0}
+            onClick={onOpen}
+            onKeyDown={(e) => { if (e.key === 'Enter') onOpen(); }}
+            style={{
+                width: '100%', textAlign: 'left',
+                background: 'var(--surface-card)', border: '1px solid var(--hairline)',
+                borderRadius: 12, padding: '13px 16px', cursor: 'pointer',
+                transition: 'background 0.15s, border-color 0.15s',
+            }}
+            onMouseEnter={(e) => { e.currentTarget.style.background = 'var(--surface-cream-strong)'; e.currentTarget.style.borderColor = 'var(--primary)'; }}
+            onMouseLeave={(e) => { e.currentTarget.style.background = 'var(--surface-card)'; e.currentTarget.style.borderColor = 'var(--hairline)'; }}
+        >
+            <div style={{ display: 'flex', alignItems: 'center', gap: 14 }}>
+                <div style={{ minWidth: 0, flex: 1 }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 14.5, fontWeight: 600, color: 'var(--ink)', lineHeight: 1.3 }}>
+                        <PackageOpen size={16} style={{ color: 'var(--muted)' }} />
+                        Возвраты в пути
+                        <InfoTip text={PENDING_RETURNS_HINT} width={300} />
+                    </div>
+                    <div style={{ fontSize: 12, color: 'var(--muted)', marginTop: 2, lineHeight: 1.4 }}>
+                        Проверка сроков: созданные черновики не должны висеть без товара дольше {warn_days} дней
+                    </div>
+                </div>
+                {count === 0 ? (
+                    <span style={{ fontSize: 13, fontWeight: 600, color: 'var(--success)', whiteSpace: 'nowrap' }}>✓ Всё дошло</span>
+                ) : (
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap', justifyContent: 'flex-end' }}>
+                        <span style={{ fontSize: 13, fontWeight: 600, color: 'var(--ink)', whiteSpace: 'nowrap' }}>
+                            {count} {plural(count, 'возврат', 'возврата', 'возвратов')} · {fmtRub(total_rub)}
+                        </span>
+                        {overdue > 0 && (
+                            <span style={{
+                                fontSize: 12, fontWeight: 600, color: '#b08a1f', whiteSpace: 'nowrap',
+                                background: 'rgba(176,138,31,0.10)', padding: '2px 9px', borderRadius: 999,
+                            }}>
+                                {overdue} дольше {warn_days} дн. · {fmtRub(overdue_rub)}
+                            </span>
+                        )}
+                    </div>
+                )}
+                <ChevronRight size={17} style={{ color: 'var(--muted-soft)', flexShrink: 0 }} />
+            </div>
+        </div>
+    );
+}
+PendingReturnsRow.propTypes = { pending: PropTypes.object.isRequired, onOpen: PropTypes.func };
 
 export default function ChecksPage() {
     const [scripts, setScripts] = useState(null);
@@ -103,14 +159,14 @@ export default function ChecksPage() {
                             )}
                             <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
                                 {t.items.map((s) => (
-                                    <ScriptCard
-                                        key={s.id}
-                                        script={s}
-                                        onOpen={(id) => navigate(`/checks/${id}`)}
-                                        pending={s.id === 'horsebio_returns' ? pendingReturns : undefined}
-                                        onOpenPending={() => navigate('/checks/pending-returns')}
-                                    />
+                                    <ScriptCard key={s.id} script={s} onOpen={(id) => navigate(`/checks/${id}`)} />
                                 ))}
+                                {t.topic === 'Возвраты' && pendingReturns && (
+                                    <PendingReturnsRow
+                                        pending={pendingReturns}
+                                        onOpen={() => navigate('/checks/pending-returns')}
+                                    />
+                                )}
                             </div>
                         </div>
                     ))}

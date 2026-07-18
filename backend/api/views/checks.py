@@ -96,10 +96,13 @@ def checks_overview(request):
     result = []
     for script in SCRIPTS_CONFIG:
         sid = script['id']
+        if script.get('hidden'):
+            continue
         if script.get('account') == 'StarPony' and not superuser:
             continue
         item = {
             **{k: script[k] for k in ('id', 'name', 'account', 'schedule', 'description')},
+            'topic': script.get('topic', ''),
             'structured': bool(script.get('structured')),
             'is_health': sid == HEALTH_CHECK_SCRIPT_ID,
             'is_running': _is_running(sid),
