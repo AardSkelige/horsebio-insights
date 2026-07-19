@@ -3,7 +3,7 @@ import {
     Loader2, CheckCircle, AlertCircle, Circle, ChevronRight, Clock,
     Activity, Banknote, PackagePlus, CalendarClock,
 } from 'lucide-react';
-import { SEV, sevOf, relTime, plural } from './checksShared';
+import { SEV, relTime, plural } from './checksShared';
 import InfoTip from './InfoTip';
 import './ScriptCard.css';
 
@@ -48,101 +48,54 @@ export const SCRIPT_META = {
     },
 };
 
-// Подписи severity с русским склонением
-const SEV_WORDS = {
-    critical:  ['критичная', 'критичные', 'критичных'],
-    important: ['важная', 'важные', 'важных'],
-    warning:   ['предупреждение', 'предупреждения', 'предупреждений'],
-};
-
-function SeverityChip({ sev, count }) {
-    const c = SEV[sev];
-    const w = SEV_WORDS[sev];
+/** Единый статус-бейдж: точка/иконка + короткий фиксированный текст.
+ *  Один и тот же формат для всех строк страницы Проверки — разбор по пунктам
+ *  и цифры смотрим в деталке по клику, а не в списке. */
+export function StatusBadge({ color, icon: Icon, spin, children }) {
     return (
-        <span style={{
-            display: 'inline-flex', alignItems: 'center', gap: 5,
-            padding: '2px 9px', borderRadius: 999, fontSize: 12, fontWeight: 600,
-            color: c.color, background: c.bg, whiteSpace: 'nowrap',
-        }}>
-            <span style={{ width: 7, height: 7, borderRadius: 999, background: c.color }} />
-            {count} {w ? plural(count, ...w) : ''}
+        <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6, color, fontSize: 13, fontWeight: 600, whiteSpace: 'nowrap' }}>
+            {Icon
+                ? <Icon size={14} className={spin ? 'animate-spin' : undefined} />
+                : <span style={{ width: 7, height: 7, borderRadius: 999, background: color }} />}
+            {children}
         </span>
     );
 }
-SeverityChip.propTypes = { sev: PropTypes.string, count: PropTypes.number };
+StatusBadge.propTypes = {
+    color: PropTypes.string.isRequired,
+    icon: PropTypes.elementType,
+    spin: PropTypes.bool,
+    children: PropTypes.node,
+};
 
-/** Правая часть строки: полезные цифры вместо голого «ОК».
- *  Проверки — severity-чипы; роботы — ненулевые счётчики последнего запуска. */
+/** Правая часть строки: только ок/не ок — без разнородных цифр и текстов разной длины. */
 function StatusLine({ script }) {
     if (script.is_running) {
-        return (
-            <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6, color: 'var(--primary)', fontSize: 13, fontWeight: 600 }}>
-                <Loader2 size={14} className="animate-spin" /> Выполняется…
-            </span>
-        );
+        return <StatusBadge color="var(--primary)" icon={Loader2} spin>Выполняется…</StatusBadge>;
     }
     const s = script.summary;
     if (script.structured && s) {
         const total = (s.critical || 0) + (s.important || 0) + (s.warnings || 0);
         if (total > 0) {
+            const sev = s.critical ? 'critical' : s.important ? 'important' : 'warning';
             return (
-                <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', justifyContent: 'flex-end' }}>
-                    {s.critical ? <SeverityChip sev="critical" count={s.critical} /> : null}
-                    {s.important ? <SeverityChip sev="important" count={s.important} /> : null}
-                    {s.warnings ? <SeverityChip sev="warning" count={s.warnings} /> : null}
-                </div>
+                <StatusBadge color={SEV[sev].color} icon={AlertCircle}>
+                    {total} {plural(total, 'проблема', 'проблемы', 'проблем')}
+                </StatusBadge>
             );
         }
-        // Роботы: показать содержательные счётчики («Уже актуальны: 488»)
-        const stats = (Array.isArray(s.stats) ? s.stats : [])
-            .filter((st) => st.value > 0 && st.label !== 'Ошибки').slice(0, 2);
-        if (stats.length > 0) {
-            return (
-                <span style={{ fontSize: 12.5, fontWeight: 600, color: 'var(--success)', whiteSpace: 'nowrap' }}>
-                    ✓ {stats.map((st) => `${st.label.toLowerCase()}: ${st.value}`).join(' · ')}
-                </span>
-            );
-        }
-        return <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6, color: 'var(--success)', fontSize: 13, fontWeight: 600 }}><CheckCircle size={14} /> Всё чисто</span>;
+        return <StatusBadge color="var(--success)" icon={CheckCircle}>ОК</StatusBadge>;
     }
     const code = script.last_run?.exit_code;
     if (code == null) {
-        return <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6, color: 'var(--muted-soft)', fontSize: 13 }}><Circle size={13} /> Не запускался</span>;
+        return <StatusBadge color="var(--muted-soft)" icon={Circle}>Не запускался</StatusBadge>;
     }
     if (code === 0) {
-        return <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6, color: 'var(--success)', fontSize: 13, fontWeight: 600 }}><CheckCircle size={14} /> ОК</span>;
+        return <StatusBadge color="var(--success)" icon={CheckCircle}>ОК</StatusBadge>;
     }
-    return <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6, color: 'var(--error)', fontSize: 13, fontWeight: 600 }}><AlertCircle size={14} /> Ошибка</span>;
+    return <StatusBadge color="var(--error)" icon={AlertCircle}>Ошибка</StatusBadge>;
 }
 StatusLine.propTypes = { script: PropTypes.object.isRequired };
-
-/** Мини-сводка внутренних проверок хелс-чека: проблемные поимённо, чистые одним счётчиком. */
-function HealthChecksStrip({ checks }) {
-    const problems = checks.filter((c) => c.status === 'problems');
-    const clean = checks.filter((c) => c.status === 'ok').length;
-    return (
-        <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap', marginTop: 9 }}>
-            {problems.map((c) => {
-                const s = sevOf(c.severity);
-                return (
-                    <span key={c.id} style={{
-                        display: 'inline-flex', alignItems: 'center', gap: 5, padding: '2px 9px',
-                        borderRadius: 999, fontSize: 12, fontWeight: 600, color: s.color, background: s.bg,
-                    }}>
-                        <span style={{ width: 6, height: 6, borderRadius: 999, background: s.color }} />
-                        {c.title} · {c.count}
-                    </span>
-                );
-            })}
-            {clean > 0 && (
-                <span style={{ fontSize: 12, fontWeight: 600, color: 'var(--success)' }}>
-                    ✓ {problems.length ? 'остальные ' : ''}{clean} {plural(clean, 'проверка чистая', 'проверки чистые', 'проверок чистые')}
-                </span>
-            )}
-        </div>
-    );
-}
-HealthChecksStrip.propTypes = { checks: PropTypes.array.isRequired };
 
 export function AccountBadge({ account }) {
     return (
@@ -160,8 +113,6 @@ AccountBadge.propTypes = { account: PropTypes.string.isRequired };
 export default function ScriptCard({ script, onOpen }) {
     const meta = SCRIPT_META[script.id] || {};
     const Icon = meta.Icon || Activity;
-    const healthChecks = script.is_health && Array.isArray(script.summary?.checks)
-        ? script.summary.checks : null;
     return (
         <div
             role="button"
@@ -209,7 +160,6 @@ export default function ScriptCard({ script, onOpen }) {
                 </div>
                 <ChevronRight className="checks-script-card__arrow" size={17} />
             </div>
-            {healthChecks && <HealthChecksStrip checks={healthChecks} />}
         </div>
     );
 }

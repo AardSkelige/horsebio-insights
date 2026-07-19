@@ -1,9 +1,9 @@
 import { useState, useEffect, useCallback } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
-import { Loader2, ShieldCheck, PackageOpen, ChevronRight } from 'lucide-react';
+import { Loader2, ShieldCheck, PackageOpen, ChevronRight, CheckCircle, AlertCircle } from 'lucide-react';
 import PropTypes from 'prop-types';
-import { checksApi, plural, fmtRub, PENDING_RETURNS_HINT } from './checksShared';
-import ScriptCard, { AccountBadge } from './ScriptCard';
+import { checksApi, plural, SEV, PENDING_RETURNS_HINT } from './checksShared';
+import ScriptCard, { AccountBadge, StatusBadge } from './ScriptCard';
 import CheckDetail from './CheckDetail';
 import PendingReturnsDetail from './PendingReturnsDetail';
 import InfoTip from './InfoTip';
@@ -14,7 +14,7 @@ const TOPIC_ORDER = ['Себестоимость', 'Возвраты', 'Опла
 /** Строка-индикатор «Возвраты в пути» — самостоятельный пункт в теме «Возвраты»:
  *  робот создаёт черновики, а этот пункт следит, сколько их ждёт товара и как долго. */
 function PendingReturnsRow({ pending, onOpen }) {
-    const { count = 0, total_rub = 0, overdue = 0, overdue_rub = 0, warn_days = 30 } = pending;
+    const { overdue = 0, warn_days = 30 } = pending;
     return (
         <div
             role="button"
@@ -43,22 +43,12 @@ function PendingReturnsRow({ pending, onOpen }) {
                         <div><b style={{ color: 'var(--body)', fontWeight: 600 }}>Как:</b> считаем возраст и сумму каждого непроведённого возврата</div>
                     </div>
                 </div>
-                {count === 0 ? (
-                    <span style={{ fontSize: 13, fontWeight: 600, color: 'var(--success)', whiteSpace: 'nowrap' }}>✓ Всё дошло</span>
+                {overdue > 0 ? (
+                    <StatusBadge color={SEV.warning.color} icon={AlertCircle}>
+                        {overdue} {plural(overdue, 'проблема', 'проблемы', 'проблем')}
+                    </StatusBadge>
                 ) : (
-                    <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap', justifyContent: 'flex-end' }}>
-                        <span style={{ fontSize: 13, fontWeight: 600, color: 'var(--ink)', whiteSpace: 'nowrap' }}>
-                            {count} {plural(count, 'возврат', 'возврата', 'возвратов')} · {fmtRub(total_rub)}
-                        </span>
-                        {overdue > 0 && (
-                            <span style={{
-                                fontSize: 12, fontWeight: 600, color: '#b08a1f', whiteSpace: 'nowrap',
-                                background: 'rgba(176,138,31,0.10)', padding: '2px 9px', borderRadius: 999,
-                            }}>
-                                {overdue} дольше {warn_days} дн. · {fmtRub(overdue_rub)}
-                            </span>
-                        )}
-                    </div>
+                    <StatusBadge color="var(--success)" icon={CheckCircle}>ОК</StatusBadge>
                 )}
                 <ChevronRight size={17} style={{ color: 'var(--muted-soft)', flexShrink: 0 }} />
             </div>
