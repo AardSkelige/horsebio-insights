@@ -11,6 +11,9 @@ const STATUS_COLOR = {
 const DOC_KINDS = new Set(['enters', 'losses', 'inventories', 'moves', 'supplies', 'salesreturns', 'enter_zero']);
 // Окно сканирования документных проверок (doc_months = 3)
 const SCAN_WINDOW_DAYS = 90;
+// deviations никогда не протухают автоматически — «норма» просто перепроверяется
+// каждый прогон; после стольких дней без пересмотра — только подсказка, не блокировка
+const STALE_VERDICT_DAYS = 180;
 
 function StatusBadge({ status }) {
     const c = STATUS_COLOR[status] || 'var(--muted)';
@@ -40,6 +43,23 @@ function isExpired(exc) {
     return (Date.now() - parsed.getTime()) / 86400000 > SCAN_WINDOW_DAYS;
 }
 
+// deviations: реальная дата разбора — extra.checked (когда завели изначально при переносе
+// истории); для исключений, добавленных позже прямо из интерфейса, этого поля нет —
+// тогда честная дата это created_at
+function verdictDateOf(exc) {
+    if (exc.kind === 'deviations' && exc.extra?.checked) return exc.extra.checked;
+    return exc.created_at;
+}
+
+/** «Норма» по отклонению не протухает и не удаляется сама — но если её давно не
+ *  пересматривали, стоит напомнить: не блокирует и не скрывает, просто подсказка. */
+function isStaleVerdict(exc) {
+    if (exc.kind !== 'deviations' || exc.extra?.status !== 'норма') return false;
+    const parsed = new Date(verdictDateOf(exc));
+    if (Number.isNaN(parsed.getTime())) return false;
+    return (Date.now() - parsed.getTime()) / 86400000 > STALE_VERDICT_DAYS;
+}
+
 const chip = (color = 'var(--muted)') => ({
     fontSize: 11, fontWeight: 600, color, background: 'var(--surface-soft)',
     padding: '2px 8px', borderRadius: 6, whiteSpace: 'nowrap',
@@ -63,6 +83,8 @@ function ExceptionRow({ exc, first, onSaved, onRemove }) {
     const label = isDoc && rawLabel && !rawLabel.startsWith('№') ? `№${rawLabel}` : rawLabel;
     const docDate = docDateOf(exc);
     const expired = isExpired(exc);
+    const stale = isStaleVerdict(exc);
+    const verdictDate = verdictDateOf(exc);
 
     const save = async () => {
         setSaving(true);
@@ -87,12 +109,18 @@ function ExceptionRow({ exc, first, onSaved, onRemove }) {
                     )}
                     {docDate && <span style={chip()}>документ от {shortDate(docDate)}</span>}
                     <span style={chip()} title={exc.created_by ? `добавил ${exc.created_by}` : ''}>
-                        вердикт от {shortDate(exc.created_at)}
+                        вердикт от {shortDate(verdictDate)}
                     </span>
                     {expired && (
                         <span style={chip('var(--muted-soft)')}
                             title={`Документ старше ${SCAN_WINDOW_DAYS} дней и больше не попадает в проверку — исключение ничего не глушит и скоро удалится автоматически`}>
                             отработало
+                        </span>
+                    )}
+                    {stale && (
+                        <span style={chip('#b08a1f')}
+                            title={`Разбор старше ${STALE_VERDICT_DAYS} дней и автоматически не протухает — стоит перепроверить, актуально ли ещё объяснение`}>
+                            давно не смотрели
                         </span>
                     )}
                     {docLink && (
