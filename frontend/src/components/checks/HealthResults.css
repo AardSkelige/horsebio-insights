@@ -16,7 +16,11 @@
 
 .finding-row {
     display: grid;
-    grid-template-columns: minmax(120px, 200px) minmax(0, 1fr) auto;
+    /* Колонка названия растёт под контент вместо жёсткого потолка — иначе на широком
+       экране название переносится, даже когда рядом пустует места полно. Верхний
+       предел 480px — подстраховка от экстремально длинных названий, чтобы не отжать
+       колонку деталей в ноль. */
+    grid-template-columns: minmax(120px, min(max-content, 480px)) minmax(0, 1fr) auto;
     align-items: start;
     gap: 12px;
     padding: 9px 14px;
