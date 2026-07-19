@@ -161,6 +161,14 @@ button:active:not(:disabled):not(.no-tap-scale):not([style*="width: 100%"]) {
   0%   { left: -40%; }
   100% { left: 100%; }
 }
+/* Известен реальный процент (например, этап N из M) — полоса растёт до значения,
+   а не бегает туда-сюда */
+.checks-progress--determinate::after {
+  left: 0;
+  width: var(--checks-progress-pct, 0%);
+  animation: none;
+  transition: width 300ms ease;
+}
 
 @media (prefers-reduced-motion: reduce) {
   .route-transition {

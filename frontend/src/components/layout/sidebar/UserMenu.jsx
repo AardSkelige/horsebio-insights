@@ -31,6 +31,7 @@ const UserMenu = ({ expanded, theme, onToggleTheme, onLogout, onProfile }) => {
     const [open, setOpen] = useState(false);
     const [menuPos, setMenuPos] = useState({ bottom: 0, left: 0, width: 0 });
     const [hov, setHov] = useState(false);
+    const [themeHov, setThemeHov] = useState(false);
     const [hovItem, setHovItem] = useState(null);
     const [auth, setAuth] = useState(getFreshAuthStatus);
     const btnRef = useRef(null);
@@ -74,45 +75,73 @@ const UserMenu = ({ expanded, theme, onToggleTheme, onLogout, onProfile }) => {
 
     return (
         <>
-            <button
-                ref={btnRef}
-                onClick={handleOpen}
-                onMouseEnter={() => setHov(true)}
-                onMouseLeave={() => setHov(false)}
-                style={{
-                    display: 'flex', alignItems: 'center',
-                    justifyContent: expanded ? 'flex-start' : 'center',
-                    gap: expanded ? 10 : 0,
-                    padding: '7px 10px', margin: '1px 6px',
-                    borderRadius: 8, border: 'none',
-                    backgroundColor: hov || open ? 'rgba(255,255,255,0.06)' : 'transparent',
-                    cursor: 'pointer',
-                    transition: 'background 150ms ease',
-                    overflow: 'hidden', whiteSpace: 'nowrap',
-                    width: 'calc(100% - 12px)', boxSizing: 'border-box',
-                }}
-            >
-                <div style={avatarBase}>{initials}</div>
+            <div style={{
+                display: 'flex', alignItems: 'center', gap: 4,
+                margin: '1px 6px', width: 'calc(100% - 12px)', boxSizing: 'border-box',
+            }}>
+                <button
+                    ref={btnRef}
+                    onClick={handleOpen}
+                    onMouseEnter={() => setHov(true)}
+                    onMouseLeave={() => setHov(false)}
+                    style={{
+                        display: 'flex', alignItems: 'center',
+                        justifyContent: expanded ? 'flex-start' : 'center',
+                        gap: expanded ? 10 : 0,
+                        padding: '7px 10px',
+                        borderRadius: 8, border: 'none',
+                        backgroundColor: hov || open ? 'rgba(255,255,255,0.06)' : 'transparent',
+                        cursor: 'pointer',
+                        transition: 'background 150ms ease',
+                        overflow: 'hidden', whiteSpace: 'nowrap',
+                        flex: 1, minWidth: 0,
+                    }}
+                >
+                    <div style={avatarBase}>{initials}</div>
+                    {expanded && (
+                        <div style={{
+                            display: 'flex', flexDirection: 'column', alignItems: 'flex-start',
+                            overflow: 'hidden',
+                            opacity: expanded ? 1 : 0,
+                            maxWidth: expanded ? '180px' : '0px',
+                            transition: `opacity 120ms ease ${expanded ? '100ms' : '0ms'}, max-width 220ms ease`,
+                        }}>
+                            <span style={{
+                                fontFamily: 'var(--sans)', fontSize: '13px', fontWeight: 500,
+                                color: 'var(--on-dark)', overflow: 'hidden',
+                                textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: '160px',
+                            }}>{displayName}</span>
+                            <span style={{
+                                fontFamily: 'var(--sans)', fontSize: '11px',
+                                color: 'var(--on-dark-soft)', whiteSpace: 'nowrap',
+                            }}>{isSuperuser ? 'Суперпользователь' : 'Пользователь'}</span>
+                        </div>
+                    )}
+                </button>
+
                 {expanded && (
-                    <div style={{
-                        display: 'flex', flexDirection: 'column', alignItems: 'flex-start',
-                        overflow: 'hidden',
-                        opacity: expanded ? 1 : 0,
-                        maxWidth: expanded ? '180px' : '0px',
-                        transition: `opacity 120ms ease ${expanded ? '100ms' : '0ms'}, max-width 220ms ease`,
-                    }}>
-                        <span style={{
-                            fontFamily: 'var(--sans)', fontSize: '13px', fontWeight: 500,
-                            color: 'var(--on-dark)', overflow: 'hidden',
-                            textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: '160px',
-                        }}>{displayName}</span>
-                        <span style={{
-                            fontFamily: 'var(--sans)', fontSize: '11px',
-                            color: 'var(--on-dark-soft)', whiteSpace: 'nowrap',
-                        }}>{isSuperuser ? 'Суперпользователь' : 'Пользователь'}</span>
-                    </div>
+                    <button
+                        onClick={(e) => { e.stopPropagation(); onToggleTheme(); }}
+                        onMouseEnter={() => setThemeHov(true)}
+                        onMouseLeave={() => setThemeHov(false)}
+                        title={theme === 'dark' ? 'Светлая тема' : 'Тёмная тема'}
+                        style={{
+                            display: 'flex', alignItems: 'center', justifyContent: 'center',
+                            width: 30, height: 30, flexShrink: 0,
+                            borderRadius: 8, border: 'none',
+                            backgroundColor: themeHov ? 'rgba(255,255,255,0.06)' : 'transparent',
+                            color: 'var(--on-dark-soft)',
+                            cursor: 'pointer',
+                            transition: 'background 150ms ease',
+                        }}
+                    >
+                        {theme === 'dark'
+                            ? <Sun size={15} />
+                            : <Moon size={15} />
+                        }
+                    </button>
                 )}
-            </button>
+            </div>
 
             {open && (
                 <div

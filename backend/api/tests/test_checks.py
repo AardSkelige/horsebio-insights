@@ -13,6 +13,7 @@ from api.services.health_checks import (
     EXPIRE_DAYS, cleanup_expired_exceptions, cleanup_resolved_deviations,
 )
 from api.views.scripts_monitor import HEALTH_CHECK_SCRIPT_ID
+from api.views.checks import _parse_progress
 
 
 class ChecksRunDeleteTests(TestCase):
@@ -166,3 +167,42 @@ class RecentChangesTests(TestCase):
             summary={}, findings=[], finished_at=timezone.now())
         resp = self.client.get(reverse('api:checks_results', args=[HEALTH_CHECK_SCRIPT_ID]))
         self.assertNotIn('recent_changes', resp.json()['results'])
+
+
+class ParseProgressTests(TestCase):
+    def test_none_when_no_markers(self):
+        self.assertIsNone(_parse_progress(''))
+        self.assertIsNone(_parse_progress('просто какой-то текст без разметки\nещё строка'))
+
+    def test_health_check_step_and_item(self):
+        content = (
+            "======================================================================\n"
+            "Проверка 4/13: Инвентаризации (последние 3 мес., порог 5 ед.)\n"
+            "======================================================================\n"
+            "  [ 12/53] Дозатор 24/410 с рифленой юбкой (длина трубки 22 мм)\n"
+            "  [ 40/53] Дозатор 24/410 с рифленой юбкой (длина трубки 22 мм)\n"
+        )
+        p = _parse_progress(content)
+        self.assertEqual(p['step'], {'n': 4, 'total': 13, 'title': 'Инвентаризации (последние 3 мес., порог 5 ед.)'})
+        self.assertEqual(p['item'], {'i': 40, 'total': 53, 'name': 'Дозатор 24/410 с рифленой юбкой (длина трубки 22 мм)'})
+
+    def test_takes_last_step_not_first(self):
+        content = (
+            "Проверка 1/13: Отрицательные остатки\n"
+            "Проверка 2/13: Оприходования\n"
+        )
+        p = _parse_progress(content)
+        self.assertEqual(p['step']['n'], 2)
+        self.assertEqual(p['step']['title'], 'Оприходования')
+
+    def test_generic_numbered_step_for_robot_scripts(self):
+        content = "1. Получаем валюту (RUB)...\n3. Загружаем товары...\n  [ 12] Витамин C VitaPro для лошадей, 1000 г\n"
+        p = _parse_progress(content)
+        self.assertEqual(p['step'], {'n': None, 'total': None, 'title': 'Загружаем товары...'})
+        self.assertEqual(p['item'], {'i': 12, 'total': None, 'name': 'Витамин C VitaPro для лошадей, 1000 г'})
+
+    def test_returns_monitor_status_marker(self):
+        content = "--- Статус: Отменен ---\n"
+        p = _parse_progress(content)
+        self.assertEqual(p['step'], {'n': None, 'total': None, 'title': 'Статус: Отменен'})
+        self.assertIsNone(p['item'])
