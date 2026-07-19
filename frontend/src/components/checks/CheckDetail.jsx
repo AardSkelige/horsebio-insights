@@ -6,14 +6,12 @@ import { checksApi, relTime, fmtDuration, plural } from './checksShared';
 import { SCRIPT_META, AccountBadge } from './ScriptCard';
 import HealthResults from './HealthResults';
 import ExceptionsPanel from './ExceptionsPanel';
-import ScriptLogPanel from './ScriptLogPanel';
 import RunningPanel from './RunningPanel';
 import InfoTip from './InfoTip';
 import './CheckDetail.css';
 
 export default function CheckDetail({ scriptId, initial, onBack }) {
     const isHealth = initial?.is_health ?? (scriptId === 'horsebio_health_check');
-    const isStructured = initial?.structured ?? isHealth;
     const [tab, setTab] = useState('check'); // check | exceptions (только health)
     const [runsData, setRunsData] = useState(null);
     const [running, setRunning] = useState(initial?.is_running || false);
@@ -59,14 +57,20 @@ export default function CheckDetail({ scriptId, initial, onBack }) {
     const meta = SCRIPT_META[scriptId] || {};
     const Icon = meta.Icon || Activity;
 
-    // Основная панель: при запуске — живой лог; иначе последний результат/лог
+    // Основная панель: при запуске — живой лог; иначе структурированный результат.
+    // Пока не пришёл initial (заход по прямой ссылке, список ещё не загружен) —
+    // ждём данные вместо преждевременного рендера.
     let main;
     if (running) {
         main = <RunningPanel scriptId={scriptId} onFinished={loadRuns} />;
-    } else if (isStructured) {
-        main = <HealthResults scriptId={scriptId} runId={null} running={false} />;
+    } else if (!initial) {
+        main = (
+            <div style={{ display: 'flex', gap: 8, color: 'var(--muted)', padding: 30, justifyContent: 'center' }}>
+                <Loader2 size={18} className="animate-spin" /> Загрузка…
+            </div>
+        );
     } else {
-        main = <ScriptLogPanel scriptId={scriptId} runId={null} />;
+        main = <HealthResults scriptId={scriptId} runId={null} running={false} />;
     }
 
     return (
