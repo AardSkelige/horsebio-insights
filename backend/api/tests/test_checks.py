@@ -158,7 +158,7 @@ class RecentChangesTests(TestCase):
         self.assertEqual(len(recent), 1)
         objects = [i['object'] for i in recent[0]['items']]
         self.assertEqual(objects, ['Товар А', 'Товар Б'])  # свежие сверху, r3 за окном
-        self.assertRegex(recent[0]['items'][0]['detail'], r'^\d{2}\.\d{2} · ')
+        self.assertRegex(recent[0]['items'][0]['detail'], r'^проверка от \d{2}\.\d{2} · ')
 
     def test_health_check_has_no_recent_changes(self):
         CheckRunResult.objects.create(

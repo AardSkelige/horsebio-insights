@@ -172,7 +172,9 @@ def _recent_changes(script_id):
                 seen.add(dedup)
                 merged[key]['items'].append({
                     **it,
-                    'detail': f"{day} · {it.get('detail', '')}" if day else it.get('detail', ''),
+                    # Подписываем явно: это дата запуска, в котором находка встретилась
+                    # последний раз, а не дата самого события (заказа, документа и т.п.)
+                    'detail': f"проверка от {day} · {it.get('detail', '')}" if day else it.get('detail', ''),
                 })
     out = []
     _rank = {'critical': 3, 'important': 2, 'warning': 1}

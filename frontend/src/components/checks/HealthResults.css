@@ -1,8 +1,17 @@
 .checks-stats-row {
-    display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+    display: flex;
+    flex-wrap: wrap;
     gap: 12px;
     margin-bottom: 18px;
+}
+
+/* На узких экранах flex-wrap ломается по-разному в зависимости от длины подписи
+   (два тайла то встают рядом, то нет) — на мобильном фиксируем ровную сетку 2 в ряд. */
+@media (max-width: 640px) {
+    .checks-stats-row {
+        display: grid;
+        grid-template-columns: repeat(2, 1fr);
+    }
 }
 
 .finding-row {
