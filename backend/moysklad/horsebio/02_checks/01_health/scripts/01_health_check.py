@@ -343,7 +343,10 @@ class CostHealthCheck(DocumentChecksMixin, PriceChecksMixin, ReportingMixin):
     def check_store(self, store_id, store_name):
         """Проверить все товары на складе"""
 
-        self._section_header(f"Склад: {store_name}")
+        # Тут же, за один проход по товарам склада, разбираются два разных
+        # чек-листа: FIFO-себестоимость и цены оприходований — назвать явно,
+        # иначе в панели "выполняется" видно только техническое "Склад: X"
+        self._section_header(f"FIFO и цены приёмок — {store_name}")
 
         # Получаем все товары с остатками
         rows = self.h._get_all_pages("/report/stock/all", {
