@@ -100,7 +100,7 @@ StatusLine.propTypes = { script: PropTypes.object.isRequired };
 export function AccountBadge({ account }) {
     return (
         <span style={{
-            fontSize: 10.5, fontWeight: 700, letterSpacing: '0.04em', color: 'var(--muted)',
+            fontFamily: 'var(--sans)', fontSize: 10.5, fontWeight: 700, letterSpacing: '0.04em', color: 'var(--muted)',
             padding: '1px 7px', borderRadius: 6, background: 'var(--surface-soft)',
             textTransform: 'uppercase', whiteSpace: 'nowrap', flexShrink: 0,
         }}>{account}</span>

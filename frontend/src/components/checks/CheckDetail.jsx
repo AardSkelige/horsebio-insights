@@ -9,6 +9,7 @@ import ExceptionsPanel from './ExceptionsPanel';
 import ScriptLogPanel from './ScriptLogPanel';
 import RunningPanel from './RunningPanel';
 import InfoTip from './InfoTip';
+import './CheckDetail.css';
 
 export default function CheckDetail({ scriptId, initial, onBack }) {
     const isHealth = initial?.is_health ?? (scriptId === 'horsebio_health_check');
@@ -75,29 +76,31 @@ export default function CheckDetail({ scriptId, initial, onBack }) {
             </button>
 
             {/* Шапка — та же строка, что на главной странице проверок */}
-            <div style={{ display: 'flex', alignItems: 'flex-start', gap: 12, marginBottom: 20 }}>
-                <Icon size={20} style={{ color: 'var(--muted)', flexShrink: 0, marginTop: 4 }} />
-                <div style={{ minWidth: 0, flex: 1 }}>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: 9, flexWrap: 'wrap', fontFamily: 'var(--serif)', fontSize: 24, fontWeight: 600, color: 'var(--ink)', lineHeight: 1.15 }}>
-                        {initial?.name || scriptId}
-                        {initial?.account && <AccountBadge account={initial.account} />}
-                        {meta.hint && <InfoTip text={meta.hint} width={310} />}
-                    </div>
-                    {meta.what && (
-                        <div style={{ fontSize: 12.5, color: 'var(--muted)', marginTop: 5, lineHeight: 1.5 }}>
-                            <div><b style={{ color: 'var(--body)', fontWeight: 600 }}>Что проверяем:</b> {meta.what}</div>
-                            <div><b style={{ color: 'var(--body)', fontWeight: 600 }}>Как:</b> {meta.how}</div>
+            <div className="check-detail__header">
+                <div className="check-detail__title-group">
+                    <Icon size={20} style={{ color: 'var(--muted)', flexShrink: 0, marginTop: 4 }} />
+                    <div style={{ minWidth: 0, flex: 1 }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 9, flexWrap: 'wrap', fontFamily: 'var(--serif)', fontSize: 24, fontWeight: 600, color: 'var(--ink)', lineHeight: 1.15 }}>
+                            {initial?.name || scriptId}
+                            {initial?.account && <AccountBadge account={initial.account} />}
+                            {meta.hint && <InfoTip text={meta.hint} width={310} />}
                         </div>
-                    )}
-                    <div style={{ display: 'flex', gap: 14, flexWrap: 'wrap', fontSize: 12, color: 'var(--muted-soft)', marginTop: 6 }}>
-                        <RunSummary running={running} latest={latest} />
-                        {initial?.schedule && <span>{initial.schedule.toLowerCase()}</span>}
+                        {meta.what && (
+                            <div style={{ fontSize: 12.5, color: 'var(--muted)', marginTop: 5, lineHeight: 1.5 }}>
+                                <div><b style={{ color: 'var(--body)', fontWeight: 600 }}>Что проверяем:</b> {meta.what}</div>
+                                <div><b style={{ color: 'var(--body)', fontWeight: 600 }}>Как:</b> {meta.how}</div>
+                            </div>
+                        )}
+                        <div style={{ display: 'flex', gap: 14, flexWrap: 'wrap', fontSize: 12, color: 'var(--muted-soft)', marginTop: 6 }}>
+                            <RunSummary running={running} latest={latest} />
+                            {initial?.schedule && <span>{initial.schedule.toLowerCase()}</span>}
+                        </div>
                     </div>
                 </div>
                 {running ? (
-                    <button onClick={handleStop} disabled={busy} style={btnStyle('var(--error)')}>{busy ? <Loader2 size={15} className="animate-spin" /> : <Square size={15} />} Остановить</button>
+                    <button className="check-detail__run-btn" onClick={handleStop} disabled={busy} style={btnStyle('var(--error)')}>{busy ? <Loader2 size={15} className="animate-spin" /> : <Square size={15} />} Остановить</button>
                 ) : (
-                    <button onClick={handleRun} disabled={busy} style={btnStyle('var(--primary)')}>{busy ? <Loader2 size={15} className="animate-spin" /> : <Play size={15} />} Запустить</button>
+                    <button className="check-detail__run-btn" onClick={handleRun} disabled={busy} style={btnStyle('var(--primary)')}>{busy ? <Loader2 size={15} className="animate-spin" /> : <Play size={15} />} Запустить</button>
                 )}
             </div>
 

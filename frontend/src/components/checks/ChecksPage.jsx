@@ -1,8 +1,8 @@
 import { useState, useEffect, useCallback } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
-import { Loader2, ShieldCheck, PackageOpen, ChevronRight, CheckCircle, AlertCircle } from 'lucide-react';
+import { Loader2, ShieldCheck, PackageOpen, ChevronRight, CheckCircle, AlertCircle, Clock } from 'lucide-react';
 import PropTypes from 'prop-types';
-import { checksApi, plural, SEV, PENDING_RETURNS_HINT } from './checksShared';
+import { checksApi, plural, relTime, SEV, PENDING_RETURNS_HINT } from './checksShared';
 import ScriptCard, { AccountBadge, StatusBadge } from './ScriptCard';
 import CheckDetail from './CheckDetail';
 import PendingReturnsDetail from './PendingReturnsDetail';
@@ -13,7 +13,7 @@ const TOPIC_ORDER = ['Себестоимость', 'Возвраты', 'Опла
 
 /** Строка-индикатор «Возвраты в пути» — самостоятельный пункт в теме «Возвраты»:
  *  робот создаёт черновики, а этот пункт следит, сколько их ждёт товара и как долго. */
-function PendingReturnsRow({ pending, onOpen }) {
+function PendingReturnsRow({ pending, lastRun, onOpen }) {
     const { overdue = 0, warn_days = 30 } = pending;
     return (
         <div
@@ -21,6 +21,7 @@ function PendingReturnsRow({ pending, onOpen }) {
             tabIndex={0}
             onClick={onOpen}
             onKeyDown={(e) => { if (e.key === 'Enter') onOpen(); }}
+            className="checks-script-card"
             style={{
                 width: '100%', textAlign: 'left',
                 background: 'var(--surface-card)', border: '1px solid var(--hairline)',
@@ -30,8 +31,8 @@ function PendingReturnsRow({ pending, onOpen }) {
             onMouseEnter={(e) => { e.currentTarget.style.background = 'var(--surface-cream-strong)'; e.currentTarget.style.borderColor = 'var(--primary)'; }}
             onMouseLeave={(e) => { e.currentTarget.style.background = 'var(--surface-card)'; e.currentTarget.style.borderColor = 'var(--hairline)'; }}
         >
-            <div style={{ display: 'flex', alignItems: 'center', gap: 14 }}>
-                <div style={{ minWidth: 0, flex: 1 }}>
+            <div className="checks-script-card__row">
+                <div className="checks-script-card__content">
                     <div style={{ display: 'flex', alignItems: 'center', gap: 7, fontSize: 14.5, fontWeight: 600, color: 'var(--ink)', lineHeight: 1.3 }}>
                         <PackageOpen size={16} style={{ color: 'var(--muted)', flexShrink: 0 }} />
                         Возвраты в пути
@@ -43,19 +44,29 @@ function PendingReturnsRow({ pending, onOpen }) {
                         <div><b style={{ color: 'var(--body)', fontWeight: 600 }}>Как:</b> считаем возраст и сумму каждого непроведённого возврата</div>
                     </div>
                 </div>
-                {overdue > 0 ? (
-                    <StatusBadge color={SEV.warning.color} icon={AlertCircle}>
-                        {overdue} {plural(overdue, 'проблема', 'проблемы', 'проблем')}
-                    </StatusBadge>
-                ) : (
-                    <StatusBadge color="var(--success)" icon={CheckCircle}>ОК</StatusBadge>
-                )}
-                <ChevronRight size={17} style={{ color: 'var(--muted-soft)', flexShrink: 0 }} />
+                <div className="checks-script-card__meta">
+                    <div className="checks-script-card__status">
+                        {overdue > 0 ? (
+                            <StatusBadge color={SEV.warning.color} icon={AlertCircle}>
+                                {overdue} {plural(overdue, 'проблема', 'проблемы', 'проблем')}
+                            </StatusBadge>
+                        ) : (
+                            <StatusBadge color="var(--success)" icon={CheckCircle}>ОК</StatusBadge>
+                        )}
+                    </div>
+                    {lastRun?.finished_at && (
+                        <span className="checks-script-card__timing">
+                            <Clock size={13} />
+                            {relTime(lastRun.finished_at)}
+                        </span>
+                    )}
+                </div>
+                <ChevronRight className="checks-script-card__arrow" size={17} />
             </div>
         </div>
     );
 }
-PendingReturnsRow.propTypes = { pending: PropTypes.object.isRequired, onOpen: PropTypes.func };
+PendingReturnsRow.propTypes = { pending: PropTypes.object.isRequired, lastRun: PropTypes.object, onOpen: PropTypes.func };
 
 export default function ChecksPage() {
     const [scripts, setScripts] = useState(null);
@@ -92,7 +103,8 @@ export default function ChecksPage() {
 
     // Индикатор возвратов — из сводки последнего запуска хелс-чека;
     // встроен в карточку робота возвратов (horsebio_returns)
-    const pendingReturns = (scripts || []).find((s) => s.is_health)?.summary?.pending_returns;
+    const healthScript = (scripts || []).find((s) => s.is_health);
+    const pendingReturns = healthScript?.summary?.pending_returns;
 
     // Группировка по темам (аккаунт — бейдж в строке, не секция)
     const topics = [];
@@ -148,6 +160,7 @@ export default function ChecksPage() {
                         {t.topic === 'Возвраты' && pendingReturns && (
                             <PendingReturnsRow
                                 pending={pendingReturns}
+                                lastRun={healthScript?.last_run}
                                 onOpen={() => navigate('/checks/pending-returns')}
                             />
                         )}

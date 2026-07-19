@@ -3,6 +3,7 @@ import PropTypes from 'prop-types';
 import { ExternalLink, Plus, Check, Undo2, Loader2, ShieldCheck, ChevronRight } from 'lucide-react';
 import { checksApi, SEV, sevOf, msLink, relTime } from './checksShared';
 import InfoTip from './InfoTip';
+import './HealthResults.css';
 
 // Подсказки по неочевидным категориям и стат-карточкам
 const CAT_HINTS = {
@@ -35,7 +36,7 @@ function StatsRow({ stats, onJump }) {
     const visible = stats.filter((s) => s.value > 0);
     if (visible.length === 0) return null;
     return (
-        <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap', marginBottom: 18 }}>
+        <div className="checks-stats-row">
             {visible.map((s, i) => {
                 const color = TONE[s.tone] || TONE.neutral;
                 const clickable = Boolean(s.cat);
@@ -268,11 +269,7 @@ function FindingRow({ cat, item, excepted, prevReason, onAdded }) {
 
     // Табличная строка: объект | детали | действия
     return (
-        <div style={{
-            display: 'grid', gridTemplateColumns: 'minmax(120px, 200px) minmax(0, 1fr) auto',
-            alignItems: 'start', gap: 12,
-            padding: '9px 14px', borderTop: '1px solid var(--hairline-soft)', background: 'var(--canvas)',
-        }}>
+        <div className="finding-row">
             <div style={{ display: 'flex', gap: 8, alignItems: 'flex-start', minWidth: 0 }}>
                 <span style={{ width: 7, height: 7, borderRadius: 999, background: c.color, marginTop: 5, flexShrink: 0 }} />
                 <span style={{ fontSize: 13, fontWeight: 600, color: 'var(--ink)', lineHeight: 1.4, minWidth: 0 }}>{item.object}</span>
@@ -286,7 +283,7 @@ function FindingRow({ cat, item, excepted, prevReason, onAdded }) {
                     </div>
                 )}
             </div>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexShrink: 0 }}>
+            <div className="finding-row__actions">
                 {link && (
                     <a href={link} target="_blank" rel="noreferrer" style={linkBtn('var(--muted)')}>
                         <ExternalLink size={13} /> МС
