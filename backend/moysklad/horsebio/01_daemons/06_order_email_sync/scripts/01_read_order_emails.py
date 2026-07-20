@@ -308,10 +308,13 @@ def _export_results(counts, state, path):
         counts.get(k, 0) for k in ("recorded", "already_processed", "no_hb_block", "no_html", "error")
     )
     stats = [
-        {"label": "Новых снимков", "value": rec, "tone": "ok" if rec else "neutral"},
-        {"label": "Уже обработаны", "value": dup, "tone": "neutral"},
-        {"label": "Без HB_ORDER_DATA", "value": nb, "tone": "warning" if nb else "neutral"},
-        {"label": "Ошибки", "value": er, "tone": "critical" if er else "neutral"},
+        {"label": "Новых заказов распознано", "value": rec, "tone": "ok" if rec else "neutral"},
+        {"label": "Уже видели раньше", "value": dup, "tone": "neutral"},
+        # Не проблема — это письма от того же адреса, но не про заказ (например,
+        # уведомление о модерации комментария на сайте). tone нейтральный специально,
+        # чтобы не пугать оранжевым цветом то, что нормально происходит каждый прогон.
+        {"label": "Другие письма (не про заказ)", "value": nb + nh, "tone": "neutral"},
+        {"label": "Ошибки разбора", "value": er, "tone": "critical" if er else "neutral"},
     ]
 
     recorded_orders = []
@@ -337,7 +340,9 @@ def _export_results(counts, state, path):
 
     payload = {
         "generated_at": _dt.now().isoformat(timespec="seconds"), "params": {},
-        "summary": {"critical": er, "important": nb, "warnings": 0, "ok": rec, "stats": stats},
+        # important/warnings оставляем 0: "другие письма" — не проблема, а норма,
+        # не должна зажигать оранжевый бейдж "N проблема" на общем экране /checks
+        "summary": {"critical": er, "important": 0, "warnings": 0, "ok": rec, "stats": stats},
         "categories": categories,
     }
     with open(path, "w", encoding="utf-8") as f:
