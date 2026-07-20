@@ -80,6 +80,28 @@ SCRIPTS_CONFIG = [
         'args': [],
         'structured': True,
     },
+    {
+        'id': 'horsebio_order_email_sync',
+        'topic': 'Заказы сайта',
+        'name': 'Чтение писем о заказах',
+        'account': 'HorseBio',
+        'schedule': 'Каждые 5 мин',
+        'description': 'Читает info@horse-bio.ru и разбирает блок HB_ORDER_DATA из писем-уведомлений о заказах (МойСклад не трогает)',
+        'script': '/app/moysklad/horsebio/01_daemons/06_order_email_sync/scripts/01_read_order_emails.py',
+        'args': [],
+        'structured': True,
+    },
+    {
+        'id': 'horsebio_order_email_create',
+        'topic': 'Заказы сайта',
+        'name': 'Заведение заказов в МойСклад',
+        'account': 'HorseBio',
+        'schedule': 'Каждые 5 мин',
+        'description': 'Черновик заказа на новый email-заказ, оплата и проведение — на письмо об оплате',
+        'script': '/app/moysklad/horsebio/01_daemons/06_order_email_sync/scripts/02_create_orders.py',
+        'args': [],
+        'structured': True,
+    },
 ]
 
 SCRIPTS_BY_ID = {s['id']: s for s in SCRIPTS_CONFIG}

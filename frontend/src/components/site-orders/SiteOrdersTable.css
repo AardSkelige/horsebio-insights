@@ -1,0 +1,173 @@
+/* table-layout: fixed принципиально важен — при auto-раскладке браузер учитывает
+   intrinsic-ширину даже abs-positioned потомков (тултип), из-за чего строка
+   с самым широким тултипом схлопывается/съезжает. Проверено на макете. */
+.site-orders-table {
+    width: 100%;
+    border-collapse: collapse;
+    table-layout: fixed;
+}
+
+.site-orders-table th {
+    text-align: left;
+    padding: 9px 14px;
+    font-family: var(--sans);
+    font-size: 10.5px;
+    font-weight: 600;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    color: var(--muted);
+    border-bottom: 1px solid var(--hairline);
+    white-space: nowrap;
+    background: var(--surface-soft);
+}
+
+.site-orders-table thead tr:first-child th:first-child { border-top-left-radius: 10px; }
+.site-orders-table thead tr:first-child th:last-child { border-top-right-radius: 10px; }
+
+.site-orders-table th.sortable {
+    cursor: pointer;
+    user-select: none;
+}
+.site-orders-table th.sortable:hover { color: var(--ink); }
+.site-orders-table th.sortable:focus-visible { outline: 2px solid var(--primary); outline-offset: -2px; }
+
+.site-orders-table .sort-arrow {
+    display: inline-block;
+    width: 9px;
+    margin-left: 3px;
+    opacity: .35;
+}
+.site-orders-table .sort-arrow::after { content: "↕"; }
+.site-orders-table th.sort-asc .sort-arrow,
+.site-orders-table th.sort-desc .sort-arrow { opacity: 1; color: var(--primary); }
+.site-orders-table th.sort-asc .sort-arrow::after { content: "↑"; }
+.site-orders-table th.sort-desc .sort-arrow::after { content: "↓"; }
+
+.site-orders-table td {
+    padding: 10px 14px;
+    font-size: 13px;
+    color: var(--ink);
+    border-bottom: 1px solid var(--hairline-soft);
+    vertical-align: middle;
+}
+.site-orders-table tbody tr:last-child td { border-bottom: none; }
+.site-orders-table tbody tr:hover { background: var(--surface-soft); }
+.site-orders-table tbody tr.err-row {
+    box-shadow: inset 3px 0 0 var(--error);
+    background: color-mix(in srgb, var(--error) 4%, transparent);
+}
+.site-orders-table tbody tr.cancelled-row td { color: var(--muted-soft); }
+
+.site-orders-table .contact {
+    display: block;
+    font-size: 11px;
+    color: var(--muted);
+    font-family: var(--mono);
+    margin-top: 1px;
+}
+.site-orders-table .mono { font-family: var(--mono); font-size: 12px; }
+.site-orders-table .num-cell {
+    font-family: var(--mono);
+    font-size: 12.5px;
+    text-align: right;
+    font-variant-numeric: tabular-nums;
+    white-space: nowrap;
+}
+.site-orders-table .actions-cell { text-align: right; white-space: nowrap; }
+.site-orders-table .actions-cell .icon-btn { margin-left: 4px; }
+.site-orders-table .actions-cell .icon-btn:first-child { margin-left: 0; }
+
+.site-orders-table .icon-btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 26px;
+    height: 26px;
+    border-radius: 7px;
+    border: 1px solid var(--hairline);
+    background: var(--canvas);
+    color: var(--muted);
+    text-decoration: none;
+    flex-shrink: 0;
+    transition: color 120ms ease, border-color 120ms ease;
+}
+.site-orders-table .icon-btn:hover { color: var(--primary); border-color: var(--primary); }
+.site-orders-table .icon-btn:focus-visible { outline: 2px solid var(--primary); outline-offset: 2px; }
+.site-orders-table .icon-btn.disabled { opacity: .3; pointer-events: none; }
+
+/* Статус-чип с тултипом */
+.status-wrap { position: relative; display: inline-block; }
+.status-wrap:focus-within .tip, .status-wrap:hover .tip { opacity: 1; visibility: visible; }
+
+.chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 4px 10px;
+    border-radius: 20px;
+    font-size: 11.5px;
+    font-weight: 500;
+    white-space: nowrap;
+    cursor: default;
+}
+.chip .cdot { width: 6px; height: 6px; border-radius: 50%; flex-shrink: 0; }
+.chip.warn { background: var(--warning-bg, color-mix(in srgb, var(--warning) 12%, transparent)); color: var(--warning); }
+.chip.warn .cdot { background: var(--warning); }
+.chip.ok { background: var(--success-bg, color-mix(in srgb, var(--success) 12%, transparent)); color: var(--success); }
+.chip.ok .cdot { background: var(--success); }
+.chip.err { background: var(--error-bg, color-mix(in srgb, var(--error) 10%, transparent)); color: var(--error); }
+.chip.err .cdot { background: var(--error); }
+.chip.cancelled { background: var(--surface-card); color: var(--muted); }
+.chip.cancelled .cdot { background: var(--muted-soft); }
+.chip.processing { background: var(--surface-card); color: var(--muted); }
+.chip.processing .cdot { background: var(--muted-soft); }
+
+/* Тултип — фиксированно тёмный НЕЗАВИСИМО от темы страницы (как большинство
+   продуктовых интерфейсов): var(--ink)/var(--canvas) инвертируются в тёмной
+   теме, из-за чего тултип превращался в светлую плашку на тёмном фоне. */
+.tip {
+    position: absolute;
+    bottom: calc(100% + 10px);
+    top: auto;
+    left: 0;
+    background: #211f1c;
+    color: #f2efe9;
+    font-family: var(--sans);
+    font-size: 12.5px;
+    line-height: 1.6;
+    padding: 12px 15px;
+    border-radius: 9px;
+    white-space: normal;
+    width: max-content;
+    max-width: 300px;
+    border: 1px solid rgba(255, 255, 255, .08);
+    opacity: 0;
+    visibility: hidden;
+    transition: opacity 140ms ease, transform 140ms ease;
+    transform: translateY(3px);
+    pointer-events: none;
+    z-index: 40;
+    box-shadow: 0 12px 28px rgba(0, 0, 0, .35), 0 2px 8px rgba(0, 0, 0, .25);
+}
+.status-wrap:hover .tip, .status-wrap:focus-within .tip { transform: translateY(0); }
+.tip::before {
+    content: "";
+    position: absolute;
+    top: 100%;
+    bottom: auto;
+    left: 16px;
+    border: 6px solid transparent;
+    border-top-color: #211f1c;
+}
+.tip .step-line { display: flex; gap: 9px; padding: 3px 0; }
+.tip .step-line + .step-line { border-top: 1px solid rgba(255, 255, 255, .07); }
+.tip .step-line .m {
+    font-family: var(--mono);
+    font-size: 10.5px;
+    color: #8f8b83;
+    flex-shrink: 0;
+    min-width: 40px;
+    padding-top: 1px;
+}
+
+/* Мобильная раскладка — карточки вместо таблицы (см. SiteOrdersTable.jsx isMobile) */

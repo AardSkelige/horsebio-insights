@@ -1,7 +1,7 @@
 import {
     Home, Package, Users, Layers, Archive, Truck,
     BarChart2, TrendingUp, PackageCheck, PieChart, ShoppingCart, ShoppingBag,
-    DollarSign, Factory, FileSpreadsheet, ClipboardList, Activity, Clock, ShieldCheck,
+    DollarSign, Factory, FileSpreadsheet, ClipboardList, Activity, Clock, ShieldCheck, Mail,
 } from 'lucide-react';
 
 const NAV_GROUPS = [
@@ -17,6 +17,12 @@ const NAV_GROUPS = [
             { path: '/shipments/counterparties', label: 'Покупатели',   icon: Users, description: 'Клиенты и их покупки' },
             { path: '/shipments/materials',      label: 'Материалы',    icon: Layers, description: 'Расход материалов в продажах' },
             { path: '/deadlines',                label: 'Сроки оплаты', icon: Clock, description: 'Дебиторка с отсрочкой платежа' },
+        ],
+    },
+    {
+        label: 'Заказы сайта',
+        items: [
+            { path: '/site-orders', label: 'Заказы сайта', icon: Mail, description: 'Заказы с horse-bio.ru и их путь в МойСклад' },
         ],
     },
     {
