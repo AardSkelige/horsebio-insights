@@ -15,6 +15,7 @@ from collections import defaultdict
 from django.http import JsonResponse
 from django.views.decorators.csrf import csrf_exempt
 from django.views.decorators.http import require_http_methods
+from django.utils import timezone as dj_timezone
 
 from api.models import HealthCheckException, CheckRunResult
 from .scripts_monitor import (
@@ -50,7 +51,7 @@ def _serialize_health_run(r, prev):
     summary = r.summary or {}
     out = {
         'run_id': r.run_id,
-        'finished_at': r.finished_at.strftime('%Y-%m-%d %H:%M:%S') if r.finished_at else '',
+        'finished_at': dj_timezone.localtime(r.finished_at).strftime('%Y-%m-%d %H:%M:%S') if r.finished_at else '',
         'exit_code': r.exit_code,
         'duration_sec': r.duration_sec,
         'summary': {k: summary.get(k, 0) for k in ('critical', 'important', 'warnings', 'ok')},
@@ -77,7 +78,7 @@ def _serialize_exception(e):
         'label': e.label,
         'reason': e.reason,
         'extra': e.extra or {},
-        'created_at': e.created_at.strftime('%Y-%m-%d %H:%M') if e.created_at else '',
+        'created_at': dj_timezone.localtime(e.created_at).strftime('%Y-%m-%d %H:%M') if e.created_at else '',
         'created_by': e.created_by.username if e.created_by else None,
     }
 
@@ -157,7 +158,7 @@ def _recent_changes(script_id):
     order = []
     seen = set()
     for r in runs:
-        day = r.finished_at.strftime('%d.%m') if r.finished_at else ''
+        day = dj_timezone.localtime(r.finished_at).strftime('%d.%m') if r.finished_at else ''
         for cat in (r.findings or []):
             key = cat.get('key', '')
             if key not in merged:
@@ -217,7 +218,7 @@ def checks_results(request, script_id):
 
     results = {
         'run_id': crr.run_id,
-        'finished_at': crr.finished_at.strftime('%Y-%m-%d %H:%M:%S') if crr.finished_at else '',
+        'finished_at': dj_timezone.localtime(crr.finished_at).strftime('%Y-%m-%d %H:%M:%S') if crr.finished_at else '',
         'duration_sec': crr.duration_sec,
         'summary': crr.summary or {},
         'categories': crr.findings or [],
