@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useLayoutEffect, useRef } from 'react';
 import PropTypes from 'prop-types';
 import { ArrowLeft, ExternalLink, Loader2, PackageOpen, ChevronRight } from 'lucide-react';
 import { checksApi, relTime, fmtRub, plural, PENDING_RETURNS_HINT } from './checksShared';
@@ -26,6 +26,25 @@ const numStyle = (color, size = 26) => ({
 function AgeStrip({ items }) {
     // Плавающий тултип у курсора (нативный title медленный и не в стиле приложения)
     const [tip, setTip] = useState(null); // {x, y, text}
+    const tipRef = useRef(null);
+
+    // Держим плашку у курсора, но не даём вылезти за край вьюпорта. Ширину меряем
+    // по факту (текст разной длины) в useLayoutEffect — до отрисовки, без мигания.
+    useLayoutEffect(() => {
+        const el = tipRef.current;
+        if (!el || !tip) return;
+        const pad = 8;
+        const w = el.offsetWidth;
+        const h = el.offsetHeight;
+        let left = tip.x + 14;
+        let top = tip.y + 16;
+        if (left + w > window.innerWidth - pad) left = window.innerWidth - w - pad;
+        if (left < pad) left = pad;
+        if (top + h > window.innerHeight - pad) top = tip.y - h - 12; // не влезает снизу — над курсором
+        el.style.left = `${left}px`;
+        el.style.top = `${top}px`;
+    }, [tip]);
+
     const buckets = BUCKETS.map((b) => {
         const inb = items.filter((it) => (it.age_days ?? 0) >= b.from && (it.age_days ?? 0) < b.to);
         return { ...b, count: inb.length, sum: inb.reduce((acc, it) => acc + (it.sum_rub || 0), 0) };
@@ -36,13 +55,8 @@ function AgeStrip({ items }) {
     return (
         <div style={{ marginTop: 18 }}>
             {tip && (
-                <div style={{
-                    position: 'fixed', top: tip.y + 16, zIndex: 50, pointerEvents: 'none',
-                    // У правого края зеркалим влево — иначе nowrap-плашка (последний сегмент)
-                    // уезжает за вьюпорт (позиционирование фиксированное от курсора).
-                    ...(tip.x > window.innerWidth - 260
-                        ? { right: window.innerWidth - tip.x + 14 }
-                        : { left: tip.x + 14 }),
+                <div ref={tipRef} style={{
+                    position: 'fixed', left: tip.x + 14, top: tip.y + 16, zIndex: 50, pointerEvents: 'none',
                     background: 'var(--surface-dark, #262521)', color: 'var(--on-dark, #f5f2ea)',
                     fontSize: 12, fontWeight: 500, lineHeight: 1.4, borderRadius: 9, padding: '7px 11px',
                     boxShadow: '0 6px 22px rgba(0,0,0,0.25)', whiteSpace: 'nowrap',
