@@ -26,7 +26,6 @@ import argparse
 import base64
 import email
 import imaplib
-import json
 import os
 import re
 import sys
@@ -39,7 +38,10 @@ from pathlib import Path
 from dotenv import load_dotenv
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', '..', '..', '_shared'))
-from order_email_utils import build_order_label, build_order_delete_action, format_money
+from order_email_utils import (
+    build_order_label, build_order_delete_action, format_money,
+    state_lock, load_state, save_state,
+)
 
 load_dotenv(Path(__file__).resolve().parents[5] / '.env')
 
@@ -187,23 +189,12 @@ def parse_hb_order_data(html: str) -> dict | None:
 class OrderEmailReader:
     """Читает почту info@horse-bio.ru, разбирает HB_ORDER_DATA, копит state"""
 
-    def __init__(self, dry_run: bool = False):
+    STATE_DEFAULT = {"processed_message_ids": [], "orders": {}}
+
+    def __init__(self, dry_run: bool = False, force: bool = False):
         self.dry_run = dry_run
-        self.state = self._load_state()
-
-    def _load_state(self) -> dict:
-        if STATE_FILE.exists():
-            return json.loads(STATE_FILE.read_text())
-        return {
-            "processed_message_ids": [],
-            "orders": {},
-        }
-
-    def _save_state(self):
-        STATE_FILE.parent.mkdir(parents=True, exist_ok=True)
-        STATE_FILE.write_text(
-            json.dumps(self.state, indent=2, ensure_ascii=False, default=str)
-        )
+        self.force = force
+        self.state = dict(self.STATE_DEFAULT)  # переписывается заново в run_once() под локом
 
     def _connect(self) -> imaplib.IMAP4_SSL:
         if not (IMAP_HOST and IMAP_USER and IMAP_PASSWORD):
@@ -315,34 +306,44 @@ class OrderEmailReader:
             "error": 0,
         }
 
-        conn = self._connect()
-        try:
-            for folder in ORDER_FOLDERS:
-                if not self._select_folder(conn, folder):
-                    print(f"  WARNING: папка «{folder}» не найдена в ящике — пропускаю")
-                    continue
+        # Лок держим на весь цикл load→process→save — иначе 02_create_orders.py,
+        # читающий и переписывающий тот же файл параллельно, может затереть то,
+        # что мы вот-вот сюда запишем (см. state_lock() в order_email_utils.py)
+        with state_lock(STATE_FILE):
+            if self.force:
+                self.state = dict(self.STATE_DEFAULT)
+                self.force = False
+            else:
+                self.state = load_state(STATE_FILE, self.STATE_DEFAULT)
 
-                uids = self._search_uids(conn)
-                print(f"Папка «{folder}»: писем от {NOTIFICATION_SENDER} — {len(uids)}")
+            conn = self._connect()
+            try:
+                for folder in ORDER_FOLDERS:
+                    if not self._select_folder(conn, folder):
+                        print(f"  WARNING: папка «{folder}» не найдена в ящике — пропускаю")
+                        continue
 
-                for uid in uids:
-                    try:
-                        msg = self._fetch_message(conn, uid)
-                        if msg is None:
-                            print(f"  ERROR: не удалось получить письмо uid={uid.decode()}")
+                    uids = self._search_uids(conn)
+                    print(f"Папка «{folder}»: писем от {NOTIFICATION_SENDER} — {len(uids)}")
+
+                    for uid in uids:
+                        try:
+                            msg = self._fetch_message(conn, uid)
+                            if msg is None:
+                                print(f"  ERROR: не удалось получить письмо uid={uid.decode()}")
+                                counts["error"] += 1
+                                continue
+                            result = self._process_message(msg, uid)
+                            counts[result] += 1
+                        except Exception as e:
+                            print(f"  ERROR: письмо uid={uid.decode()} — {e}")
                             counts["error"] += 1
-                            continue
-                        result = self._process_message(msg, uid)
-                        counts[result] += 1
-                    except Exception as e:
-                        print(f"  ERROR: письмо uid={uid.decode()} — {e}")
-                        counts["error"] += 1
-        finally:
-            conn.logout()
+            finally:
+                conn.logout()
 
-        if not self.dry_run:
-            self.state["last_checked_date"] = datetime.now().strftime("%Y-%m-%d")
-            self._save_state()
+            if not self.dry_run:
+                self.state["last_checked_date"] = datetime.now().strftime("%Y-%m-%d")
+                save_state(STATE_FILE, self.state)
 
         total_orders = len(self.state["orders"])
         paid_orders = sum(
@@ -438,11 +439,10 @@ def main():
                         help="Путь для структурированного JSON находок (для страницы /checks)")
     args = parser.parse_args()
 
-    reader = OrderEmailReader(dry_run=args.dry_run)
+    reader = OrderEmailReader(dry_run=args.dry_run, force=args.force)
 
     if args.force:
         print("[--force] Сброс state, перечитываем всю папку заново")
-        reader.state = {"processed_message_ids": [], "orders": {}}
 
     if args.daemon:
         print(f"{'='*60}")

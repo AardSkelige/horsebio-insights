@@ -7,6 +7,51 @@
 - backend/api/views/site_orders.py (страница «Заказы сайта», read-only)
 """
 
+import fcntl
+import json
+import os
+from contextlib import contextmanager
+from pathlib import Path
+
+
+@contextmanager
+def state_lock(state_file: Path):
+    """Эксклюзивная блокировка на весь цикл load→process→save state-файла.
+
+    01_read_order_emails.py и 02_create_orders.py — два независимых процесса,
+    оба каждые 5 минут читают один и тот же .order_email_state.json, правят
+    и переписывают его целиком. Без лока при неудачном стечении времени тот,
+    кто сохраняет вторым, затирает файл своей (более старой) копией — и только
+    что записанный другим процессом заказ бесследно исчезает, хотя JSON
+    остаётся валидным (см. инцидент с заказом 532598916, 21.07.2026). Лок
+    держит файл занятым на всё время работы одного процесса — второй просто
+    ждёт своей очереди перед чтением.
+    """
+    state_file.parent.mkdir(parents=True, exist_ok=True)
+    lock_path = state_file.with_name(state_file.name + ".lock")
+    with open(lock_path, "w") as lock_fh:
+        fcntl.flock(lock_fh.fileno(), fcntl.LOCK_EX)
+        try:
+            yield
+        finally:
+            fcntl.flock(lock_fh.fileno(), fcntl.LOCK_UN)
+
+
+def load_state(state_file: Path, default: dict) -> dict:
+    """Вызывать только внутри state_lock()."""
+    if state_file.exists():
+        return json.loads(state_file.read_text())
+    return dict(default)
+
+
+def save_state(state_file: Path, state: dict):
+    """Пишем во временный файл рядом и атомарно переименовываем (os.replace) —
+    так процесс, упавший на середине записи, не оставит битый или пустой JSON.
+    Вызывать только внутри state_lock()."""
+    tmp_path = state_file.with_name(f"{state_file.name}.tmp-{os.getpid()}")
+    tmp_path.write_text(json.dumps(state, indent=2, ensure_ascii=False, default=str))
+    os.replace(tmp_path, state_file)
+
 
 def build_customer_name(latest: dict) -> str:
     """Собрать ФИО покупателя из полей письма (field:familia/fio/otcestvo)"""

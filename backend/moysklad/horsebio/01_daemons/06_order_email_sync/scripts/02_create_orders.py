@@ -26,7 +26,6 @@
 """
 
 import argparse
-import json
 import re
 import sys
 import time
@@ -36,7 +35,10 @@ from pathlib import Path
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', '..', '..', '_shared'))
 from api_client import ProductionHelper, MOYSKLAD_TOKEN, BASE_URL
-from order_email_utils import build_customer_name, build_order_label, build_order_delete_action
+from order_email_utils import (
+    build_customer_name, build_order_label, build_order_delete_action,
+    state_lock, load_state, save_state,
+)
 
 STATE_FILE = Path(__file__).parent.parent / "data" / ".order_email_state.json"
 
@@ -121,19 +123,7 @@ class OrderCreator:
     def __init__(self, helper: ProductionHelper, dry_run: bool = False):
         self.helper = helper
         self.dry_run = dry_run
-        self.state = self._load_state()
-
-    def _load_state(self) -> dict:
-        if not STATE_FILE.exists():
-            raise FileNotFoundError(
-                f"Нет state-файла {STATE_FILE} — сначала запустите 01_read_order_emails.py"
-            )
-        return json.loads(STATE_FILE.read_text())
-
-    def _save_state(self):
-        STATE_FILE.write_text(
-            json.dumps(self.state, indent=2, ensure_ascii=False, default=str)
-        )
+        self.state = {}  # переписывается заново в run_once() под локом
 
     # ─── Контрагент ────────────────────────────────────────────────────────
 
@@ -354,81 +344,91 @@ class OrderCreator:
 
         counts = {"orders_created": 0, "payments_created": 0, "orders_cancelled": 0, "errors": 0}
 
-        for order_id, order in self.state.get("orders", {}).items():
-            latest = order.get("latest")
-            if not latest:
-                continue
-            ms = order.setdefault("ms", {})
+        # Лок держим на весь цикл load→process→save — иначе 01_read_order_emails.py,
+        # читающий и переписывающий тот же файл параллельно, может затереть заказы,
+        # которые мы вот-вот сюда запишем (см. state_lock() в order_email_utils.py)
+        with state_lock(STATE_FILE):
+            if not STATE_FILE.exists():
+                raise FileNotFoundError(
+                    f"Нет state-файла {STATE_FILE} — сначала запустите 01_read_order_emails.py"
+                )
+            self.state = load_state(STATE_FILE, {})
 
-            # 24ч без оплаты — удаляем черновик (только если ещё не отменён и не оплачен)
-            if ms.get("customerorder_id") and not ms.get("cancelled_at") and not latest.get("paid"):
-                before = ms.get("cancelled_at")
-                try:
-                    self._maybe_cancel_stale_draft(order_id, ms)
-                except Exception as e:
-                    print(f"    ERROR: автоотмена заказа {order_id} упала: {e}")
-                    ms["last_error"] = str(e)
-                    ms["last_error_at"] = datetime.now().isoformat()
-                    counts["errors"] += 1
-                if ms.get("cancelled_at") and not before:
-                    counts["orders_cancelled"] += 1
-
-            # Оплата пришла уже ПОСЛЕ автоотмены — прошлый черновик удалён, заводим заказ заново с нуля
-            if ms.get("cancelled_at") and latest.get("paid") and not ms.get("recreated_after_cancel"):
-                print(f"  Заказ {order_id}: оплата пришла после автоотмены — завожу заново")
-                ms["recreated_after_cancel"] = True
-                for key in ("customerorder_id", "customerorder_meta", "customerorder_name",
-                            "last_description_written", "cancelled_at", "cancel_reason"):
-                    ms.pop(key, None)
-
-            if "customerorder_id" not in ms:
-                print(f"  Заказ {order_id}:")
-                try:
-                    result = self._create_draft_order(order_id, latest)
-                except Exception as e:
-                    print(f"    ERROR: не удалось создать заказ {order_id}: {e}")
-                    ms["last_error"] = str(e)
-                    ms["last_error_at"] = datetime.now().isoformat()
-                    counts["errors"] += 1
+            for order_id, order in self.state.get("orders", {}).items():
+                latest = order.get("latest")
+                if not latest:
                     continue
+                ms = order.setdefault("ms", {})
 
-                if not self.dry_run:
-                    ms["customerorder_id"] = result["id"]
-                    ms["customerorder_name"] = result.get("name")
-                    ms["customerorder_meta"] = result["meta"]
-                    ms["created_at"] = datetime.now().isoformat()
-                    # result — реальный документ МойСклад (свежесозданный или найденный
-                    # по externalCode при потере state) — description берём из него, а не
-                    # пересобираем заново, иначе при восстановлении по externalCode здесь
-                    # окажется не то, что реально записано в документе
-                    ms["last_description_written"] = result.get("description", "")
-                ms.pop("last_error", None)
-                ms.pop("last_error_at", None)
-                counts["orders_created"] += 1
+                # 24ч без оплаты — удаляем черновик (только если ещё не отменён и не оплачен)
+                if ms.get("customerorder_id") and not ms.get("cancelled_at") and not latest.get("paid"):
+                    before = ms.get("cancelled_at")
+                    try:
+                        self._maybe_cancel_stale_draft(order_id, ms)
+                    except Exception as e:
+                        print(f"    ERROR: автоотмена заказа {order_id} упала: {e}")
+                        ms["last_error"] = str(e)
+                        ms["last_error_at"] = datetime.now().isoformat()
+                        counts["errors"] += 1
+                    if ms.get("cancelled_at") and not before:
+                        counts["orders_cancelled"] += 1
 
-            if latest.get("paid") and "payment_id" not in ms and not ms.get("paid_externally") and "customerorder_meta" in ms:
-                try:
-                    payment = self._create_payment_and_apply(order_id, {"id": ms["customerorder_id"], "meta": ms["customerorder_meta"]}, latest, ms)
-                except Exception as e:
-                    print(f"    ERROR: не удалось создать платёж для {order_id}: {e}")
-                    ms["last_error"] = str(e)
-                    ms["last_error_at"] = datetime.now().isoformat()
-                    counts["errors"] += 1
-                    continue
+                # Оплата пришла уже ПОСЛЕ автоотмены — прошлый черновик удалён, заводим заказ заново с нуля
+                if ms.get("cancelled_at") and latest.get("paid") and not ms.get("recreated_after_cancel"):
+                    print(f"  Заказ {order_id}: оплата пришла после автоотмены — завожу заново")
+                    ms["recreated_after_cancel"] = True
+                    for key in ("customerorder_id", "customerorder_meta", "customerorder_name",
+                                "last_description_written", "cancelled_at", "cancel_reason"):
+                        ms.pop(key, None)
 
-                ms.pop("last_error", None)
-                ms.pop("last_error_at", None)
-                if not self.dry_run and payment:
-                    if payment.get("paid_externally"):
-                        ms["paid_externally"] = True
-                    else:
-                        ms["payment_id"] = payment["id"]
-                        ms["payment_name"] = payment.get("name")
-                    ms["paid_at"] = datetime.now().isoformat()
-                counts["payments_created"] += 1
+                if "customerorder_id" not in ms:
+                    print(f"  Заказ {order_id}:")
+                    try:
+                        result = self._create_draft_order(order_id, latest)
+                    except Exception as e:
+                        print(f"    ERROR: не удалось создать заказ {order_id}: {e}")
+                        ms["last_error"] = str(e)
+                        ms["last_error_at"] = datetime.now().isoformat()
+                        counts["errors"] += 1
+                        continue
 
-        if not self.dry_run:
-            self._save_state()
+                    if not self.dry_run:
+                        ms["customerorder_id"] = result["id"]
+                        ms["customerorder_name"] = result.get("name")
+                        ms["customerorder_meta"] = result["meta"]
+                        ms["created_at"] = datetime.now().isoformat()
+                        # result — реальный документ МойСклад (свежесозданный или найденный
+                        # по externalCode при потере state) — description берём из него, а не
+                        # пересобираем заново, иначе при восстановлении по externalCode здесь
+                        # окажется не то, что реально записано в документе
+                        ms["last_description_written"] = result.get("description", "")
+                    ms.pop("last_error", None)
+                    ms.pop("last_error_at", None)
+                    counts["orders_created"] += 1
+
+                if latest.get("paid") and "payment_id" not in ms and not ms.get("paid_externally") and "customerorder_meta" in ms:
+                    try:
+                        payment = self._create_payment_and_apply(order_id, {"id": ms["customerorder_id"], "meta": ms["customerorder_meta"]}, latest, ms)
+                    except Exception as e:
+                        print(f"    ERROR: не удалось создать платёж для {order_id}: {e}")
+                        ms["last_error"] = str(e)
+                        ms["last_error_at"] = datetime.now().isoformat()
+                        counts["errors"] += 1
+                        continue
+
+                    ms.pop("last_error", None)
+                    ms.pop("last_error_at", None)
+                    if not self.dry_run and payment:
+                        if payment.get("paid_externally"):
+                            ms["paid_externally"] = True
+                        else:
+                            ms["payment_id"] = payment["id"]
+                            ms["payment_name"] = payment.get("name")
+                        ms["paid_at"] = datetime.now().isoformat()
+                    counts["payments_created"] += 1
+
+            if not self.dry_run:
+                save_state(STATE_FILE, self.state)
 
         print(f"\n{'='*60}")
         print("Итого:")
