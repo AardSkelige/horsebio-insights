@@ -36,7 +36,7 @@ from pathlib import Path
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', '..', '..', '_shared'))
 from api_client import ProductionHelper, MOYSKLAD_TOKEN, BASE_URL
-from order_email_utils import build_customer_name
+from order_email_utils import build_customer_name, build_order_label, build_order_delete_action
 
 STATE_FILE = Path(__file__).parent.parent / "data" / ".order_email_state.json"
 
@@ -454,18 +454,41 @@ def _export_results(counts, state, path):
         {"label": "Ошибки", "value": er, "tone": "critical" if er else "neutral"},
     ]
 
-    def cat(key, title, sev, rows):
-        items = [{"key": "", "ms_id": "", "object": f"Заказ №{order_id}", "severity": sev, "detail": detail}
-                 for order_id, detail in rows]
+    def build_item(order_id, order, detail, severity):
+        latest = order.get("latest") or {}
+        ms = order.get("ms") or {}
+        label = build_order_label(latest)
+        links = []
+        site_link = (latest.get("order_link") or "").strip()
+        if site_link:
+            links.append({"href": site_link, "label": "Заказ на сайте"})
+        if ms.get("customerorder_id"):
+            links.append({
+                "href": f"https://online.moysklad.ru/app/#customerorder/edit?id={ms['customerorder_id']}",
+                "label": "МойСклад",
+            })
+        return {
+            "key": order_id, "ms_id": "", "object": label, "severity": severity,
+            "detail": detail, "links": links,
+            "delete_action": build_order_delete_action(order_id, label),
+        }
+
+    def cat(key, title, sev, items):
         return {"key": key, "title": title, "severity": sev, "kind": None, "ms_type": None,
                 "count": len(items), "items": items} if items else None
 
-    error_rows = [(oid, o["ms"]["last_error"]) for oid, o in state.get("orders", {}).items() if o.get("ms", {}).get("last_error")]
-    cancelled_rows = [(oid, o["ms"].get("cancel_reason", "")) for oid, o in state.get("orders", {}).items() if o.get("ms", {}).get("cancelled_at")]
+    error_items = [
+        build_item(oid, o, o["ms"]["last_error"], "critical")
+        for oid, o in state.get("orders", {}).items() if o.get("ms", {}).get("last_error")
+    ]
+    cancelled_items = [
+        build_item(oid, o, o["ms"].get("cancel_reason", ""), "warning")
+        for oid, o in state.get("orders", {}).items() if o.get("ms", {}).get("cancelled_at")
+    ]
 
     categories = [c for c in [
-        cat("errors", "Ошибки заведения", "critical", error_rows),
-        cat("cancelled", "Отменены (не оплачены 24ч)", "warning", cancelled_rows),
+        cat("errors", "Ошибки заведения", "critical", error_items),
+        cat("cancelled", "Отменены (не оплачены 24ч)", "warning", cancelled_items),
     ] if c]
 
     payload = {

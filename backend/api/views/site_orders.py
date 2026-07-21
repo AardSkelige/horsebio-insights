@@ -8,6 +8,8 @@ from pathlib import Path
 from rest_framework.decorators import api_view
 from rest_framework.response import Response
 
+from .scripts_monitor import scripts_auth
+
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', '..', 'moysklad', 'horsebio', '_shared'))
 from order_email_utils import build_customer_name  # noqa: E402 — тот же helper, что и в 02_create_orders.py
 
@@ -217,3 +219,42 @@ def site_orders_list(request):
             'last_checked': last_checked,
         },
     })
+
+
+@scripts_auth
+@api_view(['DELETE'])
+def site_order_delete(request, order_id):
+    """
+    DELETE /api/site-orders/{order_id}/ — убрать заказ из журнала автоматизации
+    (используется кнопкой «Удалить» на находках /checks и на странице «Заказы
+    сайта» — для тестовых/ошибочных записей). Само письмо в почте и документы
+    в МойСклад не трогает — только внутренний state-файл. Убираем заодно
+    Message-ID письма(-ем) этого заказа из processed_message_ids, чтобы при
+    следующей проверке почты письмо могло быть разобрано заново.
+    """
+    if not STATE_FILE.exists():
+        return Response({'status': 'error', 'message': 'Файл состояния не найден'}, status=404)
+
+    try:
+        state = json.loads(STATE_FILE.read_text())
+    except Exception as e:
+        logger.exception('Не удалось прочитать state-файл заказов сайта')
+        return Response({'status': 'error', 'message': str(e)}, status=500)
+
+    order = state.get('orders', {}).pop(order_id, None)
+    if order is None:
+        return Response({'status': 'error', 'message': 'Заказ не найден в журнале'}, status=404)
+
+    processed = state.get('processed_message_ids', [])
+    for snap in order.get('history', []):
+        mid = snap.get('message_id')
+        if mid in processed:
+            processed.remove(mid)
+
+    try:
+        STATE_FILE.write_text(json.dumps(state, ensure_ascii=False, indent=2, default=str))
+    except Exception as e:
+        logger.exception('Не удалось сохранить state-файл после удаления заказа %s', order_id)
+        return Response({'status': 'error', 'message': str(e)}, status=500)
+
+    return Response({'status': 'success'})

@@ -38,6 +38,9 @@ from pathlib import Path
 
 from dotenv import load_dotenv
 
+sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', '..', '..', '_shared'))
+from order_email_utils import build_order_label, build_order_delete_action, format_money
+
 load_dotenv(Path(__file__).resolve().parents[5] / '.env')
 
 IMAP_HOST = os.getenv('ORDER_MAIL_IMAP_HOST')
@@ -386,18 +389,25 @@ def _export_results(counts, state, path):
         latest = order.get("latest")
         if not latest:
             continue
+        label = build_order_label(latest)
+        links = []
+        site_link = (latest.get("order_link") or "").strip()
+        if site_link:
+            links.append({"href": site_link, "label": "Заказ на сайте"})
+        items_count = len(latest.get("items", []))
         recorded_orders.append({
-            "key": "", "ms_id": "", "object": f"Заказ №{order_id}",
+            "key": order_id, "ms_id": "", "object": label,
             "severity": "ok",
-            "detail": f"{'оплачен' if latest.get('paid') else 'не оплачен'} · "
-                      f"{latest.get('total', '?')} {latest.get('currency', '')} · "
-                      f"позиций: {len(latest.get('items', []))}",
+            "detail": f"{'Оплачен' if latest.get('paid') else 'Не оплачен'} · "
+                      f"{format_money(latest.get('total'))} · товаров: {items_count}",
+            "links": links,
+            "delete_action": build_order_delete_action(order_id, label),
         })
 
     categories = []
     if recorded_orders:
         categories.append({
-            "key": "orders", "title": "Заказы в state", "severity": "ok",
+            "key": "orders", "title": "Заказы, которые распознал робот", "severity": "ok",
             "kind": None, "ms_type": None,
             "count": len(recorded_orders), "items": recorded_orders,
         })

@@ -102,4 +102,7 @@ export const checksApi = {
     addException: (payload) => api.post('/checks/exceptions/', payload),
     updateException: (id, payload) => api.patch(`/checks/exceptions/${id}/`, payload),
     removeException: (id) => api.delete(`/checks/exceptions/${id}/`),
+    // Универсальное удаление находки — url приходит с бэкенда в item.delete_action.url
+    // (например /site-orders/{id}/), разные роботы подставляют свой эндпоинт
+    deleteRecord: (url) => api.delete(url),
 };

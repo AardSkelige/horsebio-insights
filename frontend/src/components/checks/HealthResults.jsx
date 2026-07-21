@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
 import PropTypes from 'prop-types';
-import { ExternalLink, Plus, Check, Undo2, Loader2, ShieldCheck, ChevronRight } from 'lucide-react';
+import { ExternalLink, Plus, Check, Undo2, Loader2, ShieldCheck, ChevronRight, Trash2 } from 'lucide-react';
 import { checksApi, SEV, sevOf, msLink, relTime } from './checksShared';
 import InfoTip from './InfoTip';
 import './HealthResults.css';
@@ -17,6 +17,12 @@ const STAT_HINTS = {
     'Не ВБ/Озон': 'Заказы не от ВБ/Озон — этим монитором не обрабатываются.',
     'Уже существуют': 'Возврат по заказу уже создан ранее.',
 };
+
+const RECENT_CHANGES_HINT =
+    'Это журнал прошлых проверок за последние две недели, а не текущее состояние прямо сейчас. '
+    + 'Находка остаётся видна тут, даже если вы уже что-то поправили вручную — просто как запись '
+    + '«тогда-то робот это увидел». Со временем (когда пройдёт две недели с того прогона) запись '
+    + 'сама пропадёт из списка.';
 
 // Цифры — по дизайн-системе: сериф (Cormorant) weight 400, отрицательный трекинг, lining-nums
 const numStyle = (color, size = 28) => ({
@@ -174,16 +180,29 @@ function ChecksGrid({ checks, onJump }) {
 }
 ChecksGrid.propTypes = { checks: PropTypes.array.isRequired, onJump: PropTypes.func };
 
-function FindingRow({ cat, item, excepted, prevReason, onAdded }) {
+function FindingRow({ cat, item, excepted, prevReason, onAdded, onDeleted }) {
     const [state, setState] = useState('idle'); // idle | reason | busy | added
     const [reason, setReason] = useState('');
     const [excId, setExcId] = useState(null);
+    const [deleting, setDeleting] = useState(false);
     // Скачки цен: 'once' — глушит только этот скачок (по приёмке), 'always' — товар навсегда
     const [scope, setScope] = useState('once');
     const c = sevOf(item.severity);
     const link = item.ms_href || msLink(cat.ms_type, item.ms_id);
     const canExcept = cat.kind && item.key;
     const isJump = cat.kind === 'supply_jumps';
+
+    const handleDelete = async () => {
+        if (!window.confirm(item.delete_action?.confirm || `Удалить «${item.object}» из журнала?`)) return;
+        setDeleting(true);
+        try {
+            await checksApi.deleteRecord(item.delete_action.url);
+            onDeleted?.();
+        } catch (e) {
+            alert(e.message);
+            setDeleting(false);
+        }
+    };
 
     const add = async () => {
         setState('busy');
@@ -289,6 +308,11 @@ function FindingRow({ cat, item, excepted, prevReason, onAdded }) {
                         <ExternalLink size={13} /> МС
                     </a>
                 )}
+                {(item.links || []).map((l, i) => (
+                    <a key={i} href={l.href} target="_blank" rel="noreferrer" style={linkBtn('var(--muted)')}>
+                        <ExternalLink size={13} /> {l.label}
+                    </a>
+                ))}
                 {excepted ? (
                     <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5, fontSize: 12, color: 'var(--success)', fontWeight: 600 }}>
                         <ShieldCheck size={13} /> в исключениях
@@ -298,11 +322,19 @@ function FindingRow({ cat, item, excepted, prevReason, onAdded }) {
                         <Plus size={13} /> в искл.
                     </button>
                 ) : null}
+                {item.delete_action && (
+                    <button onClick={handleDelete} disabled={deleting} style={linkBtn('var(--error)')} title="Убрать запись из журнала">
+                        {deleting ? <Loader2 size={13} className="animate-spin" /> : <Trash2 size={13} />} Удалить
+                    </button>
+                )}
             </div>
         </div>
     );
 }
-FindingRow.propTypes = { cat: PropTypes.object, item: PropTypes.object, excepted: PropTypes.bool, prevReason: PropTypes.string, onAdded: PropTypes.func };
+FindingRow.propTypes = {
+    cat: PropTypes.object, item: PropTypes.object, excepted: PropTypes.bool,
+    prevReason: PropTypes.string, onAdded: PropTypes.func, onDeleted: PropTypes.func,
+};
 
 /** Секция находок одной проверки: проблемные развёрнуты, «норма» — свёрнута до строки. */
 function Category({ cat, excKeys, excMap, onChanged }) {
@@ -374,6 +406,10 @@ function Category({ cat, excKeys, excMap, onChanged }) {
                                 }
                                 onChanged?.();
                             }}
+                            onDeleted={() => {
+                                setHidden((s) => new Set(s).add(ekey));
+                                onChanged?.();
+                            }}
                         />
                     );
                 })}
@@ -443,8 +479,9 @@ export default function HealthResults({ scriptId, runId, running }) {
                 <ChecksGrid checks={data.summary.checks} onJump={handleJump} />
             )}
             {isRobot && !runId && (
-                <div style={{ fontSize: 11, fontWeight: 700, letterSpacing: '0.07em', textTransform: 'uppercase', color: 'var(--muted)', margin: '4px 0 10px' }}>
-                    Что робот делал за последние {data.recent_days || 14} дней
+                <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 11, fontWeight: 700, letterSpacing: '0.07em', textTransform: 'uppercase', color: 'var(--muted)', margin: '4px 0 10px' }}>
+                    <span>Что робот делал за последние {data.recent_days || 14} дней</span>
+                    <span style={{ textTransform: 'none', letterSpacing: 0 }}><InfoTip text={RECENT_CHANGES_HINT} width={280} /></span>
                 </div>
             )}
             {visibleCats.length === 0 ? (
