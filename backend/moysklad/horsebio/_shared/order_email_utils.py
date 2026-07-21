@@ -4,7 +4,7 @@
 Используется из:
 - 01_daemons/06_order_email_sync/scripts/01_read_order_emails.py (чтение почты)
 - 01_daemons/06_order_email_sync/scripts/02_create_orders.py (заведение в МойСклад)
-- backend/api/views/site_orders.py (страница «Заказы сайта», read-only)
+- backend/api/views/site_orders.py (страница «Заказы сайта»: список + удаление из журнала)
 """
 
 import fcntl
@@ -51,6 +51,23 @@ def save_state(state_file: Path, state: dict):
     tmp_path = state_file.with_name(f"{state_file.name}.tmp-{os.getpid()}")
     tmp_path.write_text(json.dumps(state, indent=2, ensure_ascii=False, default=str))
     os.replace(tmp_path, state_file)
+
+
+def forget_order(state: dict, order_id: str) -> dict | None:
+    """Убрать заказ из журнала: удалить orders[order_id] и вернуть Message-ID его
+    писем обратно из processed_message_ids, чтобы при следующей проверке почты
+    письмо могло быть разобрано заново. Возвращает удалённый заказ или None, если
+    его не было. Схема state принадлежит этому модулю (тут же load_state/save_state),
+    поэтому обратная мутация живёт рядом. Вызывать только внутри state_lock()."""
+    order = state.get("orders", {}).pop(order_id, None)
+    if order is None:
+        return None
+    processed = state.get("processed_message_ids", [])
+    for snap in order.get("history", []):
+        mid = snap.get("message_id")
+        if mid in processed:
+            processed.remove(mid)
+    return order
 
 
 def build_customer_name(latest: dict) -> str:

@@ -2,6 +2,7 @@ import { useState, useEffect, useCallback } from 'react';
 import PropTypes from 'prop-types';
 import { ExternalLink, Plus, Check, Undo2, Loader2, ShieldCheck, ChevronRight, Trash2 } from 'lucide-react';
 import { checksApi, SEV, sevOf, msLink, relTime } from './checksShared';
+import { useConfirmDelete } from '../../hooks/useConfirmDelete';
 import InfoTip from './InfoTip';
 import './HealthResults.css';
 
@@ -184,7 +185,6 @@ function FindingRow({ cat, item, excepted, prevReason, onAdded, onDeleted }) {
     const [state, setState] = useState('idle'); // idle | reason | busy | added
     const [reason, setReason] = useState('');
     const [excId, setExcId] = useState(null);
-    const [deleting, setDeleting] = useState(false);
     // Скачки цен: 'once' — глушит только этот скачок (по приёмке), 'always' — товар навсегда
     const [scope, setScope] = useState('once');
     const c = sevOf(item.severity);
@@ -192,17 +192,11 @@ function FindingRow({ cat, item, excepted, prevReason, onAdded, onDeleted }) {
     const canExcept = cat.kind && item.key;
     const isJump = cat.kind === 'supply_jumps';
 
-    const handleDelete = async () => {
-        if (!window.confirm(item.delete_action?.confirm || `Удалить «${item.object}» из журнала?`)) return;
-        setDeleting(true);
-        try {
-            await checksApi.deleteRecord(item.delete_action.url);
-            onDeleted?.();
-        } catch (e) {
-            alert(e.message);
-            setDeleting(false);
-        }
-    };
+    const { deleting, trigger: handleDelete } = useConfirmDelete({
+        confirm: item.delete_action?.confirm || `Удалить «${item.object}» из журнала?`,
+        run: () => checksApi.deleteRecord(item.delete_action.url),
+        onDone: onDeleted,
+    });
 
     const add = async () => {
         setState('busy');

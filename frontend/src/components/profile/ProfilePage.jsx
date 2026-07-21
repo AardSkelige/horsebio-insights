@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { CalendarClock, Database, DoorClosed, DoorOpen, LogOut, Monitor, Smartphone, ShieldCheck, Mail } from 'lucide-react';
-import { getFreshAuthStatus, setAuthStatus, subscribeAuth } from '../../utils/authSession';
+import { setAuthStatus } from '../../utils/authSession';
+import { useAuthStatus } from '../../hooks/useAuthStatus';
 import { authApi } from '../../api/authApi';
 
 const card = {
@@ -65,7 +66,7 @@ const formatMinutes = (minutes) => {
 };
 
 const ProfilePage = () => {
-    const [auth, setAuth] = useState(getFreshAuthStatus);
+    const auth = useAuthStatus();
     const [activity, setActivity] = useState([]);
     const [usage, setUsage] = useState(null);
     const [sessions, setSessions] = useState([]);
@@ -77,8 +78,6 @@ const ProfilePage = () => {
         window.addEventListener('resize', handler);
         return () => window.removeEventListener('resize', handler);
     }, []);
-
-    useEffect(() => subscribeAuth(setAuth), []);
 
     useEffect(() => {
         const ctrl = new AbortController();

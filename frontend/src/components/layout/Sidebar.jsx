@@ -2,7 +2,8 @@ import { useState, useEffect } from 'react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
 import PropTypes from 'prop-types';
 import { PanelLeftClose, PanelLeftOpen, X, RefreshCw } from 'lucide-react';
-import { getFreshAuthStatus, clearAuthStatus, subscribeAuth } from '../../utils/authSession';
+import { clearAuthStatus } from '../../utils/authSession';
+import { useSuperuser } from '../../hooks/useAuthStatus';
 import { authApi } from '../../api/authApi';
 import { useDataPanel } from '../../contexts/DataPanelContext';
 import NavItem from './sidebar/NavItem';
@@ -22,12 +23,10 @@ export const Sidebar = ({ expanded, onToggle, isMobile, mobileOpen, onMobileClos
     const location = useLocation();
     const navigate = useNavigate();
     const { toggle: toggleDataPanel } = useDataPanel();
-    const [isSuperuser, setIsSuperuser] = useState(getFreshAuthStatus().isSuperuser === true);
+    const isSuperuser = useSuperuser();
     const [pinnedPaths, setPinnedPaths] = useState([]);
     // Ховер живёт на уровне сайдбара: одна layoutId-пилюля перетекает между пунктами
     const [hovPath, setHovPath] = useState(null);
-
-    useEffect(() => subscribeAuth(s => setIsSuperuser(s.isSuperuser === true)), []);
 
     useEffect(() => {
         let active = true;

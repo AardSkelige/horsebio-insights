@@ -1,8 +1,8 @@
-import { useState } from 'react';
 import PropTypes from 'prop-types';
 import { Globe, Package, Trash2, Loader2 } from 'lucide-react';
 import { SkeletonRows } from '../ui/Skeleton';
 import { siteOrdersApi } from '../../api/siteOrdersApi';
+import { useConfirmDelete } from '../../hooks/useConfirmDelete';
 import './SiteOrdersTable.css';
 
 const STATUS_CLASS = {
@@ -42,25 +42,15 @@ function StatusChip({ row }) {
 }
 StatusChip.propTypes = { row: PropTypes.object.isRequired };
 
-function RowActions({ row, onDeleted }) {
-    const [deleting, setDeleting] = useState(false);
-
-    const handleDelete = async () => {
-        const label = `${row.name || 'заказ'}${row.number ? ` — №${row.number}` : ''}`;
-        if (!window.confirm(
-            `Удалить «${label}» из журнала автоматизации? Само письмо и документы в МойСклад ` +
+function RowActions({ row, onDeleted, canDelete }) {
+    const label = `${row.name || 'заказ'}${row.number ? ` — №${row.number}` : ''}`;
+    const { deleting, trigger: handleDelete } = useConfirmDelete({
+        confirm: `Удалить «${label}» из журнала автоматизации? Само письмо и документы в МойСклад ` +
             `(если уже созданы) не тронутся — сотрётся только запись в нашем внутреннем учёте, ` +
-            `и при следующей проверке почты письмо может быть разобрано заново.`
-        )) return;
-        setDeleting(true);
-        try {
-            await siteOrdersApi.remove(row.order_id);
-            onDeleted?.();
-        } catch (e) {
-            alert(e.message || 'Не удалось удалить заказ');
-            setDeleting(false);
-        }
-    };
+            `и при следующей проверке почты письмо может быть разобрано заново.`,
+        run: () => siteOrdersApi.remove(row.order_id),
+        onDone: onDeleted,
+    });
 
     return (
         <span className="actions-cell">
@@ -80,19 +70,21 @@ function RowActions({ row, onDeleted }) {
             >
                 <Package size={13} />
             </a>
-            <button
-                type="button"
-                className="icon-btn danger"
-                onClick={handleDelete}
-                disabled={deleting}
-                title="Убрать запись из журнала"
-            >
-                {deleting ? <Loader2 size={13} className="animate-spin" /> : <Trash2 size={13} />}
-            </button>
+            {canDelete && (
+                <button
+                    type="button"
+                    className="icon-btn danger"
+                    onClick={handleDelete}
+                    disabled={deleting}
+                    title="Убрать запись из журнала"
+                >
+                    {deleting ? <Loader2 size={13} className="animate-spin" /> : <Trash2 size={13} />}
+                </button>
+            )}
         </span>
     );
 }
-RowActions.propTypes = { row: PropTypes.object.isRequired, onDeleted: PropTypes.func };
+RowActions.propTypes = { row: PropTypes.object.isRequired, onDeleted: PropTypes.func, canDelete: PropTypes.bool };
 
 function SortHeader({ label, sortKey, sort, onSortChange, align }) {
     const active = sort.key === sortKey;
@@ -116,7 +108,7 @@ SortHeader.propTypes = {
     align: PropTypes.string,
 };
 
-function OrderCard({ row, onDeleted }) {
+function OrderCard({ row, onDeleted, canDelete }) {
     return (
         <div style={{ padding: '12px 16px', borderBottom: '1px solid var(--hairline)' }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', gap: 8 }}>
@@ -130,18 +122,18 @@ function OrderCard({ row, onDeleted }) {
                 <span style={{ fontFamily: 'var(--mono)', fontSize: 11.5, color: 'var(--muted)' }}>№{row.number} · {row.date_label}</span>
                 <StatusChip row={row} />
             </div>
-            <div style={{ marginTop: 8 }}><RowActions row={row} onDeleted={onDeleted} /></div>
+            <div style={{ marginTop: 8 }}><RowActions row={row} onDeleted={onDeleted} canDelete={canDelete} /></div>
         </div>
     );
 }
-OrderCard.propTypes = { row: PropTypes.object.isRequired, onDeleted: PropTypes.func };
+OrderCard.propTypes = { row: PropTypes.object.isRequired, onDeleted: PropTypes.func, canDelete: PropTypes.bool };
 
-export default function SiteOrdersTable({ rows, loading, sort, onSortChange, onDeleted, isMobile }) {
+export default function SiteOrdersTable({ rows, loading, sort, onSortChange, onDeleted, canDelete, isMobile }) {
     if (isMobile) {
         if (loading) return <div style={{ padding: 16, color: 'var(--muted)', fontSize: 13 }}>Загрузка…</div>;
         return (
             <div style={{ border: '1px solid var(--hairline)', borderRadius: 10, overflow: 'hidden' }}>
-                {rows.map(row => <OrderCard key={row.order_id} row={row} onDeleted={onDeleted} />)}
+                {rows.map(row => <OrderCard key={row.order_id} row={row} onDeleted={onDeleted} canDelete={canDelete} />)}
             </div>
         );
     }
@@ -180,7 +172,7 @@ export default function SiteOrdersTable({ rows, loading, sort, onSortChange, onD
                             <td className="mono" style={{ fontSize: 12, color: 'var(--muted-soft)' }}>{row.date_label}</td>
                             <td className="num-cell">{formatRub(row.sum)}</td>
                             <td><StatusChip row={row} /></td>
-                            <td><RowActions row={row} onDeleted={onDeleted} /></td>
+                            <td><RowActions row={row} onDeleted={onDeleted} canDelete={canDelete} /></td>
                         </tr>
                     ))}
                 </tbody>
@@ -195,5 +187,6 @@ SiteOrdersTable.propTypes = {
     sort: PropTypes.shape({ key: PropTypes.string, dir: PropTypes.string }).isRequired,
     onSortChange: PropTypes.func.isRequired,
     onDeleted: PropTypes.func,
+    canDelete: PropTypes.bool,
     isMobile: PropTypes.bool,
 };

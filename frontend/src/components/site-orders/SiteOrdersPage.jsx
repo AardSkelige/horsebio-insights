@@ -2,6 +2,7 @@ import { useState, useEffect, useRef, useCallback } from 'react';
 import { Search, X } from 'lucide-react';
 import { FadeRise } from '../ui/motion';
 import { siteOrdersApi } from '../../api/siteOrdersApi';
+import { useSuperuser } from '../../hooks/useAuthStatus';
 import SiteOrdersTable from './SiteOrdersTable';
 
 const PAGE_SIZE = 20;
@@ -30,6 +31,10 @@ export default function SiteOrdersPage() {
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState(null);
     const [isMobile, setIsMobile] = useState(() => window.innerWidth < 768);
+    // Удалять заказ из журнала может только суперпользователь (бэкенд site_order_delete
+    // под @scripts_auth); смотреть список — любой залогиненный. Кнопку удаления
+    // прячем у обычных пользователей, чтобы не показывать заведомо 403-действие.
+    const isSuperuser = useSuperuser();
     const abortRef = useRef(null);
 
     useEffect(() => {
@@ -88,7 +93,7 @@ export default function SiteOrdersPage() {
     };
 
     // После удаления заказа перечитываем текущую страницу с тем же limit
-    const reload = useCallback(() => load(limit), [load, limit]);
+    const reload = () => load(limit);
 
     const hasFilters = filters.search || filters.dateFrom || filters.dateTo;
     const rows = data?.data?.rows || [];
@@ -189,6 +194,7 @@ export default function SiteOrdersPage() {
                         sort={sort}
                         onSortChange={handleSortChange}
                         onDeleted={reload}
+                        canDelete={isSuperuser}
                         isMobile={isMobile}
                     />
                     {!loading && rows.length === 0 && (

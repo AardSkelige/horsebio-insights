@@ -1,7 +1,7 @@
 import { useState, useRef, useEffect } from 'react';
 import PropTypes from 'prop-types';
 import { UserCircle, Sun, Moon, LogOut } from 'lucide-react';
-import { getFreshAuthStatus, subscribeAuth } from '../../../utils/authSession';
+import { useAuthStatus } from '../../../hooks/useAuthStatus';
 
 const avatarBase = {
     width: 28, height: 28,
@@ -33,11 +33,9 @@ const UserMenu = ({ expanded, theme, onToggleTheme, onLogout, onProfile }) => {
     const [hov, setHov] = useState(false);
     const [themeHov, setThemeHov] = useState(false);
     const [hovItem, setHovItem] = useState(null);
-    const [auth, setAuth] = useState(getFreshAuthStatus);
+    const auth = useAuthStatus();
     const btnRef = useRef(null);
     const menuRef = useRef(null);
-
-    useEffect(() => subscribeAuth(setAuth), []);
 
     const firstName = auth.firstName || '';
     const lastName = auth.lastName || '';

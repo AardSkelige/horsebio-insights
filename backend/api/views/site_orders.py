@@ -11,7 +11,7 @@ from rest_framework.response import Response
 from .scripts_monitor import scripts_auth
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', '..', 'moysklad', 'horsebio', '_shared'))
-from order_email_utils import build_customer_name, state_lock, load_state, save_state  # noqa: E402 — те же helper'ы, что и в 02_create_orders.py
+from order_email_utils import build_customer_name, state_lock, load_state, save_state, forget_order  # noqa: E402 — те же helper'ы, что и в 02_create_orders.py
 
 logger = logging.getLogger(__name__)
 
@@ -241,17 +241,8 @@ def site_order_delete(request, order_id):
     try:
         with state_lock(STATE_FILE):
             state = load_state(STATE_FILE, {})
-
-            order = state.get('orders', {}).pop(order_id, None)
-            if order is None:
+            if forget_order(state, order_id) is None:
                 return Response({'status': 'error', 'message': 'Заказ не найден в журнале'}, status=404)
-
-            processed = state.get('processed_message_ids', [])
-            for snap in order.get('history', []):
-                mid = snap.get('message_id')
-                if mid in processed:
-                    processed.remove(mid)
-
             save_state(STATE_FILE, state)
     except Exception as e:
         logger.exception('Не удалось удалить заказ %s из state-файла', order_id)
