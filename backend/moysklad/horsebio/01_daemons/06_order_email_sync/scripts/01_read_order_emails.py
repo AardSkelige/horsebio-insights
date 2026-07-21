@@ -39,7 +39,7 @@ from dotenv import load_dotenv
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', '..', '..', '_shared'))
 from order_email_utils import (
-    build_order_label, build_order_delete_action, format_money,
+    build_order_label, build_order_delete_action, format_money, format_phone,
     state_lock, load_state, save_state,
 )
 
@@ -396,11 +396,17 @@ def _export_results(counts, state, path):
         if site_link:
             links.append({"href": site_link, "label": "Заказ на сайте"})
         items_count = len(latest.get("items", []))
+        phone = format_phone((latest.get("field") or {}).get("phone", ""))
+        detail_parts = [phone] if phone else []
+        detail_parts += [
+            "Оплачен" if latest.get("paid") else "Не оплачен",
+            format_money(latest.get("total")),
+            f"товаров: {items_count}",
+        ]
         recorded_orders.append({
             "key": order_id, "ms_id": "", "object": label,
             "severity": "ok",
-            "detail": f"{'Оплачен' if latest.get('paid') else 'Не оплачен'} · "
-                      f"{format_money(latest.get('total'))} · товаров: {items_count}",
+            "detail": " · ".join(detail_parts),
             "links": links,
             "delete_action": build_order_delete_action(order_id, label),
         })

@@ -286,20 +286,21 @@ function FindingRow({ cat, item, excepted, prevReason, onAdded, onDeleted }) {
         );
     }
 
-    // Табличная строка: объект | детали | действия
+    // Строка находки: точка + объект + детали слитно в одну строку (перенос —
+    // только у блока действий справа, на узких экранах он падает вниз)
     return (
         <div className="finding-row">
-            <div style={{ display: 'flex', gap: 8, alignItems: 'flex-start', minWidth: 0 }}>
-                <span style={{ width: 7, height: 7, borderRadius: 999, background: c.color, marginTop: 5, flexShrink: 0 }} />
-                <span style={{ fontSize: 13, fontWeight: 600, color: 'var(--ink)', lineHeight: 1.4, minWidth: 0 }}>{item.object}</span>
-            </div>
-            <div style={{ minWidth: 0 }}>
-                <div style={{ fontSize: 12.5, color: 'var(--body)', lineHeight: 1.45 }}>{item.detail}</div>
+            <div className="finding-row__text">
+                <span style={{ width: 7, height: 7, borderRadius: 999, background: c.color, flexShrink: 0 }} />
+                <span style={{ fontSize: 13, lineHeight: 1.4, minWidth: 0 }}>
+                    <span style={{ fontWeight: 600, color: 'var(--ink)' }}>{item.object}</span>
+                    {item.detail && <span style={{ color: 'var(--body)' }}> · {item.detail}</span>}
+                </span>
                 {prevReason && (
-                    <div style={{ display: 'flex', alignItems: 'flex-start', gap: 5, fontSize: 12, color: 'var(--success)', marginTop: 3, lineHeight: 1.4 }}>
-                        <ShieldCheck size={13} style={{ flexShrink: 0, marginTop: 1 }} />
-                        <span>уже разбирали: {prevReason}</span>
-                    </div>
+                    <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5, fontSize: 12, color: 'var(--success)', lineHeight: 1.4 }}>
+                        <ShieldCheck size={13} style={{ flexShrink: 0 }} />
+                        уже разбирали: {prevReason}
+                    </span>
                 )}
             </div>
             <div className="finding-row__actions">

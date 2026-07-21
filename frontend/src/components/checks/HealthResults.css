@@ -15,17 +15,26 @@
 }
 
 .finding-row {
-    display: grid;
-    /* Колонка названия растёт под контент вместо жёсткого потолка — иначе на широком
-       экране название переносится, даже когда рядом пустует места полно. Верхний
-       предел 480px — подстраховка от экстремально длинных названий, чтобы не отжать
-       колонку деталей в ноль. */
-    grid-template-columns: minmax(120px, min(max-content, 480px)) minmax(0, 1fr) auto;
-    align-items: start;
-    gap: 12px;
+    /* Название и детали — один текстовый поток (см. finding-row__text), поэтому
+       строка обычно укладывается в одну линию целиком; переносится вниз только
+       блок действий справа, если места совсем не хватает (узкий экран). */
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: space-between;
+    gap: 6px 12px;
     padding: 9px 14px;
     border-top: 1px solid var(--hairline-soft);
     background: var(--canvas);
+}
+
+.finding-row__text {
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 6px 8px;
+    min-width: 0;
+    flex: 1 1 280px;
 }
 
 .finding-row__actions {
@@ -33,15 +42,4 @@
     align-items: center;
     gap: 6px;
     flex-shrink: 0;
-}
-
-@media (max-width: 640px) {
-    .finding-row {
-        grid-template-columns: 1fr;
-        gap: 6px;
-    }
-
-    .finding-row__actions {
-        justify-content: flex-start;
-    }
 }

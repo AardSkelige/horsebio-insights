@@ -69,6 +69,22 @@ def format_money(value) -> str:
     return f"{n:,.0f}".replace(",", " ") + " ₽"
 
 
+def format_phone(raw: str) -> str:
+    """+7XXXXXXXXXX -> '+7 999 123-45-67' — для отображения в находках на /checks.
+    Формат ввода зеркалит normalize_phone() из 02_create_orders.py, но здесь только
+    для человека: если номер нестандартный, просто возвращаем как есть, не роняем."""
+    digits = "".join(c for c in (raw or "") if c.isdigit())
+    if len(digits) > 11:
+        digits = digits[:11]
+    if len(digits) == 11 and digits[0] in ("7", "8"):
+        digits = "7" + digits[1:]
+    elif len(digits) == 10:
+        digits = "7" + digits
+    if len(digits) == 11:
+        return f"+{digits[0]} {digits[1:4]} {digits[4:7]}-{digits[7:9]}-{digits[9:11]}"
+    return (raw or "").strip()
+
+
 def build_order_label(latest: dict) -> str:
     """ФИО + номер заказа на сайте — заголовок находки на /checks вместо голого order_id"""
     name = build_customer_name(latest) or "Без имени"
