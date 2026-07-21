@@ -54,32 +54,38 @@ function RowActions({ row, onDeleted, canDelete }) {
 
     return (
         <span className="actions-cell">
-            <a
-                className={`icon-btn${row.site_link ? '' : ' disabled'}`}
-                href={row.site_link || undefined}
-                target="_blank" rel="noopener noreferrer"
-                title="Открыть заказ на сайте"
-            >
-                <Globe size={13} />
-            </a>
-            <a
-                className={`icon-btn${row.ms_link ? '' : ' disabled'}`}
-                href={row.ms_link || undefined}
-                target="_blank" rel="noopener noreferrer"
-                title={row.ms_link ? 'Открыть в МойСклад' : 'Черновик ещё не создан'}
-            >
-                <Package size={13} />
-            </a>
-            {canDelete && (
-                <button
-                    type="button"
-                    className="icon-btn danger"
-                    onClick={handleDelete}
-                    disabled={deleting}
-                    title="Убрать запись из журнала"
+            <span className="act-wrap" tabIndex={0}>
+                <a
+                    className={`icon-btn${row.site_link ? '' : ' disabled'}`}
+                    href={row.site_link || undefined}
+                    target="_blank" rel="noopener noreferrer"
                 >
-                    {deleting ? <Loader2 size={13} className="animate-spin" /> : <Trash2 size={13} />}
-                </button>
+                    <Globe size={15} />
+                </a>
+                <span className="tip act-tip">Открыть заказ на сайте</span>
+            </span>
+            <span className="act-wrap" tabIndex={0}>
+                <a
+                    className={`icon-btn${row.ms_link ? '' : ' disabled'}`}
+                    href={row.ms_link || undefined}
+                    target="_blank" rel="noopener noreferrer"
+                >
+                    <Package size={15} />
+                </a>
+                <span className="tip act-tip">{row.ms_link ? 'Открыть в МойСклад' : 'Черновик ещё не создан'}</span>
+            </span>
+            {canDelete && (
+                <span className="act-wrap" tabIndex={0}>
+                    <button
+                        type="button"
+                        className="icon-btn danger"
+                        onClick={handleDelete}
+                        disabled={deleting}
+                    >
+                        {deleting ? <Loader2 size={15} className="animate-spin" /> : <Trash2 size={15} />}
+                    </button>
+                    <span className="tip act-tip">Убрать запись из журнала</span>
+                </span>
             )}
         </span>
     );

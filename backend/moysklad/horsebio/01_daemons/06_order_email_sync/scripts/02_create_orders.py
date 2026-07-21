@@ -37,7 +37,7 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', '..', '..', '_s
 from api_client import ProductionHelper, MOYSKLAD_TOKEN, BASE_URL
 from order_email_utils import (
     build_customer_name, build_order_label, build_order_delete_action,
-    state_lock, load_state, save_state,
+    format_money, state_lock, load_state, save_state,
 )
 
 STATE_FILE = Path(__file__).parent.parent / "data" / ".order_email_state.json"
@@ -58,6 +58,19 @@ DELIVERY_SERVICE_META = {"meta": {"href": f"{BASE_URL}/entity/service/1202f0a0-d
 
 # Доп. поле заказа "Комментарий от покупателя"
 CUSTOMER_NOTE_ATTRIBUTE_META = {"meta": {"href": f"{BASE_URL}/entity/customerorder/metadata/attributes/96282b87-b98a-11ef-0a80-038000318cca", "type": "attributemetadata", "mediaType": "application/json"}}
+
+# Статусы заказа покупателя (id взяты из /entity/customerorder/metadata живого аккаунта)
+STATE_NEW_ID = "41e677d8-266b-11eb-0a80-090200155c9b"
+STATE_NEW_META = {"meta": {"href": f"{BASE_URL}/entity/customerorder/metadata/states/{STATE_NEW_ID}", "type": "state", "mediaType": "application/json"}}
+STATE_CAN_ASSEMBLE_META = {"meta": {"href": f"{BASE_URL}/entity/customerorder/metadata/states/50cfc5c8-71b1-11ef-0a80-0218000bda38", "type": "state", "mediaType": "application/json"}}
+
+# Тип цены "Розница – ИП (Сайт | РРЦ)" и тег группы "розница" — проставляем новым покупателям с сайта
+RETAIL_PRICE_TYPE_META = {"meta": {"href": f"{BASE_URL}/context/companysettings/pricetype/41d51d37-266b-11eb-0a80-090200155c6f", "type": "pricetype", "mediaType": "application/json"}}
+RETAIL_GROUP_TAG = "розница"
+
+# Окно, за которое заведённые заказы показываются в журнале робота на /checks
+# (совпадает с RECENT_CHANGES_DAYS на бэкенде — там находки мёржатся за 14 дней)
+RECENT_ORDERS_DAYS = 14
 
 
 def normalize_phone(raw: str) -> str:
@@ -162,6 +175,10 @@ class OrderCreator:
         payload = {
             "name": build_customer_name(latest),
             "companyType": "individual",
+            # Розничный покупатель с сайта: тег "розница" (в UF МС это «Группа») и
+            # тип цены "Розница – ИП (Сайт | РРЦ)" — так просил пользователь
+            "tags": [RETAIL_GROUP_TAG],
+            "priceType": RETAIL_PRICE_TYPE_META,
         }
         if phone:
             payload["phone"] = phone
@@ -231,6 +248,7 @@ class OrderCreator:
             "salesChannel": SALES_CHANNEL_META,
             "externalCode": order_id,
             "applicable": False,
+            "state": STATE_NEW_META,
             "moment": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
             "description": build_description(latest),
             "positions": positions,
@@ -288,6 +306,14 @@ class OrderCreator:
         payment = self.helper._post("/entity/paymentin", payload)
 
         order_update = {"applicable": True}
+        # Оплачен и проведён — переводим в "Можно собирать" (для склада), но только
+        # если заказ всё ещё в статусе "Новый" (который робот сам поставил при создании).
+        # Если сотрудник вручную продвинул статус дальше по воронке — не откатываем.
+        current_state_href = ((order_full.get("state") or {}).get("meta") or {}).get("href", "")
+        if current_state_href.endswith(STATE_NEW_ID):
+            order_update["state"] = STATE_CAN_ASSEMBLE_META
+        else:
+            print(f"    WARNING: статус заказа {order_id} изменён вручную в МойСклад — не перезаписываю на «Можно собирать»")
         new_description = build_description(latest)
         if order_full.get("description") == ms.get("last_description_written"):
             order_update["description"] = new_description
@@ -444,7 +470,7 @@ class OrderCreator:
 def _export_results(counts, state, path):
     """Структурированный JSON для страницы /checks: стат-карточки + раскрываемые списки."""
     import json as _json
-    from datetime import datetime as _dt
+    from datetime import datetime as _dt, timedelta as _td
 
     cr, pc, cn, er = (counts.get(k, 0) for k in ("orders_created", "payments_created", "orders_cancelled", "errors"))
     stats = [
@@ -486,9 +512,37 @@ def _export_results(counts, state, path):
         for oid, o in state.get("orders", {}).items() if o.get("ms", {}).get("cancelled_at")
     ]
 
+    # Заведённые заказы: без этой ok-категории журнал робота на /checks всегда пуст —
+    # снимок одного прогона почти всегда «ничего не создано», а мёрж за 14 дней
+    # (см. _recent_changes в api/views/checks.py) собирает именно categories.
+    # Поэтому в каждом прогоне выкладываем актуальный список заведённых за окно
+    # заказов; бэкенд продедупит их по (заказ, статус) и подпишет датой прогона.
+    def _in_window(iso: str) -> bool:
+        if not iso:
+            return False
+        try:
+            return _dt.fromisoformat(iso) >= _dt.now() - _td(days=RECENT_ORDERS_DAYS)
+        except ValueError:
+            return False
+
+    created_items = []
+    for oid, o in state.get("orders", {}).items():
+        ms = o.get("ms") or {}
+        if not ms.get("customerorder_id") or ms.get("cancelled_at") or ms.get("last_error"):
+            continue
+        paid = bool(ms.get("payment_id") or ms.get("paid_externally"))
+        # Показываем только то, что робот трогал недавно, — иначе старые заказы
+        # всплывали бы в «за последние 14 дней» с датой сегодняшнего прогона
+        if not _in_window(ms.get("paid_at") if paid else ms.get("created_at")):
+            continue
+        total = format_money((o.get("latest") or {}).get("total"))
+        detail = (f"Оплачен и проведён · {total}" if paid else f"Черновик заведён · {total}")
+        created_items.append(build_item(oid, o, detail, "ok"))
+
     categories = [c for c in [
         cat("errors", "Ошибки заведения", "critical", error_items),
         cat("cancelled", "Отменены (не оплачены 24ч)", "warning", cancelled_items),
+        cat("created", "Заведено в МойСклад", "ok", created_items),
     ] if c]
 
     payload = {

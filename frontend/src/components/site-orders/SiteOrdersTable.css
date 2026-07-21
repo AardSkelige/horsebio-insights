@@ -73,17 +73,20 @@
     font-variant-numeric: tabular-nums;
     white-space: nowrap;
 }
-.site-orders-table .actions-cell { text-align: right; white-space: nowrap; }
-.site-orders-table .actions-cell .icon-btn { margin-left: 4px; }
-.site-orders-table .actions-cell .icon-btn:first-child { margin-left: 0; }
+/* Классы иконок-действий раскоуплены из-под .site-orders-table: мобильные
+   карточки (OrderCard) рендерятся вне таблицы, а раньше стили висели на
+   .site-orders-table и до карточек не доезжали — иконки на телефоне ломались. */
+.actions-cell { display: inline-flex; align-items: center; gap: 6px; white-space: nowrap; }
+/* В десктопной таблице последний столбец прижимаем вправо */
+.site-orders-table tbody td:last-child { text-align: right; }
 
-.site-orders-table .icon-btn {
+.icon-btn {
     display: inline-flex;
     align-items: center;
     justify-content: center;
-    width: 26px;
-    height: 26px;
-    border-radius: 7px;
+    width: 32px;
+    height: 32px;
+    border-radius: 8px;
     border: 1px solid var(--hairline);
     background: var(--canvas);
     color: var(--muted);
@@ -91,12 +94,12 @@
     flex-shrink: 0;
     transition: color 120ms ease, border-color 120ms ease;
 }
-.site-orders-table .icon-btn:hover { color: var(--primary); border-color: var(--primary); }
-.site-orders-table .icon-btn:focus-visible { outline: 2px solid var(--primary); outline-offset: 2px; }
-.site-orders-table .icon-btn.disabled { opacity: .3; pointer-events: none; }
-.site-orders-table .icon-btn.danger { cursor: pointer; }
-.site-orders-table .icon-btn.danger:hover { color: var(--error); border-color: var(--error); }
-.site-orders-table .icon-btn:disabled { opacity: .5; cursor: default; }
+.icon-btn:hover { color: var(--primary); border-color: var(--primary); }
+.icon-btn:focus-visible { outline: 2px solid var(--primary); outline-offset: 2px; }
+.icon-btn.disabled { opacity: .3; pointer-events: none; }
+.icon-btn.danger { cursor: pointer; }
+.icon-btn.danger:hover { color: var(--error); border-color: var(--error); }
+.icon-btn:disabled { opacity: .5; cursor: default; }
 
 /* Статус-чип с тултипом */
 .status-wrap { position: relative; display: inline-block; }
@@ -172,5 +175,13 @@
     min-width: 40px;
     padding-top: 1px;
 }
+
+/* Тултип у иконки-действия — тот же тёмный стиль, что у статус-чипа (.tip),
+   но прижат правым краем, чтобы не уезжать за правую границу таблицы.
+   Правила идут ПОСЛЕ .tip, чтобы перебить его left: 0. */
+.act-wrap { position: relative; display: inline-flex; }
+.act-wrap:hover .tip, .act-wrap:focus-within .tip { opacity: 1; visibility: visible; transform: translateY(0); }
+.act-tip { left: auto; right: 0; max-width: 240px; }
+.act-tip::before { left: auto; right: 12px; }
 
 /* Мобильная раскладка — карточки вместо таблицы (см. SiteOrdersTable.jsx isMobile) */
