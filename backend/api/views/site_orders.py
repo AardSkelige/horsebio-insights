@@ -11,7 +11,7 @@ from rest_framework.response import Response
 from .scripts_monitor import scripts_auth
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', '..', 'moysklad', 'horsebio', '_shared'))
-from order_email_utils import build_customer_name  # noqa: E402 — тот же helper, что и в 02_create_orders.py
+from order_email_utils import build_customer_name, state_lock, load_state, save_state  # noqa: E402 — те же helper'ы, что и в 02_create_orders.py
 
 logger = logging.getLogger(__name__)
 
@@ -235,26 +235,26 @@ def site_order_delete(request, order_id):
     if not STATE_FILE.exists():
         return Response({'status': 'error', 'message': 'Файл состояния не найден'}, status=404)
 
+    # Тот же лок, что держат 01_read_order_emails.py / 02_create_orders.py: без него
+    # это read-modify-write гонится с демонами и молча затирает только что созданный
+    # ими заказ (см. state_lock() и инцидент с заказом 532598916 в order_email_utils.py)
     try:
-        state = json.loads(STATE_FILE.read_text())
+        with state_lock(STATE_FILE):
+            state = load_state(STATE_FILE, {})
+
+            order = state.get('orders', {}).pop(order_id, None)
+            if order is None:
+                return Response({'status': 'error', 'message': 'Заказ не найден в журнале'}, status=404)
+
+            processed = state.get('processed_message_ids', [])
+            for snap in order.get('history', []):
+                mid = snap.get('message_id')
+                if mid in processed:
+                    processed.remove(mid)
+
+            save_state(STATE_FILE, state)
     except Exception as e:
-        logger.exception('Не удалось прочитать state-файл заказов сайта')
-        return Response({'status': 'error', 'message': str(e)}, status=500)
-
-    order = state.get('orders', {}).pop(order_id, None)
-    if order is None:
-        return Response({'status': 'error', 'message': 'Заказ не найден в журнале'}, status=404)
-
-    processed = state.get('processed_message_ids', [])
-    for snap in order.get('history', []):
-        mid = snap.get('message_id')
-        if mid in processed:
-            processed.remove(mid)
-
-    try:
-        STATE_FILE.write_text(json.dumps(state, ensure_ascii=False, indent=2, default=str))
-    except Exception as e:
-        logger.exception('Не удалось сохранить state-файл после удаления заказа %s', order_id)
+        logger.exception('Не удалось удалить заказ %s из state-файла', order_id)
         return Response({'status': 'error', 'message': str(e)}, status=500)
 
     return Response({'status': 'success'})

@@ -87,6 +87,9 @@ export default function SiteOrdersPage() {
         setSort(prev => ({ key, dir: prev.key === key && prev.dir === 'desc' ? 'asc' : 'desc' }));
     };
 
+    // После удаления заказа перечитываем текущую страницу с тем же limit
+    const reload = useCallback(() => load(limit), [load, limit]);
+
     const hasFilters = filters.search || filters.dateFrom || filters.dateTo;
     const rows = data?.data?.rows || [];
     const total = data?.data?.total ?? 0;
@@ -185,6 +188,7 @@ export default function SiteOrdersPage() {
                         loading={loading && rows.length === 0}
                         sort={sort}
                         onSortChange={handleSortChange}
+                        onDeleted={reload}
                         isMobile={isMobile}
                     />
                     {!loading && rows.length === 0 && (
