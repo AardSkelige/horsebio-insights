@@ -23,6 +23,7 @@ IMAP UID он не зависит от UIDVALIDITY). order_id из блока HB
 """
 
 import argparse
+import base64
 import email
 import imaplib
 import json
@@ -30,7 +31,7 @@ import os
 import re
 import sys
 import time
-from datetime import datetime
+from datetime import datetime, timedelta
 from email.header import decode_header
 from email.message import Message
 from pathlib import Path
@@ -47,6 +48,43 @@ STATE_FILE = Path(__file__).parent.parent / "data" / ".order_email_state.json"
 
 # Отправитель писем-уведомлений Megagroup CMS — подтверждено на живом письме
 NOTIFICATION_SENDER = "noreply@megagroup.ru"
+
+# В ящике настроено правило почты, которое уносит уведомления Megagroup из INBOX
+# в отдельные папки (подтверждено на живом ящике 20.07.2026): новые заказы попадают
+# в «ЗАКАЗЫ», письма об оплате — в «ОПЛАТА». INBOX всё равно проверяем — на случай,
+# если правило когда-нибудь изменится или отключится.
+ORDER_FOLDERS = ["INBOX", "ЗАКАЗЫ", "ОПЛАТА"]
+
+# Мониторинг начинается с этой даты — не пытаемся оживить историю заказов за
+# прошлые годы (папка «ЗАКАЗЫ» на живом ящике содержит тысячи писем за много лет,
+# в основном не про заказы вообще — без даты-фильтра IMAP SEARCH возвращал бы всю
+# историю на КАЖДОМ прогоне каждые 5 минут). См. паттерн START_DATE в 03_returns.
+HISTORY_START_DATE = "2026-07-20"
+
+
+def imap_utf7_encode(name: str) -> str:
+    """Кодирует имя папки в modified UTF-7 (RFC 3501) — так IMAP-серверы (в т.ч.
+    mail.ru/VK WorkSpace) называют папки с кириллицей во внутреннем протоколе.
+    '/' и обычная ASCII-часть остаются как есть, кириллица уходит в &...-блок."""
+    res = []
+    i, n = 0, len(name)
+    while i < n:
+        c = name[i]
+        if 0x20 <= ord(c) <= 0x7e and c != "&":
+            res.append(c)
+            i += 1
+        elif c == "&":
+            res.append("&-")
+            i += 1
+        else:
+            j = i
+            while j < n and not (0x20 <= ord(name[j]) <= 0x7e):
+                j += 1
+            chunk = name[i:j].encode("utf-16-be")
+            b64 = base64.b64encode(chunk).decode("ascii").rstrip("=").replace("/", ",")
+            res.append(f"&{b64}-")
+            i = j
+    return "".join(res)
 
 HB_BLOCK_RE = re.compile(r"<!--HB_ORDER_DATA(.*?)HB_ORDER_DATA-->", re.DOTALL)
 
@@ -171,12 +209,29 @@ class OrderEmailReader:
             )
         conn = imaplib.IMAP4_SSL(IMAP_HOST)
         conn.login(IMAP_USER, IMAP_PASSWORD)
-        conn.select("INBOX", readonly=True)
         return conn
 
+    def _select_folder(self, conn: imaplib.IMAP4_SSL, folder: str) -> bool:
+        """Возвращает False, если папки не существует (например, правило почты
+        поменялось) — тогда просто пропускаем её, не роняя весь прогон."""
+        path = folder if folder == "INBOX" else f"INBOX/{folder}"
+        status, _ = conn.select(imap_utf7_encode(path), readonly=True)
+        return status == "OK"
+
+    def _since_clause(self) -> str:
+        """Дата, начиная с которой ищем письма — вчера от last_checked_date (день
+        запаса на случай гонки часовых поясов), но не раньше HISTORY_START_DATE."""
+        last_checked = self.state.get("last_checked_date") or HISTORY_START_DATE
+        d = datetime.strptime(last_checked, "%Y-%m-%d").date() - timedelta(days=1)
+        floor = datetime.strptime(HISTORY_START_DATE, "%Y-%m-%d").date()
+        if d < floor:
+            d = floor
+        return d.strftime("%d-%b-%Y")
+
     def _search_uids(self, conn: imaplib.IMAP4_SSL) -> list[bytes]:
+        since = self._since_clause()
         status, data = conn.uid(
-            "search", None, f'(FROM "{NOTIFICATION_SENDER}")'
+            "search", None, f'(FROM "{NOTIFICATION_SENDER}" SINCE {since})'
         )
         if status != "OK":
             raise RuntimeError(f"IMAP SEARCH вернул статус {status}")
@@ -259,25 +314,31 @@ class OrderEmailReader:
 
         conn = self._connect()
         try:
-            uids = self._search_uids(conn)
-            print(f"Писем от {NOTIFICATION_SENDER}: {len(uids)}")
+            for folder in ORDER_FOLDERS:
+                if not self._select_folder(conn, folder):
+                    print(f"  WARNING: папка «{folder}» не найдена в ящике — пропускаю")
+                    continue
 
-            for uid in uids:
-                try:
-                    msg = self._fetch_message(conn, uid)
-                    if msg is None:
-                        print(f"  ERROR: не удалось получить письмо uid={uid.decode()}")
+                uids = self._search_uids(conn)
+                print(f"Папка «{folder}»: писем от {NOTIFICATION_SENDER} — {len(uids)}")
+
+                for uid in uids:
+                    try:
+                        msg = self._fetch_message(conn, uid)
+                        if msg is None:
+                            print(f"  ERROR: не удалось получить письмо uid={uid.decode()}")
+                            counts["error"] += 1
+                            continue
+                        result = self._process_message(msg, uid)
+                        counts[result] += 1
+                    except Exception as e:
+                        print(f"  ERROR: письмо uid={uid.decode()} — {e}")
                         counts["error"] += 1
-                        continue
-                    result = self._process_message(msg, uid)
-                    counts[result] += 1
-                except Exception as e:
-                    print(f"  ERROR: письмо uid={uid.decode()} — {e}")
-                    counts["error"] += 1
         finally:
             conn.logout()
 
         if not self.dry_run:
+            self.state["last_checked_date"] = datetime.now().strftime("%Y-%m-%d")
             self._save_state()
 
         total_orders = len(self.state["orders"])
@@ -304,12 +365,15 @@ def _export_results(counts, state, path):
     import json as _json
     from datetime import datetime as _dt
 
-    rec, dup, nb, nh, er = (
-        counts.get(k, 0) for k in ("recorded", "already_processed", "no_hb_block", "no_html", "error")
+    rec, nb, nh, er = (
+        counts.get(k, 0) for k in ("recorded", "no_hb_block", "no_html", "error")
     )
+    # already_processed (сколько писем демон уже дедуплицировал) сюда намеренно
+    # не выводим — это чисто техническая деталь реализации, для бизнес-пользователя
+    # ничего не значит и растёт бесконечно с историей ящика, только запутывает
+    # пустой прогон, в котором ничего нового не произошло.
     stats = [
         {"label": "Новых заказов распознано", "value": rec, "tone": "ok" if rec else "neutral"},
-        {"label": "Уже видели раньше", "value": dup, "tone": "neutral"},
         # Не проблема — это письма от того же адреса, но не про заказ (например,
         # уведомление о модерации комментария на сайте). tone нейтральный специально,
         # чтобы не пугать оранжевым цветом то, что нормально происходит каждый прогон.
