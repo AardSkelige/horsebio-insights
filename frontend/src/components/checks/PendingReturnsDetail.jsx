@@ -37,7 +37,12 @@ function AgeStrip({ items }) {
         <div style={{ marginTop: 18 }}>
             {tip && (
                 <div style={{
-                    position: 'fixed', left: tip.x + 14, top: tip.y + 16, zIndex: 50, pointerEvents: 'none',
+                    position: 'fixed', top: tip.y + 16, zIndex: 50, pointerEvents: 'none',
+                    // У правого края зеркалим влево — иначе nowrap-плашка (последний сегмент)
+                    // уезжает за вьюпорт (позиционирование фиксированное от курсора).
+                    ...(tip.x > window.innerWidth - 260
+                        ? { right: window.innerWidth - tip.x + 14 }
+                        : { left: tip.x + 14 }),
                     background: 'var(--surface-dark, #262521)', color: 'var(--on-dark, #f5f2ea)',
                     fontSize: 12, fontWeight: 500, lineHeight: 1.4, borderRadius: 9, padding: '7px 11px',
                     boxShadow: '0 6px 22px rgba(0,0,0,0.25)', whiteSpace: 'nowrap',

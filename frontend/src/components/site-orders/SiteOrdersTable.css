@@ -185,3 +185,12 @@
 .act-tip::before { left: auto; right: 12px; }
 
 /* Мобильная раскладка — карточки вместо таблицы (см. SiteOrdersTable.jsx isMobile) */
+
+/* На мобильном (isMobile = innerWidth < 768) чип статуса прижат к правому краю
+   карточки, а тултип с left:0 раскрывался вправо и уезжал за экран. Прижимаем его
+   правым краём и ограничиваем ширину вьюпортом. Скоупим на .status-wrap, чтобы не
+   задеть .act-tip. */
+@media (max-width: 767px) {
+    .status-wrap .tip { left: auto; right: 0; max-width: min(300px, calc(100vw - 32px)); }
+    .status-wrap .tip::before { left: auto; right: 16px; }
+}
