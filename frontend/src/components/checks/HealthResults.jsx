@@ -422,7 +422,7 @@ function Category({ cat, excKeys, excMap, onChanged }) {
 }
 Category.propTypes = { cat: PropTypes.object, excKeys: PropTypes.object, excMap: PropTypes.object, onChanged: PropTypes.func };
 
-export default function HealthResults({ scriptId, runId, running }) {
+export default function HealthResults({ scriptId, runId, running, onExceptionChange }) {
     const [data, setData] = useState(undefined); // undefined=loading, null=нет данных
     const [refreshKey, setRefreshKey] = useState(0);
 
@@ -485,7 +485,7 @@ export default function HealthResults({ scriptId, runId, running }) {
                 </div>
             ) : (
                 visibleCats.map((cat) => (
-                    <Category key={cat.key} cat={cat} excKeys={excKeys} excMap={excMap} onChanged={() => setRefreshKey((k) => k + 1)} />
+                    <Category key={cat.key} cat={cat} excKeys={excKeys} excMap={excMap} onChanged={() => { setRefreshKey((k) => k + 1); onExceptionChange?.(); }} />
                 ))
             )}
         </div>
@@ -504,4 +504,5 @@ HealthResults.propTypes = {
     scriptId: PropTypes.string.isRequired,
     runId: PropTypes.string,
     running: PropTypes.bool,
+    onExceptionChange: PropTypes.func,
 };

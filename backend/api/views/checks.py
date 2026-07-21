@@ -18,6 +18,7 @@ from django.views.decorators.http import require_http_methods
 from django.utils import timezone as dj_timezone
 
 from api.models import HealthCheckException, CheckRunResult
+from api.services.health_checks import active_exception_index, apply_exceptions_to_summary
 from .scripts_monitor import (
     SCRIPTS_CONFIG, SCRIPTS_BY_ID, HEALTH_CHECK_SCRIPT_ID,
     scripts_auth, scripts_auth_basic, _starpony_access_denied,
@@ -46,9 +47,12 @@ def _findings_identity(findings):
     return ids
 
 
-def _serialize_health_run(r, prev):
-    """Сериализовать CheckRunResult с дельтой относительно предыдущего запуска."""
-    summary = r.summary or {}
+def _serialize_health_run(r, prev, exc_index=None):
+    """Сериализовать CheckRunResult с дельтой относительно предыдущего запуска.
+
+    Для health-чека exc_index задан — summary пересчитывается живьём с учётом
+    исключений, чтобы «● N проблема» гасло сразу после «+ в исключения»."""
+    summary = apply_exceptions_to_summary(r.summary, r.findings, exc_index) if exc_index is not None else (r.summary or {})
     out = {
         'run_id': r.run_id,
         'finished_at': dj_timezone.localtime(r.finished_at).strftime('%Y-%m-%d %H:%M:%S') if r.finished_at else '',
@@ -57,7 +61,7 @@ def _serialize_health_run(r, prev):
         'summary': {k: summary.get(k, 0) for k in ('critical', 'important', 'warnings', 'ok')},
     }
     if prev is not None:
-        prev_sum = prev.summary or {}
+        prev_sum = apply_exceptions_to_summary(prev.summary, prev.findings, exc_index) if exc_index is not None else (prev.summary or {})
         out['delta'] = {
             k: (summary.get(k, 0) - prev_sum.get(k, 0))
             for k in ('critical', 'important', 'warnings')
@@ -113,7 +117,11 @@ def checks_overview(request):
         }
         if script.get('structured'):
             crr = latest_results.get(sid)
-            item['summary'] = (crr.summary or {}) if crr else None
+            if crr and sid == HEALTH_CHECK_SCRIPT_ID:
+                # Гасим исключённые находки в счётчиках карточки сразу, не дожидаясь прогона
+                item['summary'] = apply_exceptions_to_summary(crr.summary, crr.findings)
+            else:
+                item['summary'] = (crr.summary or {}) if crr else None
             item['last_result_run_id'] = crr.run_id if crr else None
         result.append(item)
     return JsonResponse({'scripts': result})
@@ -130,7 +138,8 @@ def checks_runs(request, script_id):
 
     if SCRIPTS_BY_ID.get(script_id, {}).get('structured'):
         rows = list(CheckRunResult.objects.filter(script_id=script_id).order_by('-finished_at')[:30])
-        runs = [_serialize_health_run(r, rows[i + 1] if i + 1 < len(rows) else None)
+        exc_index = active_exception_index() if script_id == HEALTH_CHECK_SCRIPT_ID else None
+        runs = [_serialize_health_run(r, rows[i + 1] if i + 1 < len(rows) else None, exc_index)
                 for i, r in enumerate(rows)]
         return JsonResponse({'kind': 'structured', 'runs': runs, 'is_running': _is_running(script_id)})
 
@@ -204,9 +213,11 @@ def checks_results(request, script_id):
         return JsonResponse({'results': None})
 
     # Активные исключения — только у health_check. exception_keys — ключи по типам;
-    # exceptions_map — причина и привязка к приёмке (для «прошлого разбора» в находках)
+    # exceptions_map — причина и привязка к приёмке (для «прошлого разбора» в находках);
+    # exc_index — {kind: {key: extra}} для живого пересчёта summary
     exc_keys = defaultdict(list)
     exc_map = defaultdict(dict)
+    exc_index = defaultdict(dict)
     if script_id == HEALTH_CHECK_SCRIPT_ID:
         for kind, key, reason, extra in HealthCheckException.objects.values_list(
                 'kind', 'key', 'reason', 'extra'):
@@ -215,12 +226,17 @@ def checks_results(request, script_id):
                 'reason': reason,
                 'supply_doc': (extra or {}).get('supply_doc', ''),
             }
+            exc_index[kind][key] = extra if isinstance(extra, dict) else {}
 
+    # Сетка чипов и StatsRow читают summary — гасим исключённые находки живьём,
+    # чтобы бейджи совпадали со скрытым списком находок, не дожидаясь прогона
+    summary = (apply_exceptions_to_summary(crr.summary, crr.findings, exc_index)
+               if script_id == HEALTH_CHECK_SCRIPT_ID else (crr.summary or {}))
     results = {
         'run_id': crr.run_id,
         'finished_at': dj_timezone.localtime(crr.finished_at).strftime('%Y-%m-%d %H:%M:%S') if crr.finished_at else '',
         'duration_sec': crr.duration_sec,
-        'summary': crr.summary or {},
+        'summary': summary,
         'categories': crr.findings or [],
         'exception_keys': exc_keys,
         'exceptions_map': exc_map,

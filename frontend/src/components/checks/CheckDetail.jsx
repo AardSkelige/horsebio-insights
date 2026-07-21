@@ -70,7 +70,9 @@ export default function CheckDetail({ scriptId, initial, onBack }) {
             </div>
         );
     } else {
-        main = <HealthResults scriptId={scriptId} runId={null} running={false} />;
+        // onExceptionChange → перечитать runs: заголовок «● N проблема» берёт summary
+        // из последнего запуска, а бэкенд пересчитывает его с учётом исключений
+        main = <HealthResults scriptId={scriptId} runId={null} running={false} onExceptionChange={loadRuns} />;
     }
 
     return (

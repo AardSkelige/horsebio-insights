@@ -169,6 +169,77 @@ class RecentChangesTests(TestCase):
         self.assertNotIn('recent_changes', resp.json()['results'])
 
 
+class LiveSummaryRecomputeTests(TestCase):
+    """summary пересчитывается живьём с учётом исключений — бейджи гаснут сразу
+    после «+ в исключения», не дожидаясь следующего прогона (как в инв. №00043)."""
+
+    DOC_ID = 'f3ab46d0-6e34-11f1-0a80-16ec00839c85'
+
+    def setUp(self):
+        HealthCheckException.objects.all().delete()
+        self.client = Client()
+        self.admin = User.objects.create_superuser('admin', 'admin@test.ru', 'pass')
+        self.client.force_login(self.admin)
+        self.run = CheckRunResult.objects.create(
+            script_id=HEALTH_CHECK_SCRIPT_ID, run_id='20260721_112900', exit_code=0,
+            duration_sec=504.0, finished_at=timezone.now(),
+            summary={
+                'critical': 0, 'important': 1, 'warnings': 0, 'ok': 5,
+                'categories': {'inventory_price_issues': 1},
+                'checks': [
+                    {'id': 'inventories', 'title': 'Инвентаризации', 'status': 'problems',
+                     'count': 1, 'severity': 'important', 'cats': ['inventory_price_issues']},
+                    {'id': 'losses', 'title': 'Списания', 'status': 'ok',
+                     'count': 0, 'severity': None, 'cats': []},
+                ],
+            },
+            findings=[{
+                'key': 'inventory_price_issues', 'title': 'Инвентаризации: проблемы цен',
+                'kind': 'inventories', 'ms_type': 'inventory', 'severity': 'important', 'count': 1,
+                'items': [{'key': self.DOC_ID, 'object': '№00043', 'severity': 'important'}],
+            }],
+        )
+
+    def _add_exception(self):
+        HealthCheckException.objects.create(
+            kind='inventories', key=self.DOC_ID, label='00043', reason='Ложная тревога big_deviation')
+
+    def test_results_summary_before_and_after_exception(self):
+        url = reverse('api:checks_results', args=[HEALTH_CHECK_SCRIPT_ID])
+        s = self.client.get(url).json()['results']['summary']
+        self.assertEqual(s['important'], 1)
+        self.assertEqual([c for c in s['checks'] if c['id'] == 'inventories'][0]['count'], 1)
+
+        self._add_exception()
+        s = self.client.get(url).json()['results']['summary']
+        self.assertEqual(s['important'], 0)
+        self.assertEqual(s['categories']['inventory_price_issues'], 0)
+        inv = [c for c in s['checks'] if c['id'] == 'inventories'][0]
+        self.assertEqual(inv['count'], 0)
+        self.assertEqual(inv['status'], 'ok')
+        self.assertIsNone(inv['severity'])
+
+    def test_overview_card_total_drops_to_zero(self):
+        self._add_exception()
+        resp = self.client.get(reverse('api:checks_overview'))
+        card = next(s for s in resp.json()['scripts'] if s['id'] == HEALTH_CHECK_SCRIPT_ID)
+        s = card['summary']
+        self.assertEqual((s['critical'], s['important'], s['warnings']), (0, 0, 0))
+
+    def test_runs_header_summary_drops(self):
+        self._add_exception()
+        resp = self.client.get(reverse('api:checks_runs', args=[HEALTH_CHECK_SCRIPT_ID]))
+        latest = resp.json()['runs'][0]['summary']
+        self.assertEqual(latest['important'], 0)
+
+    def test_findings_list_unchanged(self):
+        # summary гаснет, но сами находки остаются — их скрывает клиент по exception_keys
+        self._add_exception()
+        results = self.client.get(reverse('api:checks_results', args=[HEALTH_CHECK_SCRIPT_ID])).json()['results']
+        self.assertEqual(len(results['categories'][0]['items']), 1)
+        self.assertIn(self.DOC_ID, results['exception_keys']['inventories'])
+
+
 class ParseProgressTests(TestCase):
     def test_none_when_no_markers(self):
         self.assertIsNone(_parse_progress(''))

@@ -261,3 +261,91 @@ def ingest_results_file(script_id, run_id, path, exit_code=None, duration_sec=No
         except Exception:
             logger.exception('Не удалось почистить закрытые deviations-исключения')
     return obj
+
+
+# ─── Живой пересчёт summary с учётом исключений ───────────────────────────────
+#
+# summary заморожен на момент запуска скрипта, а исключения — источник истины в БД
+# и применяются к нему только на следующем прогоне (через export_exceptions_to_json).
+# Чтобы бейджи гасли сразу после «+ в исключения», read-эндпоинты пересчитывают
+# summary на лету: гасят те же находки, что скрывает клиентский isAckExcepted.
+
+_SEVERITY_RANK = {'critical': 3, 'important': 2, 'warning': 1, 'info': 0}
+
+
+def active_exception_index():
+    """{kind: {key: extra}} — активные исключения из БД для живого сопоставления
+    находок. Источник тот же, что и у export_exceptions_to_json."""
+    from api.models import HealthCheckException
+    idx = defaultdict(dict)
+    for kind, key, extra in HealthCheckException.objects.values_list('kind', 'key', 'extra'):
+        idx[kind][key] = extra if isinstance(extra, dict) else {}
+    return idx
+
+
+def _item_excepted(cat_kind, item, exc_index):
+    """Повторяет клиентский isAckExcepted (HealthResults.jsx): находка гасится
+    активным исключением того же kind по её key. deviations гасятся иначе — через
+    статус «норма», не здесь; supply_jumps — разовое исключение по supply_doc."""
+    if not cat_kind or cat_kind == 'deviations':
+        return False
+    key = item.get('key')
+    if not key:
+        return False
+    e = exc_index.get(cat_kind, {}).get(key)
+    if e is None:
+        return False
+    if cat_kind == 'supply_jumps':
+        supply_doc = e.get('supply_doc')
+        return (not supply_doc) or supply_doc == item.get('last_doc')
+    return True
+
+
+def apply_exceptions_to_summary(summary, findings, exc_index=None):
+    """Вернуть копию summary, пересчитанную без находок, погашенных исключениями.
+
+    Счётчики (critical/important/warnings), categories и сетка checks приводятся к
+    тому виду, как если бы скрипт пропустил исключённые документы. ok и
+    pending_returns не трогаются — их находки в исключения не уходят.
+    """
+    summary = dict(summary or {})
+    if exc_index is None:
+        exc_index = active_exception_index()
+
+    sev_counts = {'critical': 0, 'important': 0, 'warning': 0}
+    cat_counts = {}
+    kept_by_cat = {}
+    for cat in findings or []:
+        ckey = cat.get('key', '')
+        kind = cat.get('kind')
+        kept = [it for it in cat.get('items', []) if not _item_excepted(kind, it, exc_index)]
+        kept_by_cat[ckey] = kept
+        cat_counts[ckey] = len(kept)
+        if ckey == 'pending_returns':
+            continue
+        for it in kept:
+            s = it.get('severity')
+            if s in sev_counts:
+                sev_counts[s] += 1
+
+    summary['critical'] = sev_counts['critical']
+    summary['important'] = sev_counts['important']
+    summary['warnings'] = sev_counts['warning']
+    if cat_counts or 'categories' in summary:
+        summary['categories'] = {**summary.get('categories', {}), **cat_counts}
+
+    if 'checks' in summary:
+        new_checks = []
+        for ch in summary['checks']:
+            if ch.get('status') == 'skipped':
+                new_checks.append(ch)
+                continue
+            items = [it for k in ch.get('cats', []) for it in kept_by_cat.get(k, [])]
+            count = len(items)
+            sev = max((it.get('severity') for it in items),
+                      key=lambda s: _SEVERITY_RANK.get(s, 0)) if items else None
+            new_checks.append({**ch, 'count': count,
+                               'status': 'problems' if count else 'ok', 'severity': sev})
+        summary['checks'] = new_checks
+
+    return summary
