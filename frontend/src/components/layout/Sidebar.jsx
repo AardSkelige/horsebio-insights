@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
 import PropTypes from 'prop-types';
-import { PanelLeftClose, PanelLeftOpen, X, RefreshCw } from 'lucide-react';
+import { PanelLeftClose, PanelLeftOpen, X, RefreshCw, ChevronDown } from 'lucide-react';
 import { clearAuthStatus } from '../../utils/authSession';
 import { useSuperuser } from '../../hooks/useAuthStatus';
 import { authApi } from '../../api/authApi';
@@ -27,6 +27,20 @@ export const Sidebar = ({ expanded, onToggle, isMobile, mobileOpen, onMobileClos
     const [pinnedPaths, setPinnedPaths] = useState([]);
     // Ховер живёт на уровне сайдбара: одна layoutId-пилюля перетекает между пунктами
     const [hovPath, setHovPath] = useState(null);
+    // Свёрнутые категории меню — по label группы, запоминаем в браузере (как тему и
+    // свёрнутость самого сайдбара в Layout.jsx). Это чисто визуальное предпочтение.
+    const [collapsedGroups, setCollapsedGroups] = useState(() => {
+        try { return JSON.parse(localStorage.getItem('sidebarCollapsedGroups') || '[]'); }
+        catch { return []; }
+    });
+
+    const toggleGroup = (label) => {
+        setCollapsedGroups((prev) => {
+            const next = prev.includes(label) ? prev.filter((l) => l !== label) : [...prev, label];
+            try { localStorage.setItem('sidebarCollapsedGroups', JSON.stringify(next)); } catch { /* приватный режим — работаем без запоминания */ }
+            return next;
+        });
+    };
 
     useEffect(() => {
         let active = true;
@@ -170,6 +184,12 @@ export const Sidebar = ({ expanded, onToggle, isMobile, mobileOpen, onMobileClos
                     const items = group.items.filter(item => !item.superuserOnly || isSuperuser);
                     if (!items.length) return null;
 
+                    // Сворачивать можно только развёрнутый сайдбар и только именованные группы.
+                    // Категорию с текущей открытой страницей не сворачиваем — всегда видно, где ты.
+                    const hasActive = items.some(item => isActive(item.path));
+                    const collapsible = showExpanded && Boolean(group.label);
+                    const collapsed = collapsible && collapsedGroups.includes(group.label) && !hasActive;
+
                     return (
                         <div key={gi}>
                             {gi > 0 && !showExpanded && (
@@ -182,32 +202,52 @@ export const Sidebar = ({ expanded, onToggle, isMobile, mobileOpen, onMobileClos
                                     overflow: 'hidden',
                                     transition: 'max-height 200ms ease, opacity 150ms ease',
                                 }}>
-                                    <div style={{
-                                        padding: '10px 16px 4px',
-                                        fontFamily: 'var(--sans)', fontSize: '10px',
-                                        fontWeight: 600, letterSpacing: '0.08em',
-                                        textTransform: 'uppercase', color: 'var(--muted-soft)',
-                                    }}>
-                                        {group.label}
-                                    </div>
+                                    <button
+                                        type="button"
+                                        onClick={() => toggleGroup(group.label)}
+                                        title={collapsed ? 'Развернуть' : 'Свернуть'}
+                                        style={{
+                                            width: '100%', boxSizing: 'border-box',
+                                            display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+                                            padding: '10px 12px 4px 16px',
+                                            background: 'transparent', border: 0, cursor: 'pointer',
+                                            fontFamily: 'var(--sans)', fontSize: '10px',
+                                            fontWeight: 600, letterSpacing: '0.08em',
+                                            textTransform: 'uppercase', color: 'var(--muted-soft)',
+                                        }}
+                                    >
+                                        <span>{group.label}</span>
+                                        <ChevronDown size={12} style={{
+                                            flexShrink: 0,
+                                            transition: 'transform 200ms ease',
+                                            transform: collapsed ? 'rotate(-90deg)' : 'rotate(0deg)',
+                                        }} />
+                                    </button>
                                 </div>
                             )}
-                            {items.map(item => (
-                                <NavItem
-                                    key={item.path}
-                                    path={item.path}
-                                    label={item.label}
-                                    icon={item.icon}
-                                    expanded={showExpanded}
-                                    active={isActive(item.path)}
-                                    onNavigate={mobileNavigate}
-                                    hovered={hovPath === item.path}
-                                    onHover={setHovPath}
-                                    pinned={pinnedPaths.includes(item.path)}
-                                    pinDisabled={!pinnedPaths.includes(item.path) && pinnedPaths.length >= MAX_PINNED_SECTIONS}
-                                    onTogglePin={item.path === '/' ? undefined : handleTogglePin}
-                                />
-                            ))}
+                            <div style={{
+                                overflow: 'hidden',
+                                maxHeight: collapsed ? 0 : `${items.length * 40 + 8}px`,
+                                opacity: collapsed ? 0 : 1,
+                                transition: 'max-height 220ms ease, opacity 150ms ease',
+                            }}>
+                                {items.map(item => (
+                                    <NavItem
+                                        key={item.path}
+                                        path={item.path}
+                                        label={item.label}
+                                        icon={item.icon}
+                                        expanded={showExpanded}
+                                        active={isActive(item.path)}
+                                        onNavigate={mobileNavigate}
+                                        hovered={hovPath === item.path}
+                                        onHover={setHovPath}
+                                        pinned={pinnedPaths.includes(item.path)}
+                                        pinDisabled={!pinnedPaths.includes(item.path) && pinnedPaths.length >= MAX_PINNED_SECTIONS}
+                                        onTogglePin={item.path === '/' ? undefined : handleTogglePin}
+                                    />
+                                ))}
+                            </div>
                         </div>
                     );
                 })}
