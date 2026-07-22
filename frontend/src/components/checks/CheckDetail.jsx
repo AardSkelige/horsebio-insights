@@ -2,7 +2,7 @@ import { useState, useEffect, useCallback, useRef } from 'react';
 import PropTypes from 'prop-types';
 import { m } from 'motion/react';
 import { ArrowLeft, Play, Square, Loader2, Activity } from 'lucide-react';
-import { checksApi, relTime, fmtDuration, plural } from './checksShared';
+import { checksApi, relTime, fmtDuration, plural, SEV } from './checksShared';
 import { SCRIPT_META, AccountBadge } from './ScriptCard';
 import HealthResults from './HealthResults';
 import ExceptionsPanel from './ExceptionsPanel';
@@ -132,12 +132,14 @@ function RunSummary({ running, latest }) {
     const s = latest.summary || {};
     const problems = (s.critical || 0) + (s.important || 0) + (s.warnings || 0);
     const failed = latest.exit_code != null && latest.exit_code !== 0;
+    // Цвет по severity — как во внешней карточке (важное → оранжевый, а не всегда красный)
+    const sevColor = SEV[s.critical ? 'critical' : s.important ? 'important' : 'warning'].color;
     return (
         <span style={{ display: 'inline-flex', gap: 14, flexWrap: 'wrap' }}>
             {failed ? (
                 <span style={{ color: 'var(--error)', fontWeight: 700 }}>● запуск с ошибкой</span>
             ) : problems > 0 ? (
-                <span style={{ color: 'var(--error)', fontWeight: 700 }}>● {problems} {plural(problems, 'проблема', 'проблемы', 'проблем')}</span>
+                <span style={{ color: sevColor, fontWeight: 700 }}>● {problems} {plural(problems, 'проблема', 'проблемы', 'проблем')}</span>
             ) : (
                 <span style={{ color: 'var(--success)', fontWeight: 700 }}>✓ всё чисто</span>
             )}

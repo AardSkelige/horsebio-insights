@@ -292,6 +292,22 @@ class ReturnsMonitor:
 
         if not demands:
             shipped_sum = order.get("shippedSum", 0) / 100
+
+            # Отменён и не отгружался — товар не двигался, возвращать нечего. Это не
+            # пробел, а штатная отмена до отгрузки: не считаем проблемой и не показываем.
+            # (Отгружённый и затем отменённый заказ имеет demands и идёт по ветке ниже.)
+            if status_name == "Отменен":
+                print(f"  SKIP: {order_name} ({agent_name}) — отменён без отгрузки, возврат не нужен")
+                self.state["processed_orders"][order_id] = {
+                    "order_name": order_name,
+                    "agent": agent_name,
+                    "status_name": status_name,
+                    "status": "cancelled_no_ship",
+                    "shipped_sum": shipped_sum,
+                    "processed_at": datetime.now().isoformat()
+                }
+                return "cancelled_no_ship"
+
             # Извлекаем тип доставки из комментария синхронизации
             description = order.get("description", "")
             delivery_type = ""
@@ -408,6 +424,7 @@ class ReturnsMonitor:
             "skipped": 0,
             "already_processed": 0,
             "no_demand": 0,
+            "cancelled_no_ship": 0,
             "return_exists": 0,
             "return_created": 0,
             "error": 0,
@@ -444,6 +461,7 @@ class ReturnsMonitor:
         print("Итого:")
         print(f"  Не наши агенты (ЯМ и др.):  {counts['skipped']}")
         print(f"  Уже обработаны ранее:        {counts['already_processed']}")
+        print(f"  Отменён без отгрузки:        {counts['cancelled_no_ship']}")
         print(f"  Нет отгрузки (WARNING):      {counts['no_demand']}")
         print(f"  Возврат уже существует:      {counts['return_exists']}")
         print(f"  Создано новых возвратов:     {counts['return_created']}")

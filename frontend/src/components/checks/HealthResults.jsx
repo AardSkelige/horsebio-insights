@@ -454,6 +454,9 @@ export default function HealthResults({ scriptId, runId, running, onExceptionCha
     const excKeys = data.exception_keys || {};
     const excMap = data.exceptions_map || {};
     const isRobot = Array.isArray(data.summary?.stats) && data.summary.stats.length > 0;
+    // Возвраты ВБ/Озон: стат-карточки дублируют список ниже — прячем их (робот-режим
+    // держится на наличии stats, поэтому саму строку скрываем на фронте, а не в бэке).
+    const hideStats = scriptId === 'horsebio_returns';
     // Роботы: показываем слитые изменения за последние N дней (снимок одного запуска
     // почти всегда пуст — интересное случается раз в несколько дней).
     // Хелс-чек: снимок последнего запуска; «помечены нормой» — вниз.
@@ -469,7 +472,7 @@ export default function HealthResults({ scriptId, runId, running, onExceptionCha
                     Запуск {relTime(data.finished_at)} (исторический снимок)
                 </div>
             )}
-            {isRobot && <StatsRow stats={data.summary.stats} onJump={handleJump} />}
+            {isRobot && !hideStats && <StatsRow stats={data.summary.stats} onJump={handleJump} />}
             {Array.isArray(data.summary?.checks) && data.summary.checks.length > 0 && (
                 <ChecksGrid checks={data.summary.checks} onJump={handleJump} />
             )}
