@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback, useLayoutEffect, useRef } from 'react';
+import { createPortal } from 'react-dom';
 import PropTypes from 'prop-types';
 import { ArrowLeft, ExternalLink, Loader2, PackageOpen, ChevronRight } from 'lucide-react';
 import { checksApi, relTime, fmtRub, plural, PENDING_RETURNS_HINT } from './checksShared';
@@ -54,13 +55,16 @@ function AgeStrip({ items }) {
 
     return (
         <div style={{ marginTop: 18 }}>
-            {tip && (
+            {tip && createPortal(
+                // Портал в body: внутри страницы предки с transform (route-анимация,
+                // свайп-карточки) ломают position:fixed — плашка уезжала от курсора.
                 <div ref={tipRef} style={{
                     position: 'fixed', left: tip.x + 14, top: tip.y + 16, zIndex: 50, pointerEvents: 'none',
                     background: 'var(--surface-dark, #262521)', color: 'var(--on-dark, #f5f2ea)',
                     fontSize: 12, fontWeight: 500, lineHeight: 1.4, borderRadius: 9, padding: '7px 11px',
                     boxShadow: '0 6px 22px rgba(0,0,0,0.25)', whiteSpace: 'nowrap',
-                }}>{tip.text}</div>
+                }}>{tip.text}</div>,
+                document.body
             )}
             <div style={{ fontSize: 11, fontWeight: 700, letterSpacing: '0.07em', textTransform: 'uppercase', color: 'var(--muted)', marginBottom: 8 }}>
                 Сколько дней уже едут — по сумме
