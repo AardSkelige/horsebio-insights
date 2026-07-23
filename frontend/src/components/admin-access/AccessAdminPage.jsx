@@ -4,6 +4,7 @@ import { authApi } from '../../api/authApi';
 import './AccessAdminPage.css';
 
 const arraysEqual = (a, b) => a.length === b.length && a.every((x) => b.includes(x));
+const shortGroup = (g) => g.split(' ')[0];
 
 const AccessAdminPage = () => {
     const [loading, setLoading] = useState(true);
@@ -95,36 +96,39 @@ const AccessAdminPage = () => {
                     <p>Нет обычных пользователей для настройки</p>
                 </div>
             ) : (
-                <div className="acc-list">
+                <div className="acc-grid">
                     {users.map((u) => {
                         const set = draft[u.id] || new Set();
                         const dirty = isDirty(u.id);
                         return (
-                            <div key={u.id} className="acc-row">
-                                <div className="acc-row-top">
+                            <div key={u.id} className="acc-card">
+                                <div className="acc-card-h">
+                                    <span className="acc-av"><KeyRound style={{ width: 15, height: 15 }} /></span>
                                     <div className="acc-who">
-                                        <span className="acc-avatar"><KeyRound style={{ width: 14, height: 14 }} /></span>
-                                        <span className="acc-name">{u.fullName || u.username}</span>
-                                        <span className="acc-meta">{u.username} · {set.size} из {pages.length}</span>
-                                    </div>
-                                    <div className="acc-actions">
-                                        <button className="acc-text" onClick={() => setAll(u.id, true)}>Все</button>
-                                        <button className="acc-text" onClick={() => setAll(u.id, false)}>Ничего</button>
-                                        <button className="acc-save" disabled={!dirty || savingId === u.id} onClick={() => save(u.id)}>
-                                            {savingId === u.id ? <Loader2 className="acc-spin" style={{ width: 13, height: 13 }} />
-                                                : savedId === u.id ? <><Check style={{ width: 13, height: 13 }} /> Сохранено</>
-                                                : 'Сохранить'}
-                                        </button>
+                                        <div className="acc-name">{u.fullName || u.username}</div>
+                                        <div className="acc-meta">{u.username} · {set.size} из {pages.length}</div>
                                     </div>
                                 </div>
-                                <div className="acc-chips">
+                                <div className="acc-actions">
+                                    <div className="acc-actions-l">
+                                        <button className="acc-text" onClick={() => setAll(u.id, true)}>Все</button>
+                                        <button className="acc-text" onClick={() => setAll(u.id, false)}>Ничего</button>
+                                    </div>
+                                    <button className="acc-save" disabled={!dirty || savingId === u.id} onClick={() => save(u.id)}>
+                                        {savingId === u.id ? <Loader2 className="acc-spin" style={{ width: 13, height: 13 }} />
+                                            : savedId === u.id ? <><Check style={{ width: 13, height: 13 }} /> Сохранено</>
+                                            : 'Сохранить'}
+                                    </button>
+                                </div>
+                                <div className="acc-list">
                                     {pages.map((p) => {
                                         const on = set.has(p.key);
                                         return (
-                                            <button key={p.key} type="button" className={`acc-chip${on ? ' on' : ''}`}
+                                            <button key={p.key} type="button" className={`acc-row${on ? ' on' : ''}`}
                                                 aria-pressed={on} onClick={() => toggle(u.id, p.key)}>
-                                                {on && <Check className="acc-chip-ic" />}
-                                                {p.label}
+                                                <span className={`acc-chk${on ? ' on' : ''}`}><Check style={{ width: 11, height: 11 }} /></span>
+                                                <span className="acc-row-l">{p.label}</span>
+                                                <span className="acc-row-g">{shortGroup(p.group)}</span>
                                             </button>
                                         );
                                     })}
