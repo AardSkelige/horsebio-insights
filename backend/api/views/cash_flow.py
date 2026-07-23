@@ -19,6 +19,9 @@ from api.services.cash_flow import (
     get_sales_channels,
     get_payments_by_channels,
     get_income_channels_from_payments,
+    get_counterparties_tags,
+    get_income_by_groups,
+    get_expense_by_groups,
     get_last_full_month_dates,
     generate_moysklad_link,
     calculate_initial_balance,
@@ -81,6 +84,11 @@ def cash_flow_report(request):
         # Получаем каналы дохода
         income_channels = get_income_channels_from_payments(channel_payments, operations_data)
 
+        # Разбивка по группам контрагента (tags): и приходы, и расходы
+        counterparties_tags = get_counterparties_tags()
+        income_groups = get_income_by_groups(operations_data, counterparties_tags)
+        expense_groups = get_expense_by_groups(operations_data, counterparties_tags, expense_items_dict)
+
         # Рассчитываем начальный остаток на дату начала периода
         initial_balance = calculate_initial_balance(date_from)
 
@@ -127,13 +135,16 @@ def cash_flow_report(request):
                     'to': date_to
                 },
                 'initial_balance': initial_balance,
+                'moysklad_period_link': generate_moysklad_link(date_from, date_to),
                 'income': {
                     'total': total_income,
-                    'channels': income_channels
+                    'channels': income_channels,
+                    'groups': income_groups
                 },
                 'expense': {
                     'total': total_expense,
-                    'categories': expense_categories_with_links
+                    'categories': expense_categories_with_links,
+                    'groups': expense_groups
                 },
                 'excluded': excluded_categories_with_links,
                 'net_cash_flow': net_cash_flow,
@@ -192,6 +203,11 @@ def cash_flow_export(request):
 
         income_channels = get_income_channels_from_payments(channel_payments, operations_data)
 
+        # Разбивка по группам контрагента (tags)
+        counterparties_tags = get_counterparties_tags()
+        income_groups = get_income_by_groups(operations_data, counterparties_tags)
+        expense_groups = get_expense_by_groups(operations_data, counterparties_tags, expense_items_dict)
+
         # Рассчитываем начальный остаток на дату начала периода
         initial_balance = calculate_initial_balance(date_from)
 
@@ -208,7 +224,9 @@ def cash_flow_export(request):
             period_from,
             period_to,
             initial_balance,
-            excluded_categories
+            excluded_categories,
+            income_groups=income_groups,
+            expense_groups=expense_groups
         )
 
         # Возвращаем файл

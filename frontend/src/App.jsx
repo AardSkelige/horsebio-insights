@@ -25,6 +25,7 @@ const CounterpartyGroupsAnalysis = lazy(() => import('./components/counterparty-
 const FBOAnalysis = lazy(() => import('./components/fbo-analysis/FBOAnalysis'));
 const OzonAnalytics = lazy(() => import('./components/ozon-analytics/OzonAnalytics'));
 const CashFlowReport = lazy(() => import('./components/cash-flow/CashFlowReport'));
+const CashFlowReportV2 = lazy(() => import('./components/cash-flow/CashFlowReportV2'));
 const ProductionCalculator = lazy(() => import('./components/production/ProductionCalculator'));
 const FboConverter = lazy(() => import('./components/fbo-converter/FboConverter'));
 const ChecksPage = lazy(() => import('./components/checks/ChecksPage'));
@@ -204,6 +205,16 @@ function AppRoutes() {
             <LayoutWrapper>
               <LazyPage>
                 <CashFlowReport />
+              </LazyPage>
+            </LayoutWrapper>
+          </ProtectedRoute>
+        } />
+
+        <Route path="/analysis/cash-flow-v2" element={
+          <ProtectedRoute>
+            <LayoutWrapper>
+              <LazyPage>
+                <CashFlowReportV2 />
               </LazyPage>
             </LayoutWrapper>
           </ProtectedRoute>

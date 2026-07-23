@@ -55,6 +55,7 @@ const NAV_GROUPS = [
             { path: '/ozon/fbo-converter',           label: 'FBO Конвертер',    icon: FileSpreadsheet, description: 'Конвертация прогноза в шаблон Ozon' },
             { path: '/analysis/ozon',                label: 'Ozon',             icon: ShoppingBag, description: 'Отчёты по рекламе и продажам' },
             { path: '/analysis/cash-flow',           label: 'ДДС',              icon: DollarSign, description: 'Мониторинг денежных потоков' },
+            { path: '/analysis/cash-flow-v2',        label: 'ДДС · новая',      icon: DollarSign, description: 'ДДС с разбивкой по группам контрагента (тест)' },
         ],
     },
     {

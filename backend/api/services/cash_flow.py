@@ -277,6 +277,107 @@ def get_income_channels_from_payments(channel_payments, operations_data):
     return income_channels
 
 
+NO_GROUP = 'Без группы'
+
+
+def get_counterparties_tags():
+    """
+    Получить карту id контрагента -> список групп (поле tags).
+    «Группы контрагента» в МойСклад реализованы через tags (Array of String):
+    розница, опт, поставщики, сотрудники, выставка, маркетплейсы и т.п.
+    Грузим всех контрагентов постранично (по 1000).
+    """
+    headers = get_headers()
+    id2tags = {}
+    offset = 0
+    limit = 1000
+
+    while True:
+        url = f"{BASE_URL}/entity/counterparty?limit={limit}&offset={offset}"
+        response = requests.get(url, headers=headers, timeout=TIMEOUT)
+        response.raise_for_status()
+        rows = response.json().get('rows', [])
+
+        if not rows:
+            break
+
+        for c in rows:
+            cid = c.get('id')
+            if cid:
+                id2tags[cid] = c.get('tags') or []
+
+        offset += limit
+        if len(rows) < limit:
+            break
+
+    logger.info(f"Загружено контрагентов для групп: {len(id2tags)}")
+    return id2tags
+
+
+def _operation_agent_id(operation):
+    """Извлечь id контрагента (agent) из операции."""
+    agent = operation.get('agent')
+    if agent and agent.get('meta'):
+        href = agent['meta'].get('href', '')
+        if '/entity/counterparty/' in href:
+            return href.split('/entity/counterparty/')[-1].split('?')[0]
+    return None
+
+
+def _expense_category_name(operation, expense_items_dict):
+    """Название статьи расходов операции (для исключения «Перемещения»)."""
+    expense_item = operation.get('expenseItem')
+    if expense_item and expense_item.get('meta'):
+        href = expense_item['meta'].get('href', '')
+        if '/entity/expenseitem/' in href:
+            eid = href.split('/entity/expenseitem/')[-1].split('?')[0]
+            return expense_items_dict.get(eid)
+    return None
+
+
+def get_income_by_groups(operations_data, id2tags):
+    """
+    Приходы (paymentin + cashin), сгруппированные по группам контрагента.
+    Контрагент без тега или неизвестный агент попадает в «Без группы».
+    Полная сумма относится к каждому тегу контрагента (совпадает с логикой
+    фильтра МойСклад); на практике мультитеги в приходах не встречаются и
+    сумма по группам сходится с общим приходом по каналам.
+    """
+    groups = {}
+    for op_type in ['paymentin', 'cashin']:
+        for op in operations_data.get(op_type, []):
+            amount = (op.get('sum') or 0) / 100
+            aid = _operation_agent_id(op)
+            tags = id2tags.get(aid) if aid else None
+            if not tags:
+                groups[NO_GROUP] = groups.get(NO_GROUP, 0) + amount
+            else:
+                for tag in tags:
+                    groups[tag] = groups.get(tag, 0) + amount
+    return groups
+
+
+def get_expense_by_groups(operations_data, id2tags, expense_items_dict):
+    """
+    Расходы (paymentout + cashout) по группам контрагента-получателя.
+    «Перемещение» исключается — как и из общего расхода, чтобы итоги сходились.
+    """
+    groups = {}
+    for op_type in ['cashout', 'paymentout']:
+        for op in operations_data.get(op_type, []):
+            if _expense_category_name(op, expense_items_dict) == 'Перемещение':
+                continue
+            amount = (op.get('sum') or 0) / 100
+            aid = _operation_agent_id(op)
+            tags = id2tags.get(aid) if aid else None
+            if not tags:
+                groups[NO_GROUP] = groups.get(NO_GROUP, 0) + amount
+            else:
+                for tag in tags:
+                    groups[tag] = groups.get(tag, 0) + amount
+    return groups
+
+
 def get_last_full_month_dates():
     """
     Получить даты начала и конца последнего полного месяца
@@ -447,7 +548,7 @@ def calculate_initial_balance(start_date):
     return initial_balance
 
 
-def export_to_excel(income_channels, expense_categories, total_income, total_expense, period_from, period_to, initial_balance, excluded_categories=None):
+def export_to_excel(income_channels, expense_categories, total_income, total_expense, period_from, period_to, initial_balance, excluded_categories=None, income_groups=None, expense_groups=None):
     """
     Экспорт данных о движении денежных средств в Excel файл
     """
@@ -536,6 +637,30 @@ def export_to_excel(income_channels, expense_categories, total_income, total_exp
     # Пустая строка
     current_row += 1
 
+    # ПРИХОДЫ ПО ГРУППАМ КОНТРАГЕНТА
+    if income_groups:
+        ws[f'A{current_row}'] = "ПРИХОДЫ ПО ГРУППАМ КОНТРАГЕНТА"
+        ws[f'B{current_row}'] = sum(v for v in income_groups.values() if v > 0)
+        ws[f'C{current_row}'] = "Разбивка приходов по группам (tags)"
+        for col in ['A', 'B', 'C']:
+            cell = ws[f'{col}{current_row}']
+            cell.font = subheader_font
+            cell.fill = income_fill
+            cell.border = thin_border
+        current_row += 1
+
+        for group, amount in sorted(income_groups.items(), key=lambda x: x[1], reverse=True):
+            if amount > 0:
+                ws[f'A{current_row}'] = f"  {group}"
+                ws[f'B{current_row}'] = amount
+                ws[f'C{current_row}'] = "Группа контрагента"
+                for col in ['A', 'B', 'C']:
+                    ws[f'{col}{current_row}'].border = thin_border
+                current_row += 1
+
+        # Пустая строка
+        current_row += 1
+
     # РАСХОДЫ
     ws[f'A{current_row}'] = "РАСХОДЫ"
     ws[f'B{current_row}'] = total_expense
@@ -561,6 +686,30 @@ def export_to_excel(income_channels, expense_categories, total_income, total_exp
 
     # Пустая строка
     current_row += 1
+
+    # РАСХОДЫ ПО ГРУППАМ КОНТРАГЕНТА
+    if expense_groups:
+        ws[f'A{current_row}'] = "РАСХОДЫ ПО ГРУППАМ КОНТРАГЕНТА"
+        ws[f'B{current_row}'] = sum(v for v in expense_groups.values() if v > 0)
+        ws[f'C{current_row}'] = "Разбивка расходов по группам (tags)"
+        for col in ['A', 'B', 'C']:
+            cell = ws[f'{col}{current_row}']
+            cell.font = subheader_font
+            cell.fill = expense_fill
+            cell.border = thin_border
+        current_row += 1
+
+        for group, amount in sorted(expense_groups.items(), key=lambda x: x[1], reverse=True):
+            if amount > 0:
+                ws[f'A{current_row}'] = f"  {group}"
+                ws[f'B{current_row}'] = amount
+                ws[f'C{current_row}'] = "Группа контрагента"
+                for col in ['A', 'B', 'C']:
+                    ws[f'{col}{current_row}'].border = thin_border
+                current_row += 1
+
+        # Пустая строка
+        current_row += 1
 
     # ИСКЛЮЧЕННЫЕ ОПЕРАЦИИ
     if excluded_categories:
