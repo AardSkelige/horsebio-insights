@@ -57,13 +57,14 @@ const prepareSource = (source, isExpense = false) => {
 };
 
 // ─── KPI карточка с пояснением (i) ───
-const StatCard = ({ label, value, hint, accent }) => {
+const StatCard = ({ label, value, hint, accent, onHint }) => {
     const cls = accent ? `cfv2-kc-v cfv2-${accent}` : 'cfv2-kc-v';
+    const show = (e) => onHint({ title: label, text: hint, rect: e.currentTarget.getBoundingClientRect() });
+    const hide = () => onHint(null);
     return (
         <StaggerItem className="cfv2-kc">
-            <span className="cfv2-info" tabIndex={0} aria-label={hint}>i
-                <span className="cfv2-tip-static" role="tooltip"><b>{label}</b><span>{hint}</span></span>
-            </span>
+            <span className="cfv2-info" tabIndex={0} aria-label={hint}
+                onMouseEnter={show} onMouseLeave={hide} onFocus={show} onBlur={hide}>i</span>
             <p className="cfv2-kc-l">{label}</p>
             <p className={cls}>
                 <AnimatedNumber value={value || 0} format={fmtMoney} /><small> ₽</small>
@@ -76,6 +77,7 @@ StatCard.propTypes = {
     value: PropTypes.number,
     hint: PropTypes.string.isRequired,
     accent: PropTypes.string,
+    onHint: PropTypes.func.isRequired,
 };
 
 const CashFlowReportV2 = () => {
@@ -89,6 +91,7 @@ const CashFlowReportV2 = () => {
     const [incMode, setIncMode] = useState('grp'); // grp | src
     const [expMode, setExpMode] = useState('grp');
     const [tip, setTip] = useState(null);
+    const [hint, setHint] = useState(null); // подсказка KPI: {title, text, rect}
     const [phrase, setPhrase] = useState('');
 
     // Ротация забавных фраз во время загрузки
@@ -155,6 +158,16 @@ const CashFlowReportV2 = () => {
         if (x + w > window.innerWidth - 8) x = tip.x - w - pad;
         if (y + h > window.innerHeight - 8) y = tip.y - h - pad;
         return { left: x, top: y, opacity: 1 };
+    };
+
+    // подсказка KPI: под значком «i», зажата в границы экрана
+    const hintStyle = () => {
+        if (!hint) return {};
+        const w = 240, pad = 8, r = hint.rect;
+        let left = r.right - w;
+        if (left < pad) left = pad;
+        if (left + w > window.innerWidth - pad) left = window.innerWidth - pad - w;
+        return { top: r.bottom + 8, left, width: w };
     };
 
     const canFetch = dateFrom && dateTo && !loading;
@@ -298,12 +311,12 @@ const CashFlowReportV2 = () => {
                 <>
                     {/* KPI */}
                     <Stagger className="cfv2-kpi">
-                        <StatCard label="Нач. остаток" value={data.initial_balance} hint={KPI_HINTS.initial} accent="b" />
-                        <StatCard label="Приход" value={data.income?.total} hint={KPI_HINTS.income} accent="g" />
-                        <StatCard label="Расход" value={data.expense?.total} hint={KPI_HINTS.expense} accent="r" />
-                        <StatCard label="Чистый поток" value={net} hint={KPI_HINTS.net} accent={net >= 0 ? 'g' : 'r'} />
-                        <StatCard label="Прибыль" value={data.profit} hint={KPI_HINTS.profit} accent={(data.profit || 0) >= 0 ? 'g' : 'r'} />
-                        <StatCard label="Кон. остаток" value={data.final_balance} hint={KPI_HINTS.final} />
+                        <StatCard label="Нач. остаток" value={data.initial_balance} hint={KPI_HINTS.initial} accent="b" onHint={setHint} />
+                        <StatCard label="Приход" value={data.income?.total} hint={KPI_HINTS.income} accent="g" onHint={setHint} />
+                        <StatCard label="Расход" value={data.expense?.total} hint={KPI_HINTS.expense} accent="r" onHint={setHint} />
+                        <StatCard label="Чистый поток" value={net} hint={KPI_HINTS.net} accent={net >= 0 ? 'g' : 'r'} onHint={setHint} />
+                        <StatCard label="Прибыль" value={data.profit} hint={KPI_HINTS.profit} accent={(data.profit || 0) >= 0 ? 'g' : 'r'} onHint={setHint} />
+                        <StatCard label="Кон. остаток" value={data.final_balance} hint={KPI_HINTS.final} onHint={setHint} />
                     </Stagger>
 
                     {/* Two panels */}
@@ -353,6 +366,14 @@ const CashFlowReportV2 = () => {
                     <div className="cfv2-tip-v">{fmtMoney(tip.amount)} ₽</div>
                     <div className="cfv2-tip-s">{((tip.amount / tip.total) * 100).toFixed(1)}% от итога · {fmtMoney(tip.total)} ₽</div>
                     {tip.link && <div className="cfv2-tip-l"><ExternalLink className="cfv2-ic" /> Открыть в МойСклад</div>}
+                </div>,
+                document.body
+            )}
+
+            {/* KPI-подсказка — портал в body, чтобы не прятаться за сайдбар/панели */}
+            {hint && createPortal(
+                <div className="cfv2-hint" style={hintStyle()}>
+                    <b>{hint.title}</b><span>{hint.text}</span>
                 </div>,
                 document.body
             )}

@@ -53,12 +53,12 @@
     border: 1px solid var(--on-dark-soft); color: var(--on-dark-soft); font-size: 10px; font-weight: 600; font-style: italic;
     font-family: Georgia, serif; display: flex; align-items: center; justify-content: center; cursor: help; }
 .cfv2-info:hover, .cfv2-info:focus { color: var(--on-dark); border-color: var(--on-dark); outline: none; }
-.cfv2-tip-static { position: absolute; top: 22px; right: -4px; width: 226px; background: #2f2c28; border: 1px solid #4a4640;
-    border-radius: 10px; padding: 11px 13px; z-index: 60; opacity: 0; visibility: hidden; transform: translateY(-4px);
-    transition: all 130ms; box-shadow: 0 12px 30px -12px rgba(0,0,0,0.5); pointer-events: none; }
-.cfv2-info:hover .cfv2-tip-static, .cfv2-info:focus .cfv2-tip-static { opacity: 1; visibility: visible; transform: translateY(0); }
-.cfv2-tip-static b { display: block; font-family: var(--sans); font-size: 11.5px; color: #faf9f5; margin-bottom: 4px; }
-.cfv2-tip-static span { display: block; font-family: var(--sans); font-size: 11.5px; color: #a09d96; line-height: 1.5; }
+/* KPI-подсказка рендерится порталом в body (см. .cfv2-hint) */
+.cfv2-hint { position: fixed; z-index: 9999; box-sizing: border-box; background: #2f2c28; border: 1px solid #4a4640;
+    border-radius: 10px; padding: 11px 13px; box-shadow: 0 14px 34px -12px rgba(0,0,0,0.55); font-style: normal;
+    animation: cfv2-phrase-in 0.13s ease; }
+.cfv2-hint b { display: block; font-family: var(--sans); font-size: 11.5px; font-style: normal; color: #faf9f5; margin-bottom: 4px; }
+.cfv2-hint span { display: block; font-family: var(--sans); font-size: 11.5px; font-style: normal; color: #a09d96; line-height: 1.5; }
 
 /* ── panels ── */
 .cfv2-main { display: grid; grid-template-columns: 1fr 1fr; gap: 24px; }
