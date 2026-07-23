@@ -46,12 +46,15 @@ export const Sidebar = ({ expanded, onToggle, isMobile, mobileOpen, onMobileClos
 
     useEffect(() => {
         let active = true;
+        // Отсекаем «мёртвые» пути (после переименования маршрутов), чтобы они не
+        // занимали слоты и не блокировали звёздочки закрепления.
+        const prune = (arr) => (arr || []).filter((p) => NAV_PATHS.has(p));
         authApi.home()
-            .then((result) => { if (active) setPinnedPaths(result.data.pinnedPaths || []); })
+            .then((result) => { if (active) setPinnedPaths(prune(result.data.pinnedPaths)); })
             .catch(() => {});
 
         const handlePreferences = (event) => {
-            if (Array.isArray(event.detail?.pinnedPaths)) setPinnedPaths(event.detail.pinnedPaths);
+            if (Array.isArray(event.detail?.pinnedPaths)) setPinnedPaths(prune(event.detail.pinnedPaths));
         };
         window.addEventListener(HOME_PREFERENCES_EVENT, handlePreferences);
         return () => {
@@ -96,8 +99,9 @@ export const Sidebar = ({ expanded, onToggle, isMobile, mobileOpen, onMobileClos
 
         try {
             const result = await authApi.updateHome(next);
-            setPinnedPaths(result.data.pinnedPaths);
-            publishHomePreferences(result.data.pinnedPaths);
+            const saved = (result.data.pinnedPaths || []).filter((p) => NAV_PATHS.has(p));
+            setPinnedPaths(saved);
+            publishHomePreferences(saved);
         } catch {
             setPinnedPaths(previous);
             publishHomePreferences(previous);
