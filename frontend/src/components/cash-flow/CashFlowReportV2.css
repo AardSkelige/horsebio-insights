@@ -21,6 +21,14 @@
 .spin { animation: cfv2-spin 0.9s linear infinite; }
 @keyframes cfv2-spin { to { transform: rotate(360deg); } }
 
+/* быстрые пресеты периода (стиль category-tab) */
+.cfv2-presets { display: flex; flex-wrap: wrap; gap: 6px; margin-top: -4px; }
+.cfv2-chip { font-family: var(--sans); font-size: 12px; font-weight: 500; color: var(--muted);
+    background: transparent; border: 1px solid var(--hairline); border-radius: 8px; padding: 5px 12px;
+    cursor: pointer; transition: color 120ms, background 120ms, border-color 120ms; }
+.cfv2-chip:hover { color: var(--ink); border-color: var(--muted); }
+.cfv2-chip[aria-pressed="true"] { background: var(--surface-card); color: var(--ink); border-color: var(--hairline); }
+
 .cfv2-loadbar { display: flex; flex-direction: column; gap: 8px; }
 .cfv2-progress { height: 3px; background: var(--hairline); border-radius: 2px; overflow: hidden; }
 .cfv2-progress > div { height: 100%; background: var(--primary); border-radius: 2px; transition: width 400ms ease; }

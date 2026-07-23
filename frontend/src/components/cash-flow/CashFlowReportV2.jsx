@@ -8,6 +8,21 @@ import './CashFlowReportV2.css';
 
 const fmtMoney = (v) => (v == null ? '0' : Math.round(v).toLocaleString('ru-RU'));
 
+// Локальная дата → 'YYYY-MM-DD' для input[type=date] (без сдвига по таймзоне)
+const isoDate = (d) => {
+    const p = (n) => String(n).padStart(2, '0');
+    return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}`;
+};
+
+// Быстрые пресеты периода — возвращают [дата_с, дата_по]
+const DATE_PRESETS = [
+    { label: 'Этот месяц', range: (n) => [new Date(n.getFullYear(), n.getMonth(), 1), n] },
+    { label: 'Прошлый месяц', range: (n) => [new Date(n.getFullYear(), n.getMonth() - 1, 1), new Date(n.getFullYear(), n.getMonth(), 0)] },
+    { label: 'Этот квартал', range: (n) => [new Date(n.getFullYear(), Math.floor(n.getMonth() / 3) * 3, 1), n] },
+    { label: 'Этот год', range: (n) => [new Date(n.getFullYear(), 0, 1), n] },
+    { label: 'Прошлый год', range: (n) => [new Date(n.getFullYear() - 1, 0, 1), new Date(n.getFullYear() - 1, 11, 31)] },
+];
+
 // Пока считается отчёт — лёгкие фразы (страницу смотрят Женя и начальство).
 const LOADING_PHRASES = [
     'Считаем каждую копейку — даже те, что закатились под шкаф…',
@@ -170,6 +185,12 @@ const CashFlowReportV2 = () => {
         return { top: r.bottom + 8, left, width: w };
     };
 
+    const applyPreset = (preset) => {
+        const [from, to] = preset.range(new Date());
+        setDateFrom(isoDate(from));
+        setDateTo(isoDate(to));
+    };
+
     const canFetch = dateFrom && dateTo && !loading;
 
     const incGroups = prepareGroups(data?.income?.groups, data?.group_links);
@@ -282,6 +303,19 @@ const CashFlowReportV2 = () => {
                         {loading ? <><Loader2 className="cfv2-ic spin" />Формируется…</> : <><Calendar className="cfv2-ic" />Сформировать</>}
                     </button>
                 </div>
+            </div>
+
+            <div className="cfv2-presets">
+                {DATE_PRESETS.map((p) => {
+                    const [from, to] = p.range(new Date());
+                    const active = dateFrom === isoDate(from) && dateTo === isoDate(to);
+                    return (
+                        <button key={p.label} type="button" className="cfv2-chip"
+                            aria-pressed={active} onClick={() => applyPreset(p)}>
+                            {p.label}
+                        </button>
+                    );
+                })}
             </div>
 
             {(loading || progress > 0) && (
