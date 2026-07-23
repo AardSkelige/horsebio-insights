@@ -158,6 +158,17 @@ class APIAuthenticationMiddleware:
                     'message': 'Требуется авторизация',
                     'code': 'UNAUTHORIZED'
                 }, status=401)
+
+            # Постраничные права: путь, принадлежащий странице, доступен только
+            # при наличии этой страницы у пользователя (суперюзер — всё).
+            from api.access import user_can_access_path
+            if not user_can_access_path(request.user, request.path):
+                return JsonResponse({
+                    'status': 'error',
+                    'message': 'Нет доступа к этому разделу',
+                    'code': 'FORBIDDEN'
+                }, status=403)
+
             self._refresh_session(request)
 
         return self.get_response(request)

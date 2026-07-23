@@ -86,6 +86,30 @@ class UserHomePreference(models.Model):
         return f'{self.user} home preferences'
 
 
+class UserPageAccess(models.Model):
+    """
+    Разрешение пользователю на конкретную страницу приложения.
+    Наличие строки = доступ есть. Отсутствие = доступа нет («по умолчанию ничего»).
+    page_key соответствует реестру api.access.PAGES. Суперпользователь эти строки
+    игнорирует — ему доступно всё.
+    """
+
+    user = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.CASCADE,
+        related_name='page_access',
+    )
+    page_key = models.CharField(max_length=64)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        unique_together = ('user', 'page_key')
+        indexes = [models.Index(fields=['user'])]
+
+    def __str__(self):
+        return f'{self.user} → {self.page_key}'
+
+
 class HealthCheckException(models.Model):
     """Исключение (подтверждённая ложная тревога) проверки здоровья себестоимости.
 

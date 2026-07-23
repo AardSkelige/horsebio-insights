@@ -97,6 +97,8 @@ class ScriptsMutationAuthorizationTests(TestCase):
 class AnalyticsListValidationTests(TestCase):
     def setUp(self):
         self.user = User.objects.create_user('user', password='password')
+        from api.access import grant_all_assignable_pages
+        grant_all_assignable_pages(self.user)
         self.client.force_login(self.user)
 
     def test_invalid_pagination_is_rejected_consistently(self):

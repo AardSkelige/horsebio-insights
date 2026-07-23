@@ -9,8 +9,9 @@ import { DataPanelProvider } from './contexts/DataPanelContext';
 import LoginPage from './components/auth/LoginPage';
 import ProtectedRoute from './components/auth/ProtectedRoute';
 import SuperuserRoute from './components/auth/SuperuserRoute';
+import PageAccessGuard from './components/auth/PageAccessGuard';
 
-const LayoutWrapper = ({ children }) => <Layout>{children}</Layout>;
+const LayoutWrapper = ({ children }) => <Layout><PageAccessGuard>{children}</PageAccessGuard></Layout>;
 
 const HomePage = lazy(() => import('./components/home/HomePage'));
 const ProductAnalysis = lazy(() => import('./components/shipments/products/ProductAnalysis'));
@@ -31,6 +32,7 @@ const FboConverter = lazy(() => import('./components/fbo-converter/FboConverter'
 const ChecksPage = lazy(() => import('./components/checks/ChecksPage'));
 const ProfilePage = lazy(() => import('./components/profile/ProfilePage'));
 const AdminAnalyticsPage = lazy(() => import('./components/admin-analytics/AdminAnalyticsPage'));
+const AccessAdminPage = lazy(() => import('./components/admin-access/AccessAdminPage'));
 const InventoryTracking = lazy(() => import('./components/inventory-tracking/InventoryTracking'));
 const PaymentDeadlinesPage = lazy(() => import('./components/payment-deadlines/PaymentDeadlinesPage'));
 const SiteOrdersPage = lazy(() => import('./components/site-orders/SiteOrdersPage'));
@@ -305,6 +307,16 @@ function AppRoutes() {
             <LayoutWrapper>
               <LazyPage>
                 <AdminAnalyticsPage />
+              </LazyPage>
+            </LayoutWrapper>
+          </SuperuserRoute>
+        } />
+
+        <Route path="/admin/access" element={
+          <SuperuserRoute>
+            <LayoutWrapper>
+              <LazyPage>
+                <AccessAdminPage />
               </LazyPage>
             </LayoutWrapper>
           </SuperuserRoute>

@@ -3,7 +3,7 @@ import { Link, useLocation, useNavigate } from 'react-router-dom';
 import PropTypes from 'prop-types';
 import { PanelLeftClose, PanelLeftOpen, X, RefreshCw, ChevronDown } from 'lucide-react';
 import { clearAuthStatus } from '../../utils/authSession';
-import { useSuperuser } from '../../hooks/useAuthStatus';
+import { useAuthStatus } from '../../hooks/useAuthStatus';
 import { authApi } from '../../api/authApi';
 import { useDataPanel } from '../../contexts/DataPanelContext';
 import NavItem from './sidebar/NavItem';
@@ -23,7 +23,9 @@ export const Sidebar = ({ expanded, onToggle, isMobile, mobileOpen, onMobileClos
     const location = useLocation();
     const navigate = useNavigate();
     const { toggle: toggleDataPanel } = useDataPanel();
-    const isSuperuser = useSuperuser();
+    const auth = useAuthStatus();
+    const isSuperuser = auth.isSuperuser === true;
+    const allowedPages = auth.allowedPages;
     const [pinnedPaths, setPinnedPaths] = useState([]);
     // Ховер живёт на уровне сайдбара: одна layoutId-пилюля перетекает между пунктами
     const [hovPath, setHovPath] = useState(null);
@@ -181,7 +183,14 @@ export const Sidebar = ({ expanded, onToggle, isMobile, mobileOpen, onMobileClos
                 onMouseLeave={() => setHovPath(null)}
             >
                 {NAV_GROUPS.map((group, gi) => {
-                    const items = group.items.filter(item => !item.superuserOnly || isSuperuser);
+                    const items = group.items.filter(item => {
+                        if (item.superuserOnly) return isSuperuser;
+                        if (isSuperuser) return true;
+                        // пункт со страничным ключом виден только при наличии права;
+                        // пока права не загружены (null) — не мигаем, показываем
+                        if (item.pageKey && Array.isArray(allowedPages)) return allowedPages.includes(item.pageKey);
+                        return true;
+                    });
                     if (!items.length) return null;
 
                     // Сворачивать можно только развёрнутый сайдбар и только именованные группы.

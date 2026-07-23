@@ -21,6 +21,7 @@ urlpatterns = [
     path('auth/home/', auth.home_preferences_view, name='home_preferences'),
     path('auth/usage/', auth.usage_view, name='usage'),
     path('auth/admin-analytics/', auth.admin_analytics_view, name='admin_analytics'),
+    path('auth/pages-access/', auth.pages_access_view, name='pages_access'),
     path('auth/sessions/', auth.sessions_view, name='sessions'),
     path('auth/sessions/<int:session_id>/revoke/', auth.session_revoke_view, name='session_revoke'),
     

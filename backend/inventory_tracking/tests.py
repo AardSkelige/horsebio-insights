@@ -93,6 +93,8 @@ class SavedCellsUploadsTests(TestCase):
 class CellsUploadViewTests(TestCase):
     def setUp(self):
         self.user = User.objects.create_user(username='tester', password='secret')
+        from api.access import grant_all_assignable_pages
+        grant_all_assignable_pages(self.user)
         self.client.login(username='tester', password='secret')
         self.run = InventoryRun.objects.create(month_start=date(2026, 7, 1))
 

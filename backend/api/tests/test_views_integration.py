@@ -35,6 +35,10 @@ class BaseViewTestCase(TestCase):
             username='testuser',
             password='testpass123'
         )
+        # Выдаём все страницы (как реальным пользователям через миграцию),
+        # иначе постраничный контроль доступа вернёт 403 на секционных эндпоинтах.
+        from api.access import grant_all_assignable_pages
+        grant_all_assignable_pages(self.user)
         self.client.login(username='testuser', password='testpass123')
 
 

@@ -29,6 +29,7 @@ const ProtectedRoute = ({ children }) => {
                     email: data.email || '',
                     firstName: data.firstName || '',
                     lastName: data.lastName || '',
+                    allowedPages: Array.isArray(data.allowedPages) ? data.allowedPages : [],
                 });
                 if (isMounted) setIsAuthenticated(nextStatus);
             } catch (error) {

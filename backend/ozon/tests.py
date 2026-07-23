@@ -22,6 +22,8 @@ class OzonEndpointSecurityTests(TestCase):
         self.user = get_user_model().objects.create_user(
             username='ozon-user', password='test-password'
         )
+        from api.access import grant_all_assignable_pages
+        grant_all_assignable_pages(self.user)
 
     def test_mutating_endpoints_require_authentication(self):
         client = Client()
@@ -60,6 +62,8 @@ class OzonTemporaryFileTests(TestCase):
         self.user = get_user_model().objects.create_user(
             username='ozon-file-user', password='test-password'
         )
+        from api.access import grant_all_assignable_pages
+        grant_all_assignable_pages(self.user)
         self.client = Client(enforce_csrf_checks=True)
         self.client.force_login(self.user)
         csrf_response = self.client.get('/parser/csrf/')

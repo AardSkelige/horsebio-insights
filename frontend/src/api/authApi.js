@@ -49,4 +49,11 @@ export const authApi = {
 
     revokeSession: (sessionId) =>
         api.delete(`/auth/sessions/${sessionId}/revoke/`),
+
+    // Постраничные доступы (только суперпользователь)
+    pagesAccess: (signal) =>
+        api.get('/auth/pages-access/', { signal }),
+
+    savePagesAccess: (userId, pages) =>
+        api.post('/auth/pages-access/', { user_id: userId, pages }),
 };

@@ -74,12 +74,12 @@ describe('HomePage', () => {
     });
 
     it('добавляет проверки только суперпользователю', async () => {
-        authApi.check.mockResolvedValue({ isSuperuser: true });
+        authApi.check.mockResolvedValue({ isSuperuser: true, allowedPages: [] });
         renderPage();
 
         expect((await screen.findAllByRole('link', { name: /Проверки/ }))[0]).toHaveAttribute('href', '/checks');
         expect(screen.getByRole('link', { name: /Аналитика системы/ })).toHaveAttribute('href', '/system/analytics');
-        expect(screen.getAllByRole('link')).toHaveLength(23);
+        expect(screen.getAllByRole('link')).toHaveLength(24);
     });
 
     it('закрепляет раздел в персональной главной', async () => {

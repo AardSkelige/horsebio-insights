@@ -32,6 +32,7 @@ let authStatus = _readStorage() ?? {
     email: '',
     firstName: '',
     lastName: '',
+    allowedPages: null,
     checkedAt: 0,
 };
 
@@ -50,7 +51,7 @@ export const getFreshAuthStatus = () => {
     return isFresh ? authStatus : { ...authStatus, isAuthenticated: null, isSuperuser: null };
 };
 
-export const setAuthStatus = ({ isAuthenticated, isSuperuser, username, email, firstName, lastName }) => {
+export const setAuthStatus = ({ isAuthenticated, isSuperuser, username, email, firstName, lastName, allowedPages }) => {
     authStatus = {
         isAuthenticated: typeof isAuthenticated === 'boolean' ? isAuthenticated : authStatus.isAuthenticated,
         isSuperuser: typeof isSuperuser === 'boolean' ? isSuperuser : authStatus.isSuperuser,
@@ -58,6 +59,7 @@ export const setAuthStatus = ({ isAuthenticated, isSuperuser, username, email, f
         email: email !== undefined ? email : authStatus.email,
         firstName: firstName !== undefined ? firstName : authStatus.firstName,
         lastName: lastName !== undefined ? lastName : authStatus.lastName,
+        allowedPages: Array.isArray(allowedPages) ? allowedPages : authStatus.allowedPages,
         checkedAt: Date.now(),
     };
     _writeStorage(authStatus);
@@ -72,6 +74,7 @@ export const clearAuthStatus = () => {
         email: '',
         firstName: '',
         lastName: '',
+        allowedPages: [],
         checkedAt: Date.now(),
     };
     _clearStorage();

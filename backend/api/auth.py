@@ -2,6 +2,7 @@
 import json
 from functools import wraps
 from django.contrib.auth import authenticate, login, logout, get_user_model
+from django.db import transaction
 from django.db.models import Avg, Count, Sum, Max
 from django.db.models.functions import ExtractHour
 from django.http import JsonResponse
@@ -9,7 +10,8 @@ from django.utils import timezone
 from django.views.decorators.csrf import ensure_csrf_cookie
 from django.views.decorators.http import require_http_methods
 
-from .models import UserActivityLog, UserHomePreference, UserPageEvent, UserSession
+from .models import UserActivityLog, UserHomePreference, UserPageEvent, UserSession, UserPageAccess
+from .access import pages_catalog, sanitize_page_keys, user_allowed_page_keys, ASSIGNABLE_PAGE_KEYS
 
 
 MAX_PINNED_HOME_PATHS = 3
@@ -127,6 +129,8 @@ def check_auth(request):
         'email': u.email if u.is_authenticated else '',
         'firstName': u.first_name if u.is_authenticated else '',
         'lastName': u.last_name if u.is_authenticated else '',
+        # Разрешённые страницы — фронт по ним фильтрует меню и роуты
+        'allowedPages': sorted(user_allowed_page_keys(u)) if u.is_authenticated else [],
     })
 
 
@@ -462,6 +466,70 @@ def admin_analytics_view(request):
             'availableMonths': available_months,
         },
     })
+
+
+@require_http_methods(["GET", "POST"])
+@login_required_api
+def pages_access_view(request):
+    """
+    Управление постраничным доступом (только суперпользователь).
+
+    GET  — каталог назначаемых страниц + список активных не-суперпользователей
+           с их разрешёнными страницами.
+    POST — сохранить доступы: {"user_id": N, "pages": ["abc", "cash-flow", ...]}.
+    """
+    if not request.user.is_superuser:
+        return JsonResponse({'status': 'error', 'message': 'Доступ запрещён'}, status=403)
+
+    User = get_user_model()
+
+    if request.method == "GET":
+        access_rows = UserPageAccess.objects.values_list('user_id', 'page_key')
+        by_user = {}
+        for uid, key in access_rows:
+            by_user.setdefault(uid, []).append(key)
+
+        users = []
+        for u in User.objects.filter(is_active=True, is_superuser=False).order_by('username'):
+            users.append({
+                'id': u.id,
+                'username': u.username,
+                'fullName': ' '.join(filter(None, [u.first_name, u.last_name])),
+                'pages': sorted(by_user.get(u.id, [])),
+            })
+
+        return JsonResponse({
+            'status': 'success',
+            'data': {
+                'pages': pages_catalog(),
+                'users': users,
+            },
+        })
+
+    # POST — сохранить доступы одного пользователя
+    try:
+        payload = json.loads(request.body)
+    except (json.JSONDecodeError, TypeError):
+        return JsonResponse({'status': 'error', 'message': 'Некорректный запрос'}, status=400)
+
+    user_id = payload.get('user_id')
+    pages = sanitize_page_keys(payload.get('pages', []))
+
+    try:
+        target = User.objects.get(id=user_id, is_active=True)
+    except User.DoesNotExist:
+        return JsonResponse({'status': 'error', 'message': 'Пользователь не найден'}, status=404)
+
+    if target.is_superuser:
+        return JsonResponse({'status': 'error', 'message': 'Права суперпользователя не редактируются'}, status=400)
+
+    with transaction.atomic():
+        UserPageAccess.objects.filter(user=target).delete()
+        UserPageAccess.objects.bulk_create(
+            [UserPageAccess(user=target, page_key=key) for key in pages]
+        )
+
+    return JsonResponse({'status': 'success', 'data': {'user_id': target.id, 'pages': pages}})
 
 
 @require_http_methods(["POST"])

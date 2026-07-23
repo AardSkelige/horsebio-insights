@@ -29,6 +29,8 @@ class BaseViewTestCase(TestCase):
             username='testuser',
             password='testpass123'
         )
+        from api.access import grant_all_assignable_pages
+        grant_all_assignable_pages(self.user)
         self.client.login(username='testuser', password='testpass123')
 
 

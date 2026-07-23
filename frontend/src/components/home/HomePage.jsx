@@ -13,7 +13,7 @@ import {
 import './HomePage.css';
 
 const HomePage = () => {
-    const [auth, setAuth] = useState({ isSuperuser: false, username: '', firstName: '' });
+    const [auth, setAuth] = useState({ isSuperuser: false, username: '', firstName: '', allowedPages: null });
     const [homeData, setHomeData] = useState(null);
     const [saveError, setSaveError] = useState('');
     const { isLoading, syncVersion } = useLoading();
@@ -29,6 +29,7 @@ const HomePage = () => {
                 isSuperuser: Boolean(authResult.isSuperuser),
                 username: authResult.username || '',
                 firstName: authResult.firstName || '',
+                allowedPages: Array.isArray(authResult.allowedPages) ? authResult.allowedPages : null,
             });
             setHomeData(homeResult.data);
         }).catch((error) => {
@@ -55,7 +56,13 @@ const HomePage = () => {
         .map((group) => ({
             title: group.label,
             items: group.items
-                .filter((item) => !item.superuserOnly || auth.isSuperuser)
+                .filter((item) => {
+                    if (item.superuserOnly) return auth.isSuperuser;
+                    if (auth.isSuperuser) return true;
+                    // фильтр по постраничным правам; пока не загружены — показываем
+                    if (item.pageKey && Array.isArray(auth.allowedPages)) return auth.allowedPages.includes(item.pageKey);
+                    return true;
+                })
                 .map((item) => ({
                     icon: item.icon,
                     title: item.label,

@@ -33,6 +33,8 @@ class CashFlowEndpointRegressionTests(TestCase):
     def setUp(self):
         self.client = Client()
         self.user = User.objects.create_user(username='cash-flow-user', password='password')
+        from api.access import grant_all_assignable_pages
+        grant_all_assignable_pages(self.user)
         self.client.login(username='cash-flow-user', password='password')
 
     @patch('api.views.cash_flow.get_operations_data', side_effect=requests.Timeout('timeout'))
