@@ -77,10 +77,14 @@ const HomePage = () => {
         path: item.link,
         section: section.title,
     })));
+    // Секция «Аналитика» может отсутствовать, если у пользователя нет её страниц.
+    // Тогда analyticsIndex === -1 — не срезаем по нему (иначе теряем секции и
+    // падаем на analyticsSection.items).
     const analyticsIndex = sections.findIndex((section) => section.title === 'Аналитика');
-    const workSections = sections.slice(0, analyticsIndex);
-    const analyticsSection = sections[analyticsIndex];
-    const systemSections = sections.slice(analyticsIndex + 1);
+    const hasAnalytics = analyticsIndex !== -1;
+    const workSections = hasAnalytics ? sections.slice(0, analyticsIndex) : sections;
+    const analyticsSection = hasAnalytics ? sections[analyticsIndex] : null;
+    const systemSections = hasAnalytics ? sections.slice(analyticsIndex + 1) : [];
 
     const handleTogglePin = async (path) => {
         const previous = homeData?.pinnedPaths || [];
@@ -150,19 +154,21 @@ const HomePage = () => {
                 })}
             </div>
 
-            <FadeRise className="home-dashboard__group" delay={0.1}>
-                <section aria-labelledby="home-analytics-title">
-                    <div className="home-dashboard__heading">
-                        <h2 id="home-analytics-title">Аналитика</h2>
-                        <span />
-                    </div>
-                    <div className="home-dashboard__links home-dashboard__links--analytics">
-                        {analyticsSection.items.map((item) => (
-                            <FeatureCard key={item.link} {...item} compact />
-                        ))}
-                    </div>
-                </section>
-            </FadeRise>
+            {analyticsSection && (
+                <FadeRise className="home-dashboard__group" delay={0.1}>
+                    <section aria-labelledby="home-analytics-title">
+                        <div className="home-dashboard__heading">
+                            <h2 id="home-analytics-title">Аналитика</h2>
+                            <span />
+                        </div>
+                        <div className="home-dashboard__links home-dashboard__links--analytics">
+                            {analyticsSection.items.map((item) => (
+                                <FeatureCard key={item.link} {...item} compact />
+                            ))}
+                        </div>
+                    </section>
+                </FadeRise>
+            )}
 
             {systemSections.length > 0 && (
                 <div className="home-dashboard__system-grid">

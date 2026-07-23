@@ -82,6 +82,22 @@ describe('HomePage', () => {
         expect(screen.getAllByRole('link')).toHaveLength(24);
     });
 
+    it('не падает, когда у пользователя нет страниц «Аналитики»', async () => {
+        authApi.check.mockResolvedValue({
+            isSuperuser: false,
+            username: 'lilia',
+            firstName: 'Лиля',
+            allowedPages: ['shipments-products', 'shipments-materials'],
+        });
+        renderPage();
+
+        // Главная рендерится, доступные разделы видны
+        expect(await screen.findByRole('heading', { level: 2, name: 'Отгрузки' })).toBeInTheDocument();
+        // Секция «Аналитика» отсутствует — и это не роняет страницу
+        expect(screen.queryByRole('heading', { level: 2, name: 'Аналитика' })).not.toBeInTheDocument();
+        expect(screen.getAllByRole('link', { name: /Товары/ })[0]).toHaveAttribute('href', '/shipments/products');
+    });
+
     it('закрепляет раздел в персональной главной', async () => {
         renderPage();
 
