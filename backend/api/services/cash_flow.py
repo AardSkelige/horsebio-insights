@@ -449,6 +449,50 @@ def generate_moysklad_link(date_from, date_to, expense_item_id=None, expense_ite
         return base_url
 
 
+def _moysklad_finance_link(date_from, date_to, tag_filter_value=None):
+    """
+    Ссылка на «Финансы → Платежи» МойСклад с фильтром по периоду и,
+    опционально, по группе контрагента (значение вида «[тег],equals» или
+    «[тег1;тег2],notequals»). Кодируем только скобки и пробелы, кириллицу
+    оставляем как есть — так же, как в фильтре по статье расходов.
+    """
+    base_url = "https://online.moysklad.ru/app/#finance"
+
+    try:
+        date_from_dt = datetime.fromisoformat(date_from.replace('T', ' ').replace('.000', ''))
+        date_to_dt = datetime.fromisoformat(date_to.replace('T', ' ').replace('.000', ''))
+        formatted_date_from = date_from_dt.strftime('%d.%m.%Y %H:%M:%S')
+        formatted_date_to = date_to_dt.strftime('%d.%m.%Y %H:%M:%S')
+    except Exception as e:
+        logger.error(f"Ошибка форматирования дат для ссылки МойСклад: {e}")
+        return base_url
+
+    period_filter = f"{formatted_date_from},{formatted_date_to},inside_period".replace(' ', '%20')
+    url = f"{base_url}?global_periodFilter={period_filter}"
+
+    if tag_filter_value:
+        encoded = tag_filter_value.replace('[', '%5B').replace(']', '%5D').replace(' ', '%20')
+        url += f"&global_financeAgentFilter_tag={encoded}"
+
+    return url
+
+
+def generate_moysklad_group_link(date_from, date_to, tag):
+    """Ссылка на Платежи с фильтром по конкретной группе контрагента."""
+    return _moysklad_finance_link(date_from, date_to, f"[{tag}],equals")
+
+
+def generate_moysklad_no_group_link(date_from, date_to, all_tags):
+    """
+    Ссылка для «Без группы»: контрагенты без ЛЮБОЙ из существующих групп.
+    Фильтр «notequals» со всеми тегами через «;»: [тег1;тег2;…],notequals
+    """
+    if not all_tags:
+        return _moysklad_finance_link(date_from, date_to)
+    joined = ';'.join(sorted(all_tags))
+    return _moysklad_finance_link(date_from, date_to, f"[{joined}],notequals")
+
+
 def get_earliest_operation_date():
     """
     Получить дату самой ранней операции в МойСклад

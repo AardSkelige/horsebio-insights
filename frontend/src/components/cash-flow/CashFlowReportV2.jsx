@@ -35,10 +35,10 @@ const KPI_HINTS = {
     final: 'Начальный остаток плюс чистый поток. Сколько денег останется на конец периода.',
 };
 
-const prepareGroups = (source) => {
+const prepareGroups = (source, links) => {
     if (!source) return [];
     return Object.entries(source)
-        .map(([name, amount]) => ({ name, amount: amount || 0 }))
+        .map(([name, amount]) => ({ name, amount: amount || 0, link: links?.[name] || null }))
         .filter((r) => r.amount > 0)
         .sort((a, b) => b.amount - a.amount)
         .map((r, i) => ({ ...r, color: GROUP_COLORS[i % GROUP_COLORS.length] }));
@@ -159,8 +159,8 @@ const CashFlowReportV2 = () => {
 
     const canFetch = dateFrom && dateTo && !loading;
 
-    const incGroups = prepareGroups(data?.income?.groups);
-    const expGroups = prepareGroups(data?.expense?.groups);
+    const incGroups = prepareGroups(data?.income?.groups, data?.group_links);
+    const expGroups = prepareGroups(data?.expense?.groups, data?.group_links);
     const channels = prepareSource(data?.income?.channels, false);
     const articles = prepareSource(data?.expense?.categories, true);
     const totalIncome = data?.income?.total || 0;
@@ -180,11 +180,12 @@ const CashFlowReportV2 = () => {
                     <div className="cfv2-stack">
                         {groups.map((g, i) => {
                             const pct = (g.amount / total) * 100;
+                            const link = g.link || periodLink;
                             return (
                                 <span key={g.name} className="cfv2-seg"
-                                    style={{ flex: g.amount, background: g.color, animationDelay: `${0.05 + i * 0.06}s`, cursor: periodLink ? 'pointer' : 'default' }}
-                                    onClick={() => openLink(periodLink)}
-                                    onMouseEnter={(e) => showTip(e, { name: g.name, color: g.color, amount: g.amount, total, link: periodLink })}
+                                    style={{ flex: g.amount, background: g.color, animationDelay: `${0.05 + i * 0.06}s`, cursor: link ? 'pointer' : 'default' }}
+                                    onClick={() => openLink(link)}
+                                    onMouseEnter={(e) => showTip(e, { name: g.name, color: g.color, amount: g.amount, total, link })}
                                     onMouseMove={moveTip} onMouseLeave={hideTip}>
                                     {pct >= 9 && <span className="cfv2-sl">{g.name} {pct.toFixed(0)}%</span>}
                                 </span>
@@ -192,21 +193,24 @@ const CashFlowReportV2 = () => {
                         })}
                     </div>
                     <Stagger className="cfv2-blist">
-                        {groups.map((g) => (
+                        {groups.map((g) => {
+                            const link = g.link || periodLink;
+                            return (
                             <StaggerItem key={g.name}>
-                                <div className="cfv2-brow" onClick={() => openLink(periodLink)}
-                                    onMouseEnter={(e) => showTip(e, { name: g.name, color: g.color, amount: g.amount, total, link: periodLink })}
+                                <div className="cfv2-brow" onClick={() => openLink(link)}
+                                    onMouseEnter={(e) => showTip(e, { name: g.name, color: g.color, amount: g.amount, total, link })}
                                     onMouseMove={moveTip} onMouseLeave={hideTip}>
                                     <span className="cfv2-nm">
                                         <span className="cfv2-dot" style={{ background: g.color }} />
                                         <span className="cfv2-txt">{g.name}</span>
-                                        {periodLink && <ExternalLink className="cfv2-ext" />}
+                                        {link && <ExternalLink className="cfv2-ext" />}
                                     </span>
                                     <span className="cfv2-trk"><i style={{ width: `${Math.max((g.amount / max) * 100, 1.5)}%`, background: g.color }} /></span>
                                     <span className="cfv2-fg">{fmtMoney(g.amount)} ₽<em>{((g.amount / total) * 100).toFixed(1)}%</em></span>
                                 </div>
                             </StaggerItem>
-                        ))}
+                            );
+                        })}
                     </Stagger>
                 </div>
             );

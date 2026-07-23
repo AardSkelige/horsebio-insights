@@ -24,6 +24,8 @@ from api.services.cash_flow import (
     get_expense_by_groups,
     get_last_full_month_dates,
     generate_moysklad_link,
+    generate_moysklad_group_link,
+    generate_moysklad_no_group_link,
     calculate_initial_balance,
     export_to_excel,
 )
@@ -89,6 +91,17 @@ def cash_flow_report(request):
         income_groups = get_income_by_groups(operations_data, counterparties_tags)
         expense_groups = get_expense_by_groups(operations_data, counterparties_tags, expense_items_dict)
 
+        # Ссылки на МойСклад по группам (фильтр по группе контрагента + период).
+        # «Без группы» = контрагенты без любой из существующих групп (notequals по всем тегам).
+        period_link = generate_moysklad_link(date_from, date_to)
+        all_tags = {tag for tags in counterparties_tags.values() for tag in tags}
+        group_links = {}
+        for group_name in set(income_groups) | set(expense_groups):
+            group_links[group_name] = (
+                generate_moysklad_no_group_link(date_from, date_to, all_tags) if group_name == 'Без группы'
+                else generate_moysklad_group_link(date_from, date_to, group_name)
+            )
+
         # Рассчитываем начальный остаток на дату начала периода
         initial_balance = calculate_initial_balance(date_from)
 
@@ -135,7 +148,8 @@ def cash_flow_report(request):
                     'to': date_to
                 },
                 'initial_balance': initial_balance,
-                'moysklad_period_link': generate_moysklad_link(date_from, date_to),
+                'moysklad_period_link': period_link,
+                'group_links': group_links,
                 'income': {
                     'total': total_income,
                     'channels': income_channels,
