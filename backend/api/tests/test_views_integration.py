@@ -221,7 +221,11 @@ class CashFlowTests(BaseViewTestCase):
     @patch('api.views.cash_flow.get_expense_categories_by_api')
     @patch('api.views.cash_flow.get_income_channels_from_payments')
     @patch('api.views.cash_flow.calculate_initial_balance')
-    def test_cash_flow_report(self, mock_balance, mock_income, mock_expense_cat,
+    @patch('api.views.cash_flow.get_counterparties_tags')
+    @patch('api.views.cash_flow.get_income_by_groups')
+    @patch('api.views.cash_flow.get_expense_by_groups')
+    def test_cash_flow_report(self, mock_exp_groups, mock_inc_groups, mock_cp_tags,
+                              mock_balance, mock_income, mock_expense_cat,
                               mock_expense_items, mock_payments, mock_channels, mock_ops):
         """Test POST /api/analysis/cash-flow/ endpoint."""
         # Set up mocks
@@ -235,6 +239,9 @@ class CashFlowTests(BaseViewTestCase):
         mock_expense_cat.return_value = ({}, {}, {}, {})
         mock_income.return_value = {'total': 1000}
         mock_balance.return_value = 0
+        mock_cp_tags.return_value = {}
+        mock_inc_groups.return_value = {}
+        mock_exp_groups.return_value = {}
 
         response = self.client.post(
             '/api/analysis/cash-flow/',
@@ -257,7 +264,11 @@ class CashFlowTests(BaseViewTestCase):
     @patch('api.views.cash_flow.get_income_channels_from_payments')
     @patch('api.views.cash_flow.calculate_initial_balance')
     @patch('api.views.cash_flow.export_to_excel')
-    def test_cash_flow_export(self, mock_excel, mock_balance, mock_income, mock_expense_cat,
+    @patch('api.views.cash_flow.get_counterparties_tags')
+    @patch('api.views.cash_flow.get_income_by_groups')
+    @patch('api.views.cash_flow.get_expense_by_groups')
+    def test_cash_flow_export(self, mock_exp_groups, mock_inc_groups, mock_cp_tags,
+                              mock_excel, mock_balance, mock_income, mock_expense_cat,
                               mock_expense_items, mock_payments, mock_channels, mock_ops):
         """Test POST /api/analysis/cash-flow/export/ endpoint."""
         from io import BytesIO
@@ -272,6 +283,9 @@ class CashFlowTests(BaseViewTestCase):
         mock_expense_cat.return_value = ({}, {}, {}, {})
         mock_income.return_value = {'total': 1000}
         mock_balance.return_value = 0
+        mock_cp_tags.return_value = {}
+        mock_inc_groups.return_value = {}
+        mock_exp_groups.return_value = {}
         mock_excel.return_value = BytesIO(b'fake excel content')
 
         response = self.client.post(
