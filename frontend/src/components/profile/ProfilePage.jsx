@@ -115,8 +115,8 @@ const ProfilePage = () => {
     useEffect(() => {
         if (!auth.isSuperuser) return;
         let alive = true;
-        checksApi.overview({ account: 'StarPony' })
-            .then(d => { if (alive) setStarponyScripts(Array.isArray(d.scripts) ? d.scripts : []); })
+        checksApi.overview()
+            .then(d => { if (alive) setStarponyScripts((d.scripts || []).filter(s => s.account === 'StarPony')); })
             .catch(() => {});
         return () => { alive = false; };
     }, [auth.isSuperuser]);
@@ -236,15 +236,15 @@ const ProfilePage = () => {
                 )}
             </section>
 
-            {/* Main grid */}
+            {/* Main grid — три колонки на десктопе, чтобы кабинет помещался без прокрутки */}
             <div style={{
                 display: 'grid',
-                gridTemplateColumns: isMobile ? '1fr' : '1fr 2fr',
+                gridTemplateColumns: isMobile ? '1fr' : 'repeat(3, minmax(0, 1fr))',
                 gap: 12,
                 alignItems: 'start',
             }}>
 
-                {/* Left column: профиль + статистика + история */}
+                {/* Колонка 1: профиль + администрирование + StarPony */}
                 <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
 
                     <section style={card}>
@@ -307,7 +307,7 @@ const ProfilePage = () => {
                                     const ok = Boolean(s.summary) && problems === 0;
                                     const problemLabel = problems === 1 ? 'проблема' : problems < 5 ? 'проблемы' : 'проблем';
                                     return (
-                                        <Link key={s.id} to={`/checks/${s.id}`} style={{
+                                        <Link key={s.id} to={`/checks/${s.id}`} state={{ from: 'profile' }} style={{
                                             display: 'flex', alignItems: 'center', gap: 10,
                                             borderTop: '1px solid var(--hairline)', padding: '9px 0',
                                             textDecoration: 'none', color: 'inherit',
@@ -334,6 +334,10 @@ const ProfilePage = () => {
                             </div>
                         </section>
                     )}
+                </div>
+
+                {/* Колонка 2: статистика месяца + активные сессии */}
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
 
                     {usage && (
                         <section style={card}>
@@ -431,6 +435,10 @@ const ProfilePage = () => {
                             </div>
                         )}
                     </section>
+                </div>
+
+                {/* Колонка 3: история входов + популярные разделы */}
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
 
                     <section style={card}>
                         <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 16 }}>
@@ -470,10 +478,8 @@ const ProfilePage = () => {
                             })}
                         </div>
                     </section>
-                </div>
 
-                {/* Right column: популярные разделы */}
-                <section style={{ ...card, alignSelf: 'start' }}>
+                    <section style={card}>
                     <div style={{ marginBottom: 20 }}>
                         <span style={sectionLabel}>Популярные разделы</span>
                     </div>
@@ -520,7 +526,8 @@ const ProfilePage = () => {
                             ))}
                         </div>
                     )}
-                </section>
+                    </section>
+                </div>
             </div>
         </div>
     );

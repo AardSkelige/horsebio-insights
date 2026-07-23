@@ -10,7 +10,7 @@ import RunningPanel from './RunningPanel';
 import InfoTip from './InfoTip';
 import './CheckDetail.css';
 
-export default function CheckDetail({ scriptId, initial, onBack }) {
+export default function CheckDetail({ scriptId, initial, onBack, backLabel = 'Все проверки' }) {
     const isHealth = initial?.is_health ?? (scriptId === 'horsebio_health_check');
     const [tab, setTab] = useState('check'); // check | exceptions (только health)
     const [runsData, setRunsData] = useState(null);
@@ -78,7 +78,7 @@ export default function CheckDetail({ scriptId, initial, onBack }) {
     return (
         <div style={{ maxWidth: 1100, margin: '0 auto' }}>
             <button onClick={onBack} style={{ display: 'inline-flex', alignItems: 'center', gap: 6, background: 'none', border: 'none', color: 'var(--muted)', fontSize: 13, fontWeight: 600, cursor: 'pointer', marginBottom: 16, padding: 0 }}>
-                <ArrowLeft size={16} /> Все проверки
+                <ArrowLeft size={16} /> {backLabel}
             </button>
 
             {/* Шапка — та же строка, что на главной странице проверок */}
@@ -181,4 +181,5 @@ CheckDetail.propTypes = {
     scriptId: PropTypes.string.isRequired,
     initial: PropTypes.object,
     onBack: PropTypes.func.isRequired,
+    backLabel: PropTypes.string,
 };

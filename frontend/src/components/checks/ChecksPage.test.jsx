@@ -32,9 +32,19 @@ const SCRIPTS = [
         schedule: 'ежедневно',
     },
     {
-        id: 'starpony_returns',
+        id: 'horsebio_returns',
         name: 'Мониторинг возвратов',
         description: 'Возвраты покупателей',
+        account: 'HorseBio',
+        last_run: null,
+        schedule: 'каждый час',
+    },
+    {
+        // StarPony на странице проверок НЕ показывается (виден только в ЛК суперпользователя),
+        // но остаётся в данных, чтобы деталь по прямой ссылке /checks/:id работала
+        id: 'starpony_returns',
+        name: 'StarPony возвраты',
+        description: 'Возвраты StarPony',
         account: 'StarPony',
         last_run: null,
         schedule: 'каждый час',
@@ -56,12 +66,14 @@ beforeEach(() => {
 });
 
 describe('ChecksPage — список', () => {
-    it('показывает строки скриптов с бейджами аккаунтов', async () => {
+    it('показывает строки HorseBio, но скрывает StarPony', async () => {
         renderAt('/checks');
         expect(await screen.findByText('Проверка данных')).toBeInTheDocument();
         expect(screen.getByText('Мониторинг возвратов')).toBeInTheDocument();
-        expect(screen.getByText('HorseBio')).toBeInTheDocument();
-        expect(screen.getByText('StarPony')).toBeInTheDocument();
+        expect(screen.getAllByText('HorseBio').length).toBeGreaterThan(0);
+        // StarPony на странице проверок не отображается
+        expect(screen.queryByText('StarPony возвраты')).not.toBeInTheDocument();
+        expect(screen.queryByText('StarPony')).not.toBeInTheDocument();
     });
 
     it('показывает статус и время запуска одной компактной строкой', async () => {

@@ -91,7 +91,7 @@ export function fmtDuration(sec) {
 
 // ─── API ──────────────────────────────────────────────────────────────────────
 export const checksApi = {
-    overview: (params) => api.get('/checks/scripts/', params ? { params } : undefined),
+    overview: () => api.get('/checks/scripts/'),
     runs: (id) => api.get(`/checks/scripts/${id}/runs/`),
     results: (id, runId) => api.get(`/checks/scripts/${id}/results/`, { params: runId ? { run_id: runId } : {} }),
     log: (id, runId) => api.get(`/checks/scripts/${id}/log/`, { params: runId ? { run_id: runId } : {} }),

@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback } from 'react';
-import { useNavigate, useParams } from 'react-router-dom';
+import { useNavigate, useParams, useLocation } from 'react-router-dom';
 import { Loader2, ShieldCheck, PackageOpen, ChevronRight, CheckCircle, AlertCircle, Clock } from 'lucide-react';
 import PropTypes from 'prop-types';
 import { checksApi, plural, relTime, SEV, PENDING_RETURNS_HINT } from './checksShared';
@@ -73,6 +73,7 @@ export default function ChecksPage() {
     const [error, setError] = useState(null);
     const { scriptId } = useParams();
     const navigate = useNavigate();
+    const location = useLocation();
 
     const load = useCallback(async () => {
         try {
@@ -92,13 +93,17 @@ export default function ChecksPage() {
 
     if (scriptId) {
         const script = (scripts || []).find((s) => s.id === scriptId);
+        // Открыто из ЛК (StarPony) — помечено state.from; «назад» ведёт в кабинет
+        const fromProfile = location.state?.from === 'profile';
         // idx === 0 — деталка открыта по прямой ссылке, «назад» из истории увёл бы из приложения
         const goBack = () => {
-            if (window.history.state?.idx > 0) navigate(-1);
+            if (fromProfile) navigate('/profile');
+            else if (window.history.state?.idx > 0) navigate(-1);
             else navigate('/checks', { replace: true });
         };
+        const backLabel = fromProfile ? 'Личный кабинет' : 'Все проверки';
         if (scriptId === 'pending-returns') return <PendingReturnsDetail onBack={goBack} />;
-        return <CheckDetail scriptId={scriptId} initial={script} onBack={goBack} />;
+        return <CheckDetail scriptId={scriptId} initial={script} onBack={goBack} backLabel={backLabel} />;
     }
 
     // Индикатор возвратов — из сводки последнего запуска хелс-чека;
@@ -106,9 +111,13 @@ export default function ChecksPage() {
     const healthScript = (scripts || []).find((s) => s.is_health);
     const pendingReturns = healthScript?.summary?.pending_returns;
 
-    // Группировка по темам (аккаунт — бейдж в строке, не секция)
+    // Группировка по темам (аккаунт — бейдж в строке, не секция).
+    // StarPony на сетке проверок не показываем — он виден только в личном кабинете
+    // суперпользователя. При этом сам скрипт остаётся в списке scripts, чтобы
+    // деталь по прямой ссылке /checks/<id> получала свои данные (name, summary…).
     const topics = [];
     (scripts || []).forEach((s) => {
+        if (s.account === 'StarPony') return;
         const topic = s.topic || '';
         let t = topics.find((x) => x.topic === topic);
         if (!t) { t = { topic, items: [] }; topics.push(t); }

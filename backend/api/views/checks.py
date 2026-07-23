@@ -93,11 +93,11 @@ def _serialize_exception(e):
 def checks_overview(request):
     """GET /api/checks/scripts/ — обзор всех скриптов со сводкой.
 
-    По умолчанию StarPony скрыт со страницы проверок совсем — его видно только
-    в личном кабинете суперпользователя, который явно запрашивает ?account=StarPony.
+    StarPony отдаём только суперпользователю (как и раньше). На странице проверок
+    его карточки прячет фронтенд, а в личном кабинете суперпользователя, наоборот,
+    показывает — данные для обоих берутся из этого же ответа.
     """
     superuser = _is_superuser(request)
-    account_filter = request.GET.get('account')
     latest_results = {}
     for s in SCRIPTS_CONFIG:
         if s.get('structured'):
@@ -109,17 +109,8 @@ def checks_overview(request):
         sid = script['id']
         if script.get('hidden'):
             continue
-        acct = script.get('account')
-        if account_filter:
-            # ЛК: отдаём только запрошенный аккаунт; StarPony — только суперпользователю
-            if acct != account_filter:
-                continue
-            if acct == 'StarPony' and not superuser:
-                continue
-        else:
-            # Страница проверок: StarPony не показываем вообще
-            if acct == 'StarPony':
-                continue
+        if script.get('account') == 'StarPony' and not superuser:
+            continue
         item = {
             **{k: script[k] for k in ('id', 'name', 'account', 'schedule', 'description')},
             'topic': script.get('topic', ''),
