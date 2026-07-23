@@ -4,6 +4,7 @@ import PersonalWorkspace from './components/PersonalWorkspace';
 import { FadeRise } from '../ui/motion';
 import NAV_GROUPS from '../layout/sidebar/navGroups';
 import { authApi } from '../../api/authApi';
+import { getAuthStatus } from '../../utils/authSession';
 import { useLoading } from '../../contexts/LoadingContext';
 import {
     HOME_PREFERENCES_EVENT,
@@ -12,8 +13,21 @@ import {
 } from '../../utils/homePreferences';
 import './HomePage.css';
 
+// Сидим начальный auth из общего кэша (как сайдбар) — чтобы на обновлении
+// страницы права были известны с первого рендера и не мелькали недоступные
+// пункты до ответа authApi.check.
+const seedAuth = () => {
+    const c = getAuthStatus();
+    return {
+        isSuperuser: c.isSuperuser === true,
+        username: c.username || '',
+        firstName: c.firstName || '',
+        allowedPages: Array.isArray(c.allowedPages) ? c.allowedPages : null,
+    };
+};
+
 const HomePage = () => {
-    const [auth, setAuth] = useState({ isSuperuser: false, username: '', firstName: '', allowedPages: null });
+    const [auth, setAuth] = useState(seedAuth);
     const [homeData, setHomeData] = useState(null);
     const [saveError, setSaveError] = useState('');
     const { isLoading, syncVersion } = useLoading();
