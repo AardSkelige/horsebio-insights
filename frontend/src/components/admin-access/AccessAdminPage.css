@@ -27,7 +27,10 @@
     transition: opacity 120ms; }
 .acc-save:disabled { opacity: 0.45; cursor: default; }
 
-.acc-groups { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 14px 20px; }
+/* CSS-колонки вместо grid: группы разной высоты плотно упаковываются по
+   вертикали, без пустот под короткими разделами */
+.acc-groups { column-width: 210px; column-gap: 28px; }
+.acc-group { break-inside: avoid; margin-bottom: 16px; }
 .acc-group-label { font-family: var(--sans); font-size: 10px; font-weight: 600; letter-spacing: 0.07em;
     text-transform: uppercase; color: var(--muted); margin-bottom: 8px; }
 .acc-checks { display: flex; flex-direction: column; gap: 4px; }
@@ -44,5 +47,5 @@
 @media (max-width: 560px) {
     .acc-title { font-size: 24px; }
     .acc-user-head { flex-direction: column; align-items: flex-start; }
-    .acc-groups { grid-template-columns: 1fr; }
+    .acc-groups { column-width: auto; column-count: 1; }
 }
