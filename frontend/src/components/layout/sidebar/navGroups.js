@@ -59,15 +59,10 @@ const NAV_GROUPS = [
         ],
     },
     {
-        label: 'МойСклад',
-        items: [
-            { path: '/checks', label: 'Проверки', icon: ShieldCheck, description: 'Автоматические проверки МойСклад', superuserOnly: true },
-        ],
-    },
-    {
-        label: 'Система',
+        label: 'Администрирование',
         superuserOnly: true,
         items: [
+            { path: '/checks',           label: 'Проверки',          icon: ShieldCheck, description: 'Автоматические проверки МойСклад', superuserOnly: true },
             { path: '/system/analytics', label: 'Аналитика системы', icon: Activity, description: 'Использование системы и сессии', superuserOnly: true },
         ],
     },
