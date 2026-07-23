@@ -17,7 +17,7 @@
 .cfv2-btn.p { background: var(--primary); color: #fff; }
 .cfv2-btn.s { background: var(--surface-card); color: var(--ink); }
 .cfv2-ic { width: 14px; height: 14px; flex-shrink: 0; }
-.cfv2-ic.up { color: #059669; } .cfv2-ic.down { color: #dc2626; }
+.cfv2-ic.up { color: var(--success); } .cfv2-ic.down { color: var(--error); }
 .spin { animation: cfv2-spin 0.9s linear infinite; }
 @keyframes cfv2-spin { to { transform: rotate(360deg); } }
 
@@ -30,9 +30,9 @@
 @media (prefers-reduced-motion: reduce) { .cfv2-phrase { animation: none; } }
 
 .cfv2-error { display: flex; align-items: center; gap: 10px; background: rgba(198,69,69,0.08);
-    border: 1px solid rgba(198,69,69,0.22); border-radius: 10px; padding: 12px 14px; font-size: 13px; color: #c64545; }
+    border: 1px solid rgba(198,69,69,0.22); border-radius: 10px; padding: 12px 14px; font-size: 13px; color: var(--error); }
 .cfv2-error span { flex: 1; }
-.cfv2-error button { background: none; border: none; cursor: pointer; color: #c64545; display: flex; padding: 2px; }
+.cfv2-error button { background: none; border: none; cursor: pointer; color: var(--error); display: flex; padding: 2px; }
 
 .cfv2-empty { display: flex; flex-direction: column; align-items: center; padding: 64px 0; gap: 10px; }
 .cfv2-empty-ic { width: 40px; height: 40px; color: var(--hairline); }
@@ -42,23 +42,24 @@
 
 /* ── KPI ── */
 .cfv2-kpi { display: grid; grid-template-columns: repeat(6, 1fr); gap: 12px; }
-.cfv2-kc { position: relative; background: var(--surface-dark); border-radius: 12px; padding: 14px 16px; }
+.cfv2-kc { position: relative; background: var(--surface-card); border: 1px solid var(--hairline);
+    border-radius: 12px; padding: 14px 16px; }
 .cfv2-kc-l { font-family: var(--sans); font-size: 10px; letter-spacing: 0.07em; text-transform: uppercase;
-    color: var(--on-dark-soft); margin: 0 0 7px; white-space: nowrap; }
+    color: var(--muted); margin: 0 0 7px; white-space: nowrap; }
 .cfv2-kc-v { font-family: var(--serif); font-size: 23px; font-weight: 400; line-height: 1; letter-spacing: -0.02em;
-    color: var(--on-dark); margin: 0; white-space: nowrap; font-variant-numeric: lining-nums tabular-nums; }
-.cfv2-kc-v small { font-family: var(--sans); font-size: 12px; color: var(--on-dark-soft); }
-.cfv2-kc-v.g { color: #6ee7b7; } .cfv2-kc-v.r { color: #fca5a5; } .cfv2-kc-v.b { color: #e8a58f; }
+    color: var(--ink); margin: 0; white-space: nowrap; font-variant-numeric: lining-nums tabular-nums; }
+.cfv2-kc-v small { font-family: var(--sans); font-size: 12px; color: var(--muted); }
+.cfv2-kc-v.g { color: var(--success); } .cfv2-kc-v.r { color: var(--error); } .cfv2-kc-v.b { color: var(--ink); }
 .cfv2-info { position: absolute; top: 11px; right: 11px; width: 16px; height: 16px; border-radius: 50%;
-    border: 1px solid var(--on-dark-soft); color: var(--on-dark-soft); font-size: 10px; font-weight: 600; font-style: italic;
+    border: 1px solid var(--muted); color: var(--muted); font-size: 10px; font-weight: 600; font-style: italic;
     font-family: Georgia, serif; display: flex; align-items: center; justify-content: center; cursor: help; }
-.cfv2-info:hover, .cfv2-info:focus { color: var(--on-dark); border-color: var(--on-dark); outline: none; }
+.cfv2-info:hover, .cfv2-info:focus { color: var(--ink); border-color: var(--ink); outline: none; }
 /* KPI-подсказка рендерится порталом в body (см. .cfv2-hint) */
-.cfv2-hint { position: fixed; z-index: 9999; box-sizing: border-box; background: #2f2c28; border: 1px solid #4a4640;
+.cfv2-hint { position: fixed; z-index: 9999; box-sizing: border-box; background: var(--surface-dark); border: 1px solid var(--surface-dark-elevated);
     border-radius: 10px; padding: 11px 13px; box-shadow: 0 14px 34px -12px rgba(0,0,0,0.55); font-style: normal;
     animation: cfv2-phrase-in 0.13s ease; }
-.cfv2-hint b { display: block; font-family: var(--sans); font-size: 11.5px; font-style: normal; color: #faf9f5; margin-bottom: 4px; }
-.cfv2-hint span { display: block; font-family: var(--sans); font-size: 11.5px; font-style: normal; color: #a09d96; line-height: 1.5; }
+.cfv2-hint b { display: block; font-family: var(--sans); font-size: 11.5px; font-style: normal; color: var(--on-dark); margin-bottom: 4px; }
+.cfv2-hint span { display: block; font-family: var(--sans); font-size: 11.5px; font-style: normal; color: var(--on-dark-soft); line-height: 1.5; }
 
 /* ── panels ── */
 .cfv2-main { display: grid; grid-template-columns: 1fr 1fr; gap: 24px; }
@@ -121,13 +122,13 @@
 .cfv2-fc .v { font-family: var(--mono); font-size: 14px; font-weight: 600; color: var(--ink); }
 
 /* floating tooltip */
-.cfv2-tip { position: fixed; z-index: 100; pointer-events: none; background: #2f2c28; border: 1px solid #4a4640;
+.cfv2-tip { position: fixed; z-index: 100; pointer-events: none; background: var(--surface-dark); border: 1px solid var(--surface-dark-elevated);
     border-radius: 11px; padding: 12px 14px; min-width: 190px; box-shadow: 0 16px 40px -14px rgba(0,0,0,0.55); transition: opacity 100ms; }
-.cfv2-tip-h { display: flex; align-items: center; gap: 7px; font-family: var(--sans); font-size: 12.5px; font-weight: 600; color: #faf9f5; margin-bottom: 8px; }
-.cfv2-tip-v { font-family: var(--mono); font-size: 17px; color: #faf9f5; line-height: 1; }
-.cfv2-tip-s { font-family: var(--sans); font-size: 11.5px; color: #a09d96; margin-top: 5px; }
-.cfv2-tip-l { display: flex; align-items: center; gap: 5px; margin-top: 9px; padding-top: 9px; border-top: 1px solid #4a4640;
-    font-family: var(--sans); font-size: 11px; color: #e8a58f; }
+.cfv2-tip-h { display: flex; align-items: center; gap: 7px; font-family: var(--sans); font-size: 12.5px; font-weight: 600; color: var(--on-dark); margin-bottom: 8px; }
+.cfv2-tip-v { font-family: var(--mono); font-size: 17px; color: var(--on-dark); line-height: 1; }
+.cfv2-tip-s { font-family: var(--sans); font-size: 11.5px; color: var(--on-dark-soft); margin-top: 5px; }
+.cfv2-tip-l { display: flex; align-items: center; gap: 5px; margin-top: 9px; padding-top: 9px; border-top: 1px solid var(--surface-dark-elevated);
+    font-family: var(--sans); font-size: 11px; color: var(--primary); }
 .cfv2-tip-l .cfv2-ic { width: 12px; height: 12px; }
 
 /* ── адаптив / мобильная версия ── */

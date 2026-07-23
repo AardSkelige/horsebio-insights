@@ -243,7 +243,7 @@ const CashFlowReportV2 = () => {
                                 return (
                                     <tr key={r.name} style={{ cursor: link ? 'pointer' : 'default' }}
                                         onClick={() => openLink(link)}
-                                        onMouseEnter={(e) => showTip(e, { name: r.name, color: isInc ? '#059669' : '#dc2626', amount: r.amount, total, link })}
+                                        onMouseEnter={(e) => showTip(e, { name: r.name, color: isInc ? 'var(--success)' : 'var(--error)', amount: r.amount, total, link })}
                                         onMouseMove={moveTip} onMouseLeave={hideTip}>
                                         <td><span className="cfv2-cell">{r.name}{link && <ExternalLink className="cfv2-ext" />}</span></td>
                                         <td className="num">{fmtMoney(r.amount)}</td>
@@ -348,7 +348,7 @@ const CashFlowReportV2 = () => {
                     <div className="cfv2-foot">
                         <div className="cfv2-fc">
                             <span className="l">Прибыль (приход − расход)</span>
-                            <span className="v" style={{ color: (data.profit || 0) >= 0 ? '#059669' : '#dc2626' }}>{data.profit >= 0 ? '+' : ''}{fmtMoney(data.profit)} ₽</span>
+                            <span className="v" style={{ color: (data.profit || 0) >= 0 ? 'var(--success)' : 'var(--error)' }}>{data.profit >= 0 ? '+' : ''}{fmtMoney(data.profit)} ₽</span>
                         </div>
                         <div className="cfv2-fc">
                             <span className="l">Конечный остаток</span>
