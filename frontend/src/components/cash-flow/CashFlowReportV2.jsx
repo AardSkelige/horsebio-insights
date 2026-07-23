@@ -105,6 +105,7 @@ const CashFlowReportV2 = () => {
     const [progress, setProgress] = useState(0);
     const [incMode, setIncMode] = useState('grp'); // grp | src
     const [expMode, setExpMode] = useState('grp');
+    const [activePreset, setActivePreset] = useState(null); // подсвеченный чип периода
     const [tip, setTip] = useState(null);
     const [hint, setHint] = useState(null); // подсказка KPI: {title, text, rect}
     const [phrase, setPhrase] = useState('');
@@ -189,7 +190,11 @@ const CashFlowReportV2 = () => {
         const [from, to] = preset.range(new Date());
         setDateFrom(isoDate(from));
         setDateTo(isoDate(to));
+        setActivePreset(preset.label);
     };
+    // ручная правка даты сбрасывает подсветку пресета
+    const onDateFrom = (e) => { setDateFrom(e.target.value); setActivePreset(null); };
+    const onDateTo = (e) => { setDateTo(e.target.value); setActivePreset(null); };
 
     const canFetch = dateFrom && dateTo && !loading;
 
@@ -289,33 +294,30 @@ const CashFlowReportV2 = () => {
                     <p className="cfv2-sub">Приходы и расходы за период — по источникам и по группам контрагента</p>
                 </div>
                 <div className="cfv2-ctr">
-                    <div className="filter-date-range cfv2-dates">
-                        <input type="date" value={dateFrom} onChange={(e) => setDateFrom(e.target.value)} disabled={loading} className="cfv2-date" />
-                        <span className="filter-date-sep">—</span>
-                        <input type="date" value={dateTo} onChange={(e) => setDateTo(e.target.value)} disabled={loading} className="cfv2-date" />
+                    <div className="cfv2-ctr-row">
+                        <div className="filter-date-range cfv2-dates">
+                            <input type="date" value={dateFrom} onChange={onDateFrom} disabled={loading} className="cfv2-date" />
+                            <span className="filter-date-sep">—</span>
+                            <input type="date" value={dateTo} onChange={onDateTo} disabled={loading} className="cfv2-date" />
+                        </div>
+                        {data && (
+                            <button onClick={exportToExcel} disabled={exporting || loading} className="cfv2-btn s">
+                                {exporting ? <Loader2 className="cfv2-ic spin" /> : <Download className="cfv2-ic" />} Excel
+                            </button>
+                        )}
+                        <button onClick={fetchReport} disabled={!canFetch} className="cfv2-btn p">
+                            {loading ? <><Loader2 className="cfv2-ic spin" />Формируется…</> : <><Calendar className="cfv2-ic" />Сформировать</>}
+                        </button>
                     </div>
-                    {data && (
-                        <button onClick={exportToExcel} disabled={exporting || loading} className="cfv2-btn s">
-                            {exporting ? <Loader2 className="cfv2-ic spin" /> : <Download className="cfv2-ic" />} Excel
-                        </button>
-                    )}
-                    <button onClick={fetchReport} disabled={!canFetch} className="cfv2-btn p">
-                        {loading ? <><Loader2 className="cfv2-ic spin" />Формируется…</> : <><Calendar className="cfv2-ic" />Сформировать</>}
-                    </button>
+                    <div className="cfv2-presets">
+                        {DATE_PRESETS.map((p) => (
+                            <button key={p.label} type="button" className="cfv2-chip"
+                                aria-pressed={activePreset === p.label} onClick={() => applyPreset(p)}>
+                                {p.label}
+                            </button>
+                        ))}
+                    </div>
                 </div>
-            </div>
-
-            <div className="cfv2-presets">
-                {DATE_PRESETS.map((p) => {
-                    const [from, to] = p.range(new Date());
-                    const active = dateFrom === isoDate(from) && dateTo === isoDate(to);
-                    return (
-                        <button key={p.label} type="button" className="cfv2-chip"
-                            aria-pressed={active} onClick={() => applyPreset(p)}>
-                            {p.label}
-                        </button>
-                    );
-                })}
             </div>
 
             {(loading || progress > 0) && (

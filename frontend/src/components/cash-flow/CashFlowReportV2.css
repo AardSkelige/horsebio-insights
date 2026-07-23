@@ -6,7 +6,8 @@
     border-bottom: 1px solid var(--hairline); padding-bottom: 16px; }
 .cfv2-title { font-family: var(--serif); font-size: 30px; font-weight: 400; letter-spacing: -0.025em; line-height: 1.1; margin: 0 0 4px; }
 .cfv2-sub { font-family: var(--sans); font-size: 13px; color: var(--muted); margin: 0; }
-.cfv2-ctr { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.cfv2-ctr { display: flex; flex-direction: column; align-items: flex-start; gap: 10px; }
+.cfv2-ctr-row { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
 .cfv2-dates { display: flex; align-items: center; gap: 8px; }
 .cfv2-date { height: 36px; padding: 0 10px; font-family: var(--sans); font-size: 13px; color: var(--ink);
     background: var(--canvas); border: 1px solid var(--hairline); border-radius: 8px; outline: none; transition: border-color 150ms; }
@@ -21,8 +22,8 @@
 .spin { animation: cfv2-spin 0.9s linear infinite; }
 @keyframes cfv2-spin { to { transform: rotate(360deg); } }
 
-/* быстрые пресеты периода (стиль category-tab) */
-.cfv2-presets { display: flex; flex-wrap: wrap; gap: 6px; margin-top: -4px; }
+/* быстрые пресеты периода (стиль category-tab) — под полями дат */
+.cfv2-presets { display: flex; flex-wrap: wrap; gap: 6px; }
 .cfv2-chip { font-family: var(--sans); font-size: 12px; font-weight: 500; color: var(--muted);
     background: transparent; border: 1px solid var(--hairline); border-radius: 8px; padding: 5px 12px;
     cursor: pointer; transition: color 120ms, background 120ms, border-color 120ms; }
@@ -145,7 +146,8 @@
 }
 @media (max-width: 860px) {
     .cfv2-topbar { flex-direction: column; }
-    .cfv2-ctr { width: 100%; }
+    .cfv2-ctr { width: 100%; align-items: stretch; }
+    .cfv2-ctr-row { width: 100%; }
     .cfv2-dates { flex: 1; }
     .cfv2-date { flex: 1; }
     .cfv2-main { grid-template-columns: 1fr; gap: 28px; }
