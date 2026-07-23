@@ -1,8 +1,10 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { CalendarClock, Database, DoorClosed, DoorOpen, LogOut, Monitor, Smartphone, ShieldCheck, Mail, ExternalLink } from 'lucide-react';
+import { Link } from 'react-router-dom';
+import { CalendarClock, Database, DoorClosed, DoorOpen, LogOut, Monitor, Smartphone, ShieldCheck, Mail, ExternalLink, Activity } from 'lucide-react';
 import { setAuthStatus } from '../../utils/authSession';
 import { useAuthStatus } from '../../hooks/useAuthStatus';
 import { authApi } from '../../api/authApi';
+import { checksApi } from '../checks/checksShared';
 
 const card = {
     backgroundColor: 'var(--surface-card)',
@@ -70,6 +72,7 @@ const ProfilePage = () => {
     const [activity, setActivity] = useState([]);
     const [usage, setUsage] = useState(null);
     const [sessions, setSessions] = useState([]);
+    const [starponyScripts, setStarponyScripts] = useState([]);
     const [revokingId, setRevokingId] = useState(null);
     const [isMobile, setIsMobile] = useState(() => window.innerWidth < 768);
 
@@ -107,6 +110,16 @@ const ProfilePage = () => {
 
         return () => ctrl.abort();
     }, []);
+
+    // StarPony виден только здесь, в ЛК суперпользователя (со страницы проверок убран)
+    useEffect(() => {
+        if (!auth.isSuperuser) return;
+        let alive = true;
+        checksApi.overview({ account: 'StarPony' })
+            .then(d => { if (alive) setStarponyScripts(Array.isArray(d.scripts) ? d.scripts : []); })
+            .catch(() => {});
+        return () => { alive = false; };
+    }, [auth.isSuperuser]);
 
     const handleRevoke = useCallback(async (sessionId) => {
         setRevokingId(sessionId);
@@ -278,6 +291,46 @@ const ProfilePage = () => {
                             </a>
                             <div style={{ color: 'var(--muted)', fontSize: 11, marginTop: 8, lineHeight: 1.4 }}>
                                 Панель управления Django. Откроется в новой вкладке.
+                            </div>
+                        </section>
+                    )}
+
+                    {auth.isSuperuser && starponyScripts.length > 0 && (
+                        <section style={card}>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 16 }}>
+                                <Activity size={15} color="var(--primary)" />
+                                <span style={sectionLabel}>StarPony</span>
+                            </div>
+                            <div style={{ display: 'flex', flexDirection: 'column' }}>
+                                {starponyScripts.map(s => {
+                                    const problems = (s.summary?.critical || 0) + (s.summary?.important || 0) + (s.summary?.warnings || 0);
+                                    const ok = Boolean(s.summary) && problems === 0;
+                                    const problemLabel = problems === 1 ? 'проблема' : problems < 5 ? 'проблемы' : 'проблем';
+                                    return (
+                                        <Link key={s.id} to={`/checks/${s.id}`} style={{
+                                            display: 'flex', alignItems: 'center', gap: 10,
+                                            borderTop: '1px solid var(--hairline)', padding: '9px 0',
+                                            textDecoration: 'none', color: 'inherit',
+                                        }}>
+                                            <div style={{ flex: 1, minWidth: 0 }}>
+                                                <div style={{ fontSize: 13, color: 'var(--ink)', fontWeight: 500, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                                                    {s.name}
+                                                </div>
+                                                <div style={{ fontSize: 11, color: 'var(--muted-soft)', marginTop: 2 }}>
+                                                    {s.last_run ? relativeTime(s.last_run.finished_at) : s.schedule}
+                                                </div>
+                                            </div>
+                                            <span style={{
+                                                fontSize: 11, fontWeight: 500, flexShrink: 0,
+                                                borderRadius: 4, padding: '2px 8px',
+                                                color: ok ? 'var(--success)' : problems > 0 ? '#d08b2c' : 'var(--muted)',
+                                                background: ok ? 'rgba(52,199,89,0.12)' : problems > 0 ? 'rgba(208,139,44,0.12)' : 'transparent',
+                                            }}>
+                                                {ok ? 'OK' : problems > 0 ? `${problems} ${problemLabel}` : '—'}
+                                            </span>
+                                        </Link>
+                                    );
+                                })}
                             </div>
                         </section>
                     )}
