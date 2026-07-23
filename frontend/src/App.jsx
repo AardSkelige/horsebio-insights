@@ -312,7 +312,7 @@ function AppRoutes() {
           </SuperuserRoute>
         } />
 
-        <Route path="/admin/access" element={
+        <Route path="/system/access" element={
           <SuperuserRoute>
             <LayoutWrapper>
               <LazyPage>

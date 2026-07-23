@@ -64,7 +64,7 @@ const NAV_GROUPS = [
         label: 'Администрирование',
         superuserOnly: true,
         items: [
-            { path: '/admin/access',     label: 'Доступы',           icon: KeyRound, description: 'Кто какие страницы видит', superuserOnly: true },
+            { path: '/system/access',    label: 'Доступы',           icon: KeyRound, description: 'Кто какие страницы видит', superuserOnly: true },
             { path: '/checks',           label: 'Проверки',          icon: ShieldCheck, description: 'Автоматические проверки МойСклад', superuserOnly: true },
             { path: '/system/analytics', label: 'Аналитика системы', icon: Activity, description: 'Использование системы и сессии', superuserOnly: true },
         ],
