@@ -1,51 +1,49 @@
-.acc-root { display: flex; flex-direction: column; gap: 20px; color: var(--ink); }
-.acc-head { border-bottom: 1px solid var(--hairline); padding-bottom: 16px; }
+.acc-root { display: flex; flex-direction: column; gap: 18px; color: var(--ink); }
+.acc-head { border-bottom: 1px solid var(--hairline); padding-bottom: 14px; }
 .acc-title { font-family: var(--serif); font-size: 30px; font-weight: 400; letter-spacing: -0.025em; line-height: 1.1; margin: 0 0 4px; }
-.acc-sub { font-family: var(--sans); font-size: 13px; color: var(--muted); margin: 0; max-width: 70ch; line-height: 1.5; }
+.acc-sub { font-family: var(--sans); font-size: 13px; color: var(--muted); margin: 0; max-width: 72ch; line-height: 1.5; }
 
 .acc-error { display: flex; align-items: center; gap: 10px; background: rgba(198,69,69,0.08);
     border: 1px solid rgba(198,69,69,0.22); border-radius: 10px; padding: 12px 14px; font-size: 13px; color: var(--error); }
 .acc-loading, .acc-empty { display: flex; flex-direction: column; align-items: center; justify-content: center;
-    gap: 10px; padding: 60px 0; font-family: var(--sans); font-size: 14px; color: var(--muted); }
+    gap: 10px; padding: 56px 0; font-family: var(--sans); font-size: 14px; color: var(--muted); }
 .acc-loading { flex-direction: row; }
 .acc-spin { animation: acc-spin 0.9s linear infinite; }
 @keyframes acc-spin { to { transform: rotate(360deg); } }
 
-.acc-users { display: flex; flex-direction: column; gap: 16px; }
-.acc-user { background: var(--surface-card); border: 1px solid var(--hairline); border-radius: 12px; padding: 16px 18px; }
-.acc-user-head { display: flex; align-items: center; justify-content: space-between; gap: 14px; flex-wrap: wrap;
-    margin-bottom: 14px; padding-bottom: 12px; border-bottom: 1px solid var(--hairline); }
-.acc-user-id { display: flex; align-items: center; gap: 10px; }
-.acc-user-name { font-family: var(--sans); font-size: 14px; font-weight: 600; color: var(--ink); }
-.acc-user-login { font-family: var(--sans); font-size: 12px; color: var(--muted); margin-top: 1px; }
-.acc-user-actions { display: flex; align-items: center; gap: 8px; }
-.acc-mini { font-family: var(--sans); font-size: 12px; color: var(--muted); background: transparent;
-    border: 1px solid var(--hairline); border-radius: 7px; padding: 5px 10px; cursor: pointer; transition: all 120ms; }
-.acc-mini:hover { color: var(--ink); border-color: var(--muted); }
-.acc-save { font-family: var(--sans); font-size: 12px; font-weight: 500; color: #fff; background: var(--primary);
-    border: none; border-radius: 7px; padding: 6px 14px; cursor: pointer; display: inline-flex; align-items: center; gap: 5px;
-    transition: opacity 120ms; }
-.acc-save:disabled { opacity: 0.45; cursor: default; }
+/* Список без «коробок»: строки, разделённые волосяной линией — компактно и не боксово */
+.acc-list { display: flex; flex-direction: column; border-top: 1px solid var(--hairline); }
+.acc-row { padding: 14px 2px; border-bottom: 1px solid var(--hairline); }
 
-/* CSS-колонки вместо grid: группы разной высоты плотно упаковываются по
-   вертикали, без пустот под короткими разделами */
-.acc-groups { column-width: 210px; column-gap: 28px; }
-.acc-group { break-inside: avoid; margin-bottom: 16px; }
-.acc-group-label { font-family: var(--sans); font-size: 10px; font-weight: 600; letter-spacing: 0.07em;
-    text-transform: uppercase; color: var(--muted); margin-bottom: 8px; }
-.acc-checks { display: flex; flex-direction: column; gap: 4px; }
-.acc-check { display: flex; align-items: center; gap: 8px; font-family: var(--sans); font-size: 13px;
-    color: var(--body); cursor: pointer; padding: 3px 4px; border-radius: 6px; user-select: none; transition: background 120ms; }
-.acc-check:hover { background: var(--canvas); }
-.acc-check.on { color: var(--ink); }
-.acc-check input { position: absolute; opacity: 0; width: 0; height: 0; }
-.acc-box { display: inline-flex; align-items: center; justify-content: center; width: 16px; height: 16px; flex-shrink: 0;
-    border: 1px solid var(--hairline); border-radius: 5px; background: var(--canvas); color: transparent; transition: all 120ms; }
-.acc-check.on .acc-box { background: var(--primary); border-color: var(--primary); color: #fff; }
-.acc-check input:focus-visible + .acc-box { outline: 2px solid var(--primary); outline-offset: 1px; }
+.acc-row-top { display: flex; align-items: center; justify-content: space-between; gap: 14px; flex-wrap: wrap; margin-bottom: 10px; }
+.acc-who { display: flex; align-items: center; gap: 9px; min-width: 0; }
+.acc-avatar { display: inline-flex; align-items: center; justify-content: center; width: 26px; height: 26px; flex-shrink: 0;
+    border-radius: 8px; background: var(--surface-card); color: var(--primary); }
+.acc-name { font-family: var(--sans); font-size: 14px; font-weight: 600; color: var(--ink); white-space: nowrap; }
+.acc-meta { font-family: var(--sans); font-size: 12px; color: var(--muted); white-space: nowrap; }
+
+.acc-actions { display: flex; align-items: center; gap: 4px; }
+.acc-text { font-family: var(--sans); font-size: 12px; color: var(--muted); background: transparent; border: none;
+    border-radius: 6px; padding: 5px 9px; cursor: pointer; transition: color 120ms, background 120ms; }
+.acc-text:hover { color: var(--ink); background: var(--surface-card); }
+.acc-save { font-family: var(--sans); font-size: 12px; font-weight: 500; color: #fff; background: var(--primary);
+    border: none; border-radius: 7px; padding: 6px 14px; margin-left: 4px; cursor: pointer;
+    display: inline-flex; align-items: center; gap: 5px; transition: opacity 120ms; }
+.acc-save:disabled { opacity: 0.4; cursor: default; }
+
+/* Лента toggle-чипов — плотно и на бренде; активный чип сдержанно тонирован кораллом */
+.acc-chips { display: flex; flex-wrap: wrap; gap: 6px; }
+.acc-chip { display: inline-flex; align-items: center; gap: 5px; font-family: var(--sans); font-size: 12.5px; font-weight: 500;
+    color: var(--muted); background: transparent; border: 1px solid var(--hairline); border-radius: 999px;
+    padding: 5px 12px; cursor: pointer; user-select: none; transition: all 120ms; white-space: nowrap; }
+.acc-chip:hover { border-color: var(--muted); color: var(--ink); }
+.acc-chip.on { color: var(--primary); border-color: rgba(204,120,92,0.55); background: rgba(204,120,92,0.14); }
+.acc-chip.on:hover { background: rgba(204,120,92,0.22); }
+.acc-chip-ic { width: 12px; height: 12px; flex-shrink: 0; }
+.acc-chip:focus-visible { outline: 2px solid var(--primary); outline-offset: 1px; }
 
 @media (max-width: 560px) {
     .acc-title { font-size: 24px; }
-    .acc-user-head { flex-direction: column; align-items: flex-start; }
-    .acc-groups { column-width: auto; column-count: 1; }
+    .acc-row-top { align-items: flex-start; }
+    .acc-who { flex-wrap: wrap; }
 }
