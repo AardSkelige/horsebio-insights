@@ -1,4 +1,5 @@
-import { useState, useCallback, useRef } from 'react';
+import { useState, useCallback, useEffect } from 'react';
+import { createPortal } from 'react-dom';
 import PropTypes from 'prop-types';
 import { TrendingUp, TrendingDown, Download, Loader2, AlertCircle, Calendar, X, ExternalLink } from 'lucide-react';
 import { FadeRise, Stagger, StaggerItem, AnimatedNumber } from '../ui/motion';
@@ -6,6 +7,20 @@ import { analysisApi } from '../../api/analysisApi';
 import './CashFlowReportV2.css';
 
 const fmtMoney = (v) => (v == null ? '0' : Math.round(v).toLocaleString('ru-RU'));
+
+// Пока считается отчёт — лёгкие фразы (страницу смотрят Женя и начальство).
+const LOADING_PHRASES = [
+    'Считаем каждую копейку — даже те, что закатились под шкаф…',
+    'Допрашиваем МойСклад с пристрастием…',
+    'Сверяем приходы с расходами и нервами…',
+    'Уговариваем цифры сойтись…',
+    'Ищем, куда утекли деньги…',
+    'Пересчитываем — вдруг мы разбогатели…',
+    'Собираем платежи по всем углам…',
+    'Проверяем, все ли клиенты заплатили…',
+    'Готовим отчёт, которым не стыдно похвастаться перед начальством…',
+    'Немного финансовой магии…',
+];
 
 // Терракотовый тональный ряд — сегменты подписаны напрямую, доли одной метрики.
 const GROUP_COLORS = ['#cc785c', '#d6987f', '#b5654c', '#e3b9a6', '#8f4a37', '#c98f6b', '#a85a44'];
@@ -74,7 +89,16 @@ const CashFlowReportV2 = () => {
     const [incMode, setIncMode] = useState('grp'); // grp | src
     const [expMode, setExpMode] = useState('grp');
     const [tip, setTip] = useState(null);
-    const tipRef = useRef(null);
+    const [phrase, setPhrase] = useState('');
+
+    // Ротация забавных фраз во время загрузки
+    useEffect(() => {
+        if (!loading) return undefined;
+        const pick = () => setPhrase(LOADING_PHRASES[Math.floor(Math.random() * LOADING_PHRASES.length)]);
+        pick();
+        const id = setInterval(pick, 1900);
+        return () => clearInterval(id);
+    }, [loading]);
 
     const fetchReport = useCallback(async () => {
         if (!dateFrom || !dateTo) { setError('Выберите период для формирования отчёта'); return; }
@@ -204,7 +228,7 @@ const CashFlowReportV2 = () => {
                                         onClick={() => openLink(link)}
                                         onMouseEnter={(e) => showTip(e, { name: r.name, color: isInc ? '#059669' : '#dc2626', amount: r.amount, total, link })}
                                         onMouseMove={moveTip} onMouseLeave={hideTip}>
-                                        <td>{r.name}{link && <ExternalLink className="cfv2-ext" />}</td>
+                                        <td><span className="cfv2-cell">{r.name}{link && <ExternalLink className="cfv2-ext" />}</span></td>
                                         <td className="num">{fmtMoney(r.amount)}</td>
                                     </tr>
                                 );
@@ -244,7 +268,10 @@ const CashFlowReportV2 = () => {
             </div>
 
             {(loading || progress > 0) && (
-                <div className="cfv2-progress"><div style={{ width: `${Math.min(progress, 100)}%` }} /></div>
+                <div className="cfv2-loadbar">
+                    <div className="cfv2-progress"><div style={{ width: `${Math.min(progress, 100)}%` }} /></div>
+                    {loading && phrase && <p className="cfv2-phrase">{phrase}</p>}
+                </div>
             )}
 
             {error && (
@@ -314,14 +341,16 @@ const CashFlowReportV2 = () => {
                 </>
             )}
 
-            {/* floating tooltip */}
-            {tip && (
-                <div className="cfv2-tip" ref={tipRef} style={tipStyle()}>
+            {/* floating tooltip — портал в body: предки с transform (route-анимация)
+                ломают position:fixed, из-за чего пузырь уезжал от курсора */}
+            {tip && createPortal(
+                <div className="cfv2-tip" style={tipStyle()}>
                     <div className="cfv2-tip-h"><span className="cfv2-dot" style={{ background: tip.color }} />{tip.name}</div>
                     <div className="cfv2-tip-v">{fmtMoney(tip.amount)} ₽</div>
                     <div className="cfv2-tip-s">{((tip.amount / tip.total) * 100).toFixed(1)}% от итога · {fmtMoney(tip.total)} ₽</div>
                     {tip.link && <div className="cfv2-tip-l"><ExternalLink className="cfv2-ic" /> Открыть в МойСклад</div>}
-                </div>
+                </div>,
+                document.body
             )}
         </div>
     );
