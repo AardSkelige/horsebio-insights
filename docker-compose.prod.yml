@@ -16,6 +16,7 @@ services:
       - hb_buy_prices_data:/app/moysklad/horsebio/01_daemons/02_buy_prices/data
       - hb_deadlines_data:/app/moysklad/horsebio/01_daemons/05_payment_deadline/data
       - hb_order_email_data:/app/moysklad/horsebio/01_daemons/06_order_email_sync/data
+      - hb_cdek_waybills_data:/app/moysklad/horsebio/01_daemons/07_cdek_waybills/data
       - sp_cost_prices_data:/app/moysklad/starpony/01_daemons/01_cost_prices/data
       - sp_deadlines_data:/app/moysklad/starpony/01_daemons/02_payment_deadline/data
       # Ack-файлы health-чеков: пишутся через API (подтверждение из UI),
@@ -96,6 +97,7 @@ volumes:
   hb_buy_prices_data:
   hb_deadlines_data:
   hb_order_email_data:
+  hb_cdek_waybills_data:
   sp_cost_prices_data:
   sp_deadlines_data:
   hb_health_data:

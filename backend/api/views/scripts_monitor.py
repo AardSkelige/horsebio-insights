@@ -102,6 +102,17 @@ SCRIPTS_CONFIG = [
         'args': [],
         'structured': True,
     },
+    {
+        'id': 'horsebio_cdek_waybills',
+        'topic': 'Заказы сайта',
+        'name': 'Накладные СДЭК',
+        'account': 'HorseBio',
+        'schedule': 'Каждые 5 мин',
+        'description': 'Формирует накладную СДЭК для оплаченных одиночных заказов сайта и прикрепляет PDF к заказу в МойСклад',
+        'script': '/app/moysklad/horsebio/01_daemons/07_cdek_waybills/scripts/01_create_waybills.py',
+        'args': [],
+        'structured': True,
+    },
 ]
 
 SCRIPTS_BY_ID = {s['id']: s for s in SCRIPTS_CONFIG}
