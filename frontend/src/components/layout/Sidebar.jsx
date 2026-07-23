@@ -9,7 +9,7 @@ import { useDataPanel } from '../../contexts/DataPanelContext';
 import NavItem from './sidebar/NavItem';
 import UtilBtn from './sidebar/UtilBtn';
 import UserMenu from './sidebar/UserMenu';
-import NAV_GROUPS from './sidebar/navGroups';
+import NAV_GROUPS, { NAV_PATHS } from './sidebar/navGroups';
 import {
     HOME_PREFERENCES_EVENT,
     MAX_PINNED_SECTIONS,
@@ -83,7 +83,8 @@ export const Sidebar = ({ expanded, onToggle, isMobile, mobileOpen, onMobileClos
     };
 
     const handleTogglePin = async (path) => {
-        const previous = pinnedPaths;
+        // Только актуальные пути — «мёртвые» пины не занимают слоты избранного
+        const previous = pinnedPaths.filter((p) => NAV_PATHS.has(p));
         const isPinned = previous.includes(path);
         if (!isPinned && previous.length >= MAX_PINNED_SECTIONS) return;
 

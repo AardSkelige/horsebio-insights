@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react';
 import FeatureCard from './components/FeatureCard';
 import PersonalWorkspace from './components/PersonalWorkspace';
 import { FadeRise } from '../ui/motion';
-import NAV_GROUPS from '../layout/sidebar/navGroups';
+import NAV_GROUPS, { NAV_PATHS } from '../layout/sidebar/navGroups';
 import { authApi } from '../../api/authApi';
 import { getAuthStatus } from '../../utils/authSession';
 import { useLoading } from '../../contexts/LoadingContext';
@@ -101,7 +101,9 @@ const HomePage = () => {
     const systemSections = hasAnalytics ? sections.slice(analyticsIndex + 1) : [];
 
     const handleTogglePin = async (path) => {
-        const previous = homeData?.pinnedPaths || [];
+        // Считаем и сохраняем только актуальные пути — «мёртвые» пины
+        // (после переименования маршрутов) не занимают слоты и вычищаются.
+        const previous = (homeData?.pinnedPaths || []).filter((p) => NAV_PATHS.has(p));
         const isPinned = previous.includes(path);
         if (!isPinned && previous.length >= MAX_PINNED_SECTIONS) {
             setSaveError(`Можно закрепить не больше ${MAX_PINNED_SECTIONS} разделов`);

@@ -71,4 +71,8 @@ const NAV_GROUPS = [
     },
 ];
 
+// Все существующие пути меню — для отсечения «мёртвых» закреплённых разделов
+// (например, после переименования маршрута), чтобы они не занимали слоты избранного.
+export const NAV_PATHS = new Set(NAV_GROUPS.flatMap((g) => g.items).map((i) => i.path));
+
 export default NAV_GROUPS;
