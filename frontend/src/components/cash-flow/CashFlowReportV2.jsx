@@ -1,4 +1,4 @@
-import { useState, useCallback, useEffect } from 'react';
+import { useState, useCallback, useEffect, useRef } from 'react';
 import { createPortal } from 'react-dom';
 import PropTypes from 'prop-types';
 import { TrendingUp, TrendingDown, Download, Loader2, AlertCircle, Calendar, X, ExternalLink } from 'lucide-react';
@@ -109,6 +109,16 @@ const CashFlowReportV2 = () => {
     const [tip, setTip] = useState(null);
     const [hint, setHint] = useState(null); // подсказка KPI: {title, text, rect}
     const [phrase, setPhrase] = useState('');
+    const tipRef = useRef(null);
+    const [isTouch] = useState(() => typeof window !== 'undefined' && window.matchMedia?.('(hover: none)').matches);
+
+    // на тач-устройствах закрываем прикреплённый тултип по тапу вне его
+    useEffect(() => {
+        if (!tip?.pinned) return undefined;
+        const close = (e) => { if (!tipRef.current?.contains(e.target)) setTip(null); };
+        const id = setTimeout(() => document.addEventListener('pointerdown', close), 0);
+        return () => { clearTimeout(id); document.removeEventListener('pointerdown', close); };
+    }, [tip?.pinned]);
 
     // Ротация забавных фраз во время загрузки
     useEffect(() => {
@@ -160,12 +170,22 @@ const CashFlowReportV2 = () => {
     const periodLink = data?.moysklad_period_link || null;
     const openLink = (link) => { if (link) window.open(link, '_blank', 'noopener,noreferrer'); };
     const showTip = (e, { name, color, amount, total, link }) => {
+        if (isTouch) return; // на тач тултип показываем по тапу, не по «ховеру»
         setTip({ name, color, amount, total, link, x: e.clientX, y: e.clientY });
     };
     const moveTip = (e) => {
-        setTip((t) => (t ? { ...t, x: e.clientX, y: e.clientY } : t));
+        setTip((t) => (t && !t.pinned ? { ...t, x: e.clientX, y: e.clientY } : t));
     };
-    const hideTip = () => setTip(null);
+    const hideTip = () => setTip((t) => (t?.pinned ? t : null));
+    // клик по метке: тач → прикрепить тултип (видно название + ссылка), десктоп → сразу открыть МойСклад
+    const onMarkClick = (e, data) => {
+        if (isTouch) {
+            e.stopPropagation();
+            setTip({ ...data, x: e.clientX, y: e.clientY, pinned: true });
+        } else {
+            openLink(data.link);
+        }
+    };
 
     const tipStyle = () => {
         if (!tip) return { opacity: 0 };
@@ -223,7 +243,7 @@ const CashFlowReportV2 = () => {
                             return (
                                 <span key={g.name} className="cfv2-seg"
                                     style={{ flex: g.amount, background: g.color, animationDelay: `${0.05 + i * 0.06}s`, cursor: link ? 'pointer' : 'default' }}
-                                    onClick={() => openLink(link)}
+                                    onClick={(e) => onMarkClick(e, { name: g.name, color: g.color, amount: g.amount, total, link })}
                                     onMouseEnter={(e) => showTip(e, { name: g.name, color: g.color, amount: g.amount, total, link })}
                                     onMouseMove={moveTip} onMouseLeave={hideTip}>
                                     {pct >= 9 && <span className="cfv2-sl">{g.name} {pct.toFixed(0)}%</span>}
@@ -236,7 +256,7 @@ const CashFlowReportV2 = () => {
                             const link = g.link || periodLink;
                             return (
                             <StaggerItem key={g.name}>
-                                <div className="cfv2-brow" onClick={() => openLink(link)}
+                                <div className="cfv2-brow" onClick={(e) => onMarkClick(e, { name: g.name, color: g.color, amount: g.amount, total, link })}
                                     onMouseEnter={(e) => showTip(e, { name: g.name, color: g.color, amount: g.amount, total, link })}
                                     onMouseMove={moveTip} onMouseLeave={hideTip}>
                                     <span className="cfv2-nm">
@@ -268,7 +288,7 @@ const CashFlowReportV2 = () => {
                                 const link = r.link || periodLink;
                                 return (
                                     <tr key={r.name} style={{ cursor: link ? 'pointer' : 'default' }}
-                                        onClick={() => openLink(link)}
+                                        onClick={(e) => onMarkClick(e, { name: r.name, color: isInc ? 'var(--success)' : 'var(--error)', amount: r.amount, total, link })}
                                         onMouseEnter={(e) => showTip(e, { name: r.name, color: isInc ? 'var(--success)' : 'var(--error)', amount: r.amount, total, link })}
                                         onMouseMove={moveTip} onMouseLeave={hideTip}>
                                         <td><span className="cfv2-cell">{r.name}{link && <ExternalLink className="cfv2-ext" />}</span></td>
@@ -397,11 +417,13 @@ const CashFlowReportV2 = () => {
             {/* floating tooltip — портал в body: предки с transform (route-анимация)
                 ломают position:fixed, из-за чего пузырь уезжал от курсора */}
             {tip && createPortal(
-                <div className="cfv2-tip" style={tipStyle()}>
+                <div ref={tipRef} className={`cfv2-tip${tip.pinned ? ' pinned' : ''}`} style={tipStyle()}>
                     <div className="cfv2-tip-h"><span className="cfv2-dot" style={{ background: tip.color }} />{tip.name}</div>
                     <div className="cfv2-tip-v">{fmtMoney(tip.amount)} ₽</div>
                     <div className="cfv2-tip-s">{((tip.amount / tip.total) * 100).toFixed(1)}% от итога · {fmtMoney(tip.total)} ₽</div>
-                    {tip.link && <div className="cfv2-tip-l"><ExternalLink className="cfv2-ic" /> Открыть в МойСклад</div>}
+                    {tip.link && (tip.pinned
+                        ? <a className="cfv2-tip-l" href={tip.link} target="_blank" rel="noopener noreferrer"><ExternalLink className="cfv2-ic" /> Открыть в МойСклад</a>
+                        : <div className="cfv2-tip-l"><ExternalLink className="cfv2-ic" /> Открыть в МойСклад</div>)}
                 </div>,
                 document.body
             )}

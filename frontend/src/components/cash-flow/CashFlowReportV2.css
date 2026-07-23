@@ -133,6 +133,8 @@
 /* floating tooltip */
 .cfv2-tip { position: fixed; z-index: 100; pointer-events: none; background: var(--surface-dark); border: 1px solid var(--surface-dark-elevated);
     border-radius: 11px; padding: 12px 14px; min-width: 190px; box-shadow: 0 16px 40px -14px rgba(0,0,0,0.55); transition: opacity 100ms; }
+.cfv2-tip.pinned { pointer-events: auto; } /* тап-режим: ссылка внутри кликабельна */
+a.cfv2-tip-l { text-decoration: none; cursor: pointer; }
 .cfv2-tip-h { display: flex; align-items: center; gap: 7px; font-family: var(--sans); font-size: 12.5px; font-weight: 600; color: var(--on-dark); margin-bottom: 8px; }
 .cfv2-tip-v { font-family: var(--mono); font-size: 17px; color: var(--on-dark); line-height: 1; }
 .cfv2-tip-s { font-family: var(--sans); font-size: 11.5px; color: var(--on-dark-soft); margin-top: 5px; }
@@ -147,9 +149,10 @@
 @media (max-width: 860px) {
     .cfv2-topbar { flex-direction: column; }
     .cfv2-ctr { width: 100%; align-items: stretch; }
-    .cfv2-ctr-row { width: 100%; }
-    .cfv2-dates { flex: 1; }
+    .cfv2-ctr-row { width: 100%; flex-direction: column; align-items: stretch; }
+    .cfv2-dates { width: 100%; }
     .cfv2-date { flex: 1; }
+    .cfv2-btn { width: 100%; justify-content: center; }
     .cfv2-main { grid-template-columns: 1fr; gap: 28px; }
     .cfv2-blist, .cfv2-scroll { max-height: none; }
 }
@@ -160,7 +163,6 @@
     .cfv2-brow { grid-template-columns: 110px 1fr auto; gap: 8px; }
     .cfv2-fg em { display: none; }
     .cfv2-foot { flex-direction: column; }
-    .cfv2-tip { display: none; }
 }
 
 @media (prefers-reduced-motion: reduce) {
