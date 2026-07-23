@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { CalendarClock, Database, DoorClosed, DoorOpen, LogOut, Monitor, Smartphone, ShieldCheck, Mail } from 'lucide-react';
+import { CalendarClock, Database, DoorClosed, DoorOpen, LogOut, Monitor, Smartphone, ShieldCheck, Mail, ExternalLink } from 'lucide-react';
 import { setAuthStatus } from '../../utils/authSession';
 import { useAuthStatus } from '../../hooks/useAuthStatus';
 import { authApi } from '../../api/authApi';
@@ -252,6 +252,35 @@ const ProfilePage = () => {
                             </div>
                         ))}
                     </section>
+
+                    {auth.isSuperuser && (
+                        <section style={card}>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 16 }}>
+                                <ShieldCheck size={15} color="var(--primary)" />
+                                <span style={sectionLabel}>Администрирование</span>
+                            </div>
+                            <a
+                                href="/admin/"
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                style={{
+                                    display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8,
+                                    padding: '11px 16px', borderRadius: 8,
+                                    backgroundColor: 'var(--primary)', color: 'var(--on-primary)',
+                                    fontSize: 13, fontWeight: 500, textDecoration: 'none',
+                                    transition: 'opacity 0.15s',
+                                }}
+                                onMouseEnter={e => e.currentTarget.style.opacity = '0.9'}
+                                onMouseLeave={e => e.currentTarget.style.opacity = '1'}
+                            >
+                                <ExternalLink size={15} />
+                                Django-админка
+                            </a>
+                            <div style={{ color: 'var(--muted)', fontSize: 11, marginTop: 8, lineHeight: 1.4 }}>
+                                Панель управления Django. Откроется в новой вкладке.
+                            </div>
+                        </section>
+                    )}
 
                     {usage && (
                         <section style={card}>
