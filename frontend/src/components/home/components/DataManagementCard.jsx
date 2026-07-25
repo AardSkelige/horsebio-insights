@@ -10,6 +10,10 @@ const PRESET_RANGES = [
     { label: '1 год', months: 12 }
 ];
 
+// Тона семантических токенов на тёмной поверхности карточки
+const darkTone = (token, amount = 16) => `color-mix(in srgb, var(${token}) ${amount}%, var(--surface-dark))`;
+const onDarkTone = (token, amount = 78) => `color-mix(in srgb, var(${token}) ${amount}%, var(--on-dark))`;
+
 const formatDateWithTimezone = (dateString) => {
     const date = new Date(dateString + 'T00:00:00');
     return date.toLocaleDateString('ru-RU', { timeZone: 'Europe/Moscow' });
@@ -148,7 +152,7 @@ const DataManagementCard = () => {
                                         min={min} max={max} disabled={isLoading}
                                         style={{
                                             display: 'block', width: '100%', padding: '4px 8px', fontSize: '12px',
-                                            borderRadius: '6px', border: '1px solid #252320',
+                                            borderRadius: '6px', border: '1px solid var(--surface-dark-elevated)',
                                             backgroundColor: 'var(--surface-dark-elevated)',
                                             color: isLoading ? 'var(--muted-soft)' : 'var(--on-dark)', outline: 'none',
                                         }}
@@ -184,7 +188,7 @@ const DataManagementCard = () => {
 
                         {stats?.data_stale && (
                             <div className="flex items-start gap-2 mt-1 p-2 rounded-lg"
-                                style={{ backgroundColor: '#3d2a17', color: '#fbbf24' }}>
+                                style={{ backgroundColor: darkTone('--warning', 18), color: onDarkTone('--warning', 80) }}>
                                 <AlertTriangle className="w-3.5 h-3.5 mt-px flex-shrink-0" />
                                 <span>
                                     {stats?.hours_since_update != null
@@ -208,7 +212,7 @@ const DataManagementCard = () => {
                                 )}
                             </div>
                             <button onClick={cancelLoading} className="w-full flex items-center justify-center text-xs"
-                                style={{ padding: '6px 12px', borderRadius: '8px', border: 'none', cursor: 'pointer', backgroundColor: '#3d1a1a', color: '#f87171' }}>
+                                style={{ padding: '6px 12px', borderRadius: '8px', border: 'none', cursor: 'pointer', backgroundColor: darkTone('--error', 16), color: onDarkTone('--error', 62) }}>
                                 Остановить
                             </button>
                         </div>

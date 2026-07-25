@@ -14,6 +14,12 @@ const card = {
     padding: 20,
 };
 
+const summaryCard = {
+    backgroundColor: 'var(--surface-card)',
+    borderRadius: 10,
+    padding: '13px 15px',
+};
+
 const MONTH_NAMES = [
     '', 'Январь', 'Февраль', 'Март', 'Апрель', 'Май', 'Июнь',
     'Июль', 'Август', 'Сентябрь', 'Октябрь', 'Ноябрь', 'Декабрь',
@@ -114,13 +120,13 @@ const AdminAnalyticsPage = () => {
                 gap: 12, marginBottom: 12,
             }}>
                 {summaryItems.map(({ label, value, icon: Icon }) => (
-                    <div key={label} style={card}>
-                        <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 12 }}>
-                            <Icon size={14} color="var(--primary)" />
-                            <span style={{ ...sectionLabel, whiteSpace: 'normal', lineHeight: 1.3 }}>{label}</span>
+                    <div key={label} style={summaryCard}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 7, marginBottom: 7 }}>
+                            <Icon size={13} color="var(--primary)" style={{ flexShrink: 0 }} />
+                            <span style={{ ...sectionLabel, fontSize: 10.5, whiteSpace: 'normal', lineHeight: 1.25 }}>{label}</span>
                         </div>
                         <div style={{
-                            fontFamily: 'var(--serif)', fontSize: isMobile ? 28 : 36, fontWeight: 400,
+                            fontFamily: 'var(--serif)', fontSize: isMobile ? 24 : 28, fontWeight: 400,
                             letterSpacing: '-0.025em', lineHeight: 1, color: 'var(--ink)',
                             fontVariantNumeric: 'lining-nums', fontFeatureSettings: '"lnum" 1',
                         }}>

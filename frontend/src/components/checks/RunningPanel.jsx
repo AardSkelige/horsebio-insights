@@ -2,6 +2,8 @@ import { useState, useEffect, useRef, useCallback } from 'react';
 import PropTypes from 'prop-types';
 import { Loader2, ChevronRight } from 'lucide-react';
 import { checksApi } from './checksShared';
+import RunLog from './RunLog';
+import './RunLog.css';
 
 const ellipsis = { overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' };
 
@@ -83,11 +85,9 @@ export default function RunningPanel({ scriptId, onFinished }) {
             </button>
 
             {showLog && (
-                <div style={{
-                    marginTop: 10, background: 'var(--surface-soft)', border: '1px solid var(--hairline)', borderRadius: 10,
-                    padding: '12px 14px', fontFamily: 'var(--mono)', fontSize: 12, lineHeight: 1.55, color: 'var(--muted)',
-                    whiteSpace: 'pre-wrap', wordBreak: 'break-word', maxHeight: '40vh', overflowY: 'auto',
-                }}>{content || 'Ожидание вывода…'}</div>
+                <div style={{ marginTop: 10 }}>
+                    <RunLog content={content || 'Ожидание вывода…'} title="Живой вывод" maxHeight="40vh" autoScroll />
+                </div>
             )}
         </div>
     );

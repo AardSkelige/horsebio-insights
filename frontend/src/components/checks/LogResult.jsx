@@ -2,6 +2,8 @@ import { useState, useEffect } from 'react';
 import PropTypes from 'prop-types';
 import { Loader2 } from 'lucide-react';
 import { checksApi } from './checksShared';
+import RunLog from './RunLog';
+import './RunLog.css';
 
 /**
  * Вывод последнего запуска для «лог»-заданий (без структурированных находок) —
@@ -38,13 +40,7 @@ export default function LogResult({ scriptId, runId = null }) {
         );
     }
 
-    return (
-        <div style={{
-            background: 'var(--surface-soft)', border: '1px solid var(--hairline)', borderRadius: 10,
-            padding: '12px 14px', fontFamily: 'var(--mono)', fontSize: 12, lineHeight: 1.55, color: 'var(--muted)',
-            whiteSpace: 'pre-wrap', wordBreak: 'break-word', maxHeight: '60vh', overflowY: 'auto',
-        }}>{content}</div>
-    );
+    return <RunLog content={content} title="Вывод последнего запуска" maxHeight="60vh" />;
 }
 
 LogResult.propTypes = {
