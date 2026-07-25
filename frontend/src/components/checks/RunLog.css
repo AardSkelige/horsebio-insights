@@ -1,0 +1,119 @@
+/* Журнал выполнения — аккуратное, читаемое представление вывода прогона */
+.runlog {
+    border: 1px solid var(--hairline);
+    border-radius: 12px;
+    background: var(--surface-card);
+    overflow: hidden;
+}
+
+.runlog__head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 10px;
+    padding: 10px 14px;
+    border-bottom: 1px solid var(--hairline);
+}
+
+.runlog__title {
+    font-family: var(--sans);
+    font-size: 11px;
+    font-weight: 600;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--muted);
+}
+
+.runlog__copy {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    padding: 4px 9px;
+    border: 1px solid var(--hairline);
+    border-radius: 7px;
+    background: transparent;
+    color: var(--muted);
+    font-family: var(--sans);
+    font-size: 11.5px;
+    font-weight: 500;
+    cursor: pointer;
+    flex-shrink: 0;
+    transition: color 120ms, border-color 120ms;
+}
+.runlog__copy:hover { color: var(--ink); border-color: var(--muted); }
+
+.runlog__body {
+    padding: 6px 0;
+    overflow: auto;
+    -webkit-overflow-scrolling: touch;
+}
+
+/* строка журнала */
+.runlog__row {
+    display: grid;
+    grid-template-columns: 56px 1fr;
+    gap: 12px;
+    padding: 3px 14px;
+    align-items: baseline;
+}
+.runlog__row:hover { background: var(--surface-soft); }
+
+.runlog__time {
+    font-family: var(--sans);
+    font-size: 11px;
+    line-height: 1.5;
+    color: var(--muted-soft);
+    text-align: right;
+    font-variant-numeric: tabular-nums;
+    white-space: nowrap;
+}
+
+.runlog__msg {
+    display: flex;
+    align-items: baseline;
+    gap: 6px;
+    font-family: var(--sans);
+    font-size: 13px;
+    line-height: 1.5;
+    color: var(--body);
+    word-break: break-word;
+}
+
+.runlog__ic {
+    flex-shrink: 0;
+    align-self: flex-start;
+    margin-top: 2px;
+}
+
+/* уровни */
+.runlog__row--success .runlog__msg { color: var(--success); }
+.runlog__row--success .runlog__ic { color: var(--success); }
+.runlog__row--warning .runlog__msg { color: var(--warning); }
+.runlog__row--warning .runlog__ic { color: var(--warning); }
+.runlog__row--error .runlog__msg { color: var(--error); font-weight: 500; }
+.runlog__row--error .runlog__ic { color: var(--error); }
+.runlog__row--stats .runlog__msg { color: var(--muted); }
+.runlog__row--debug .runlog__msg { color: var(--muted-soft); }
+.runlog__row--progress .runlog__msg { color: var(--body); }
+
+/* заголовок секции */
+.runlog__section {
+    padding: 14px 14px 5px;
+    margin-top: 2px;
+}
+.runlog__section:first-child { margin-top: 0; }
+.runlog__section-label {
+    font-family: var(--sans);
+    font-size: 11px;
+    font-weight: 700;
+    letter-spacing: 0.07em;
+    text-transform: uppercase;
+    color: var(--primary);
+}
+
+@media (max-width: 560px) {
+    .runlog__row { grid-template-columns: 48px 1fr; gap: 9px; padding: 3px 12px; }
+    .runlog__msg { font-size: 12.5px; }
+    .runlog__section { padding: 12px 12px 4px; }
+    .runlog__copy span { display: none; }
+}

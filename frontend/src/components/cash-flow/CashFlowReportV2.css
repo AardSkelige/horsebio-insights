@@ -156,6 +156,14 @@ a.cfv2-tip-l { text-decoration: none; cursor: pointer; }
     .cfv2-main { grid-template-columns: 1fr; gap: 28px; }
     .cfv2-blist, .cfv2-scroll { max-height: none; }
 }
+/* поля дат держим в один ряд и на мобильном (глобальный .filter-date-range
+   ломает их в столбец при ≤600px — переопределяем с большей специфичностью) */
+@media (max-width: 600px) {
+    .cfv2-ctr .cfv2-dates { flex-direction: row; align-items: center; gap: 8px; }
+    .cfv2-ctr .cfv2-dates .cfv2-date { flex: 1 1 0; min-width: 0; }
+    .cfv2-ctr .cfv2-dates .filter-date-sep { display: inline; color: var(--muted-soft); flex-shrink: 0; }
+}
+
 @media (max-width: 560px) {
     .cfv2-title { font-size: 24px; }
     .cfv2-kpi { grid-template-columns: repeat(2, 1fr); }
