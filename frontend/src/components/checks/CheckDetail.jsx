@@ -5,6 +5,7 @@ import { ArrowLeft, Play, Square, Loader2, Activity } from 'lucide-react';
 import { checksApi, relTime, fmtDuration, plural, SEV } from './checksShared';
 import { SCRIPT_META, AccountBadge } from './ScriptCard';
 import HealthResults from './HealthResults';
+import LogResult from './LogResult';
 import ExceptionsPanel from './ExceptionsPanel';
 import RunningPanel from './RunningPanel';
 import InfoTip from './InfoTip';
@@ -69,6 +70,10 @@ export default function CheckDetail({ scriptId, initial, onBack, backLabel = 'В
                 <Loader2 size={18} className="animate-spin" /> Загрузка…
             </div>
         );
+    } else if (initial.structured === false) {
+        // «Лог»-задания (синхронизация, инвентаризация) не дают структурированных
+        // находок — показываем вывод последнего запуска, а не пустой экран находок.
+        main = <LogResult scriptId={scriptId} />;
     } else {
         // onExceptionChange → перечитать runs: заголовок «● N проблема» берёт summary
         // из последнего запуска, а бэкенд пересчитывает его с учётом исключений
