@@ -113,6 +113,26 @@ SCRIPTS_CONFIG = [
         'args': [],
         'structured': True,
     },
+    {
+        'id': 'horsebio_data_sync',
+        'topic': 'Обновление данных',
+        'name': 'Синхронизация данных',
+        'account': 'HorseBio',
+        'schedule': 'Ежедн. в 11:00',
+        'description': 'Автосинхронизация данных МойСклад за последние 7 дней (Django-команда auto_sync_weekly)',
+        'script': '/app/manage.py',
+        'args': ['auto_sync_weekly'],
+    },
+    {
+        'id': 'horsebio_inventory_check',
+        'topic': 'Обновление данных',
+        'name': 'Инвентаризация',
+        'account': 'HorseBio',
+        'schedule': 'Ежедн. в 09:00',
+        'description': 'Ежедневный пересчёт статуса инвентаризации позиций (Django-команда check_inventory)',
+        'script': '/app/manage.py',
+        'args': ['check_inventory', '--triggered-by', 'scheduler'],
+    },
 ]
 
 SCRIPTS_BY_ID = {s['id']: s for s in SCRIPTS_CONFIG}

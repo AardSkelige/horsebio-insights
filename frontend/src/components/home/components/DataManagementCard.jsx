@@ -1,5 +1,5 @@
 import { useState, useCallback, useRef, useEffect } from 'react';
-import { Calendar, DatabaseIcon } from 'lucide-react';
+import { Calendar, DatabaseIcon, AlertTriangle } from 'lucide-react';
 import { useLoading } from '../../../contexts/LoadingContext';
 import { statsApi } from '../../../api/statsApi';
 
@@ -181,6 +181,18 @@ const DataManagementCard = () => {
                                 <span style={{ color: 'var(--on-dark-soft)' }}>{value}</span>
                             </div>
                         ))}
+
+                        {stats?.data_stale && (
+                            <div className="flex items-start gap-2 mt-1 p-2 rounded-lg"
+                                style={{ backgroundColor: '#3d2a17', color: '#fbbf24' }}>
+                                <AlertTriangle className="w-3.5 h-3.5 mt-px flex-shrink-0" />
+                                <span>
+                                    {stats?.hours_since_update != null
+                                        ? `Данные не обновлялись ${Math.round(stats.hours_since_update)} ч — авто-синхронизация могла остановиться.`
+                                        : 'Данные ещё ни разу не синхронизировались.'}
+                                </span>
+                            </div>
+                        )}
                     </div>
 
                     {isLoading && loadingProgress ? (

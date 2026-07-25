@@ -235,21 +235,40 @@ def get_stats(request):
             
             # Определяем какое обновление было последним
             'latest_update_type': None,
-            'latest_update_time': None
+            'latest_update_time': None,
+
+            # Свежесть данных: авто-синк идёт ежедневно, поэтому отставание
+            # больше суток с запасом означает, что планировщик встал.
+            'data_stale': False,
+            'hours_since_update': None,
         }
-        
+
         # Определяем какое обновление было самым последним
         updates = []
         if last_manual_update:
             updates.append(('manual', last_manual_update))
         if last_auto_update:
             updates.append(('auto', last_auto_update))
-            
+
         if updates:
             latest_type, latest_time = max(updates, key=lambda x: x[1])
             stats['latest_update_type'] = latest_type
             stats['latest_update_time'] = timezone.localtime(latest_time).strftime("%d.%m.%Y %H:%M")
-        
+
+        # Свежесть считаем по любому успешному синку (авто или ручному)
+        freshest = max(
+            (t for t in (last_general_update, last_manual_update, last_auto_update) if t),
+            default=None,
+        )
+        STALE_AFTER_HOURS = 26
+        if freshest:
+            hours = (timezone.now() - freshest).total_seconds() / 3600
+            stats['hours_since_update'] = round(hours, 1)
+            stats['data_stale'] = hours > STALE_AFTER_HOURS
+        else:
+            # Данных о синке нет вовсе — тоже повод показать предупреждение
+            stats['data_stale'] = True
+
         return JsonResponse({
             'status': 'success',
             'stats': stats
