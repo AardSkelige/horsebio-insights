@@ -50,16 +50,17 @@ MARK = ' · Ozon:'
 # Номер отправления Ozon в описании заказа: 43356677-1677-1 / 0112326660-1774-1
 POSTING_RE = re.compile(r'(\d{6,}-\d{3,}-\d)')
 
-# Классификация статусов Ozon → действие
+# Классификация статусов Ozon → где товar (НЕ команда проводить — это решает Лера,
+# когда коробка физически придёт к нам на склад в Подрезково; Ozon этого не знает).
 def classify(sys_name: str, display: str) -> str:
     s = (sys_name or '').lower()
     d = (display or '').lower()
-    if s == 'receivedbyseller' or 'получен продавц' in d:
-        return 'у нас'            # товар у продавца → проверить/провести
     if 'утилиз' in d or 'списан' in d or 'dispos' in s or 'utiliz' in s:
-        return 'не придёт'        # товар не вернётся → черновик можно удалить
-    if 'едет к' in d or 'movingtoseller' in s:
-        return 'едет к нам'
+        return 'не придёт'        # утилизирован/списан → товар не вернётся, черновик удалить
+    if 'едет' in d and ('вам' in d or 'продавц' in d) or 'movingtoseller' in s:
+        return 'едет к нам'       # реально едет к продавцу → ждать поступление
+    if s == 'receivedbyseller' or 'получен' in d:
+        return 'получен — уточнить'  # Ozon пишет «получен», но место может быть его склад/ПВЗ
     return 'у Ozon'              # На складе Ozon / Ожидает отправки / Едет на склад Ozon
 
 
@@ -146,7 +147,7 @@ def main():
     print(f"Черновиков Озон в МС: {len(drafts)}\n")
 
     counts = {'updated': 0, 'unchanged': 0, 'no_posting': 0, 'no_ozon_match': 0, 'error': 0}
-    by_action = {'у нас': [], 'едет к нам': [], 'у Ozon': [], 'не придёт': []}
+    by_action = {'получен — уточнить': [], 'едет к нам': [], 'у Ozon': [], 'не придёт': []}
 
     for d in drafts:
         name = d.get('name', '?')
@@ -190,11 +191,11 @@ def main():
     print(f"  Нет номера отправления:  {counts['no_posting']}")
     print(f"  Нет в Ozon API:          {counts['no_ozon_match']}")
     print(f"  Ошибки:                  {counts['error']}")
-    print(f"\n  По действию:")
-    print(f"    🟢 у нас (провести):    {len(by_action['у нас'])}  {by_action['у нас']}")
-    print(f"    🟡 едет к нам:          {len(by_action['едет к нам'])}  {by_action['едет к нам']}")
-    print(f"    ⚪ у Ozon (ждать):      {len(by_action['у Ozon'])}")
-    print(f"    🔴 не придёт (удалить): {len(by_action['не придёт'])}  {by_action['не придёт']}")
+    print(f"\n  Где товар (проводит всегда Лера вручную, когда коробка придёт в Подрезково):")
+    print(f"    🟡 едет к нам:            {len(by_action['едет к нам'])}  {by_action['едет к нам']}")
+    print(f"    🔵 получен — уточнить:    {len(by_action['получен — уточнить'])}  {by_action['получен — уточнить']}")
+    print(f"    ⚪ у Ozon (ждать):        {len(by_action['у Ozon'])}")
+    print(f"    🔴 не придёт (удалить):   {len(by_action['не придёт'])}  {by_action['не придёт']}")
     print('='*64)
 
 
