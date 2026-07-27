@@ -34,6 +34,12 @@ STATE_FILE = Path(__file__).parent.parent / "data" / ".returns_state.json"
 # Стартовая дата — историю до этой даты не трогаем
 START_DATE = "2026-03-04 00:00:00"
 
+# Не создавать возврат, если сам заказ старше этого срока. Фильтр по updated
+# ловит и старые заказы, у которых недавно сменился статус (напр. массовая
+# отмена заказов 2024–2025 при ресинхронизации Озона 01.07.2026). Возврат по
+# отгрузке полуторагодовой давности бессмыслен — отсекаем по дате заказа.
+RETURN_MAX_AGE_DAYS = 183  # ~6 месяцев
+
 # Статусы заказов для обработки
 STATES = {
     "Возврат": f"{BASE_URL}/entity/customerorder/metadata/states/41e67a4d-266b-11eb-0a80-090200155ca0",
@@ -133,6 +139,16 @@ class ReturnsMonitor:
             size = returns.get("meta", {}).get("size", 0)
             return size > 0
         return False
+
+    def _is_too_old(self, moment: str) -> bool:
+        """Заказ старше RETURN_MAX_AGE_DAYS? (защита от массовой отмены старья)"""
+        if not moment:
+            return False
+        try:
+            dt = datetime.strptime(moment[:10], "%Y-%m-%d")
+        except ValueError:
+            return False
+        return (datetime.now() - dt).days > RETURN_MAX_AGE_DAYS
 
     def _extract_meta(self, field: dict) -> dict:
         """Извлечь {meta: ...} из поля сущности"""
@@ -271,7 +287,7 @@ class ReturnsMonitor:
     def _process_order(self, order: dict) -> str:
         """
         Обработать один заказ покупателя.
-        Returns: 'skipped' | 'already_processed' | 'no_demand' |
+        Returns: 'skipped' | 'too_old' | 'already_processed' | 'no_demand' |
                  'return_exists' | 'return_created' | 'error'
         """
         order_id = order.get("id")
@@ -286,6 +302,22 @@ class ReturnsMonitor:
         # Уже обработан ранее?
         if order_id in self.state["processed_orders"]:
             return "already_processed"
+
+        # Заказ слишком старый — возврат не нужен. Фиксируем в state, чтобы не
+        # переоценивать каждый прогон и не шуметь.
+        order_moment = order.get("moment", "")
+        if self._is_too_old(order_moment):
+            print(f"  SKIP: {order_name} ({agent_name}) — заказ от {order_moment[:10]} "
+                  f"старше {RETURN_MAX_AGE_DAYS} дн, возврат не создаём")
+            self.state["processed_orders"][order_id] = {
+                "order_name": order_name,
+                "agent": agent_name,
+                "status_name": status_name,
+                "status": "too_old",
+                "order_date": order_moment[:10],
+                "processed_at": datetime.now().isoformat()
+            }
+            return "too_old"
 
         # Получаем отгрузки (demands — это list при expand=demands)
         demands = order.get("demands") or []
@@ -422,6 +454,7 @@ class ReturnsMonitor:
 
         counts = {
             "skipped": 0,
+            "too_old": 0,
             "already_processed": 0,
             "no_demand": 0,
             "cancelled_no_ship": 0,
@@ -460,6 +493,7 @@ class ReturnsMonitor:
         print(f"\n{'='*60}")
         print("Итого:")
         print(f"  Не наши агенты (ЯМ и др.):  {counts['skipped']}")
+        print(f"  Заказ старше {RETURN_MAX_AGE_DAYS} дн:        {counts['too_old']}")
         print(f"  Уже обработаны ранее:        {counts['already_processed']}")
         print(f"  Отменён без отгрузки:        {counts['cancelled_no_ship']}")
         print(f"  Нет отгрузки (WARNING):      {counts['no_demand']}")
