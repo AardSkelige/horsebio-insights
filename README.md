@@ -1,65 +1,57 @@
 # HorseBio Insights
 
-[![Deploy Backend](https://github.com/AardSkelige/horsebio-insights/actions/workflows/deploy-backend.yml/badge.svg)](https://github.com/AardSkelige/horsebio-insights/actions/workflows/deploy-backend.yml)
-[![Deploy Frontend](https://github.com/AardSkelige/horsebio-insights/actions/workflows/deploy-frontend.yml/badge.svg)](https://github.com/AardSkelige/horsebio-insights/actions/workflows/deploy-frontend.yml)
+Внутренняя система аналитики и автоматизации для оптовой компании в сфере ветеринарных и коневодческих товаров. Помогает планировать закупки, прогнозировать спрос и убирать ручную рутину при работе с ERP, маркетплейсами и доставкой. Используется каждый день отделом закупок и руководством.
 
-Production business-analytics platform for a veterinary products company: MoySklad ERP synchronization, demand forecasting, purchase optimization, and marketplace analytics. Used daily by the purchasing team and management.
+---
 
-## Features
+## 📸 Скриншоты
 
-- **Demand forecasting** — Facebook Prophet on top of shipment history: monthly forecasts per product group with seasonality and trend awareness
-- **ABC analysis** — products and counterparties categorized by revenue contribution (Pareto principle)
-- **Purchase optimization** — reorder points calculated from demand forecasts, stock levels, and material lead times
-- **Seasonality analysis** — detection of seasonal demand patterns per group and per SKU
-- **Counterparty analytics** — customer behavior, groupings, shipment dynamics
-- **Cash flow** — cash flow reporting built from ERP data
-- **Ozon marketplace analytics** — API integration: sales, FBO stock, advertising campaigns
-- **MoySklad automations** — background daemons (purchase price sync, returns monitoring, payment deadlines) and accounting integrity checks with findings acknowledged through the UI
+> _Место под скриншоты. Что стоит заснять:_
+> - **Главный дашборд** — общая картина по продажам и остаткам
+> - **Прогноз спроса / оптимизация закупок** — таблица или график «сколько и когда закупать»
+> - **ABC-анализ или сезонность** — наглядный график, сразу видна аналитическая ценность
+> - _(опционально)_ короткий **GIF**: как за пару кликов формируется рекомендация по закупке
 
-## Architecture
+---
 
-```
-MoySklad ERP ──┐
-               ├──> sync (API parser) ──> PostgreSQL ──> forecasting / api ──> React SPA
-Ozon API ──────┘                                              │
-                                                    nginx (reverse proxy)
-```
+## Что делает
 
-- **Backend** — Django 5 + Django REST Framework; domain apps: `sync` (MoySklad integration), `forecasting` (Prophet, ABC, seasonality, purchasing), `ozon` (marketplace), `api` (REST layer), `core` (domain models)
-- **Frontend** — React 18 + Vite, Ant Design + Tailwind CSS, Recharts for charts; components organized by business domain (abc, purchases, seasonality, shipments, supplies, cash-flow, ozon-analytics)
-- **Data** — PostgreSQL 17 in production, SQLite for local development; pandas/numpy for processing
-- **Infrastructure** — Docker Compose, two nginx instances (frontend static + Django proxy), background process state persisted in named volumes
+- **Подсказывает, что и сколько закупать.** Смотрит на историю продаж и прогнозирует спрос, чтобы не было ни залежавшихся остатков, ни дефицита.
+- **Собирает всю аналитику в одном месте.** Продажи, поставки, остатки, движение денег, поведение клиентов — вместо десятка Excel-файлов.
+- **Сама делает рутинную работу.** Оформляет накладные на доставку, следит за сроками оплаты, обрабатывает возвраты, подтягивает заказы с сайта и маркетплейса.
+- **Проверяет данные на ошибки.** Автоматически ловит расхождения в документах, пока они не испортили отчёты.
+- **Работает сразу на две компании** из одной системы, с разными процессами под каждую.
 
-## CI/CD
+---
 
-GitHub Actions: every push to `main` runs the tests (backend against PostgreSQL 17, frontend with Vitest) and only after a green test stage builds Docker images, publishes them to GHCR, and deploys to the server over SSH. Secrets live exclusively in GitHub Secrets; configuration is environment-driven (`backend/.env.example`). A pre-commit hook with gitleaks guards against accidentally committed secrets.
+## Технологии
 
-## Quick Start
+**Бэкенд:** Python, Django, PostgreSQL
+**Прогнозирование и аналитика:** Prophet (прогноз спроса), pandas, numpy, scikit-learn
+**Фронтенд:** React, Vite, Tailwind CSS, Ant Design
+**Интеграции:** МойСклад (ERP), Ozon (маркетплейс), СДЭК (доставка), синхронизация заказов по email
+**Инфраструктура:** Docker, Nginx, автоматический деплой через GitHub Actions (с прогоном тестов перед каждой выкаткой)
 
-```bash
-# Backend
-cd backend
-cp .env.example .env        # fill in the values
-pip install -r requirements.txt
-python manage.py migrate
-python manage.py runserver 127.0.0.1:8001
+---
 
-# Frontend
-cd frontend
-npm install
-npm run dev                 # http://localhost:3001
+## Почему это интересно
 
-# Or everything at once in Docker
-docker-compose -f docker-compose.local.yml up --build
-```
+**Прогноз, который не ломается на «редких» товарах.**
+Обычные модели прогнозирования требуют длинной истории продаж — и для товаров, которые покупают редко, выдают ерунду. Здесь система сама выбирает подход под каждый товар: у популярных считает точный прогноз, а редкие объединяет в группы и прогнозирует спрос уже по группе. В итоге адекватная рекомендация есть по всему ассортименту, а не только по бестселлерам.
 
-## Tests
+**Автоматика, которой можно доверять.**
+Прежде чем строить отчёты, система прогоняет данные из ERP через набор автоматических проверок — ищет расхождения и битые документы. Скучная на вид, но важная часть: аналитика полезна ровно настолько, насколько чистые данные под ней. А фоновые задачи — накладные, напоминания об оплате, возвраты — вынесены на надёжное расписание с журналом, так что всегда видно, что и когда отработало.
 
-```bash
-cd backend && python manage.py test    # 150+ tests
-cd frontend && npm test
-```
+---
 
-## Notes
+## Масштаб проекта
 
-The project works with real company data, so the repository contains no fixtures or dumps: operational data comes from MoySklad during synchronization, and automation state lives in Docker volumes on the server.
+- **~53 000 строк кода** — бэкенд ~33k, фронтенд ~20k
+- **4 внешние интеграции** — МойСклад, Ozon, СДЭК, email
+- **23 функциональных раздела** интерфейса — от ABC-анализа и сезонности до движения денег и работы со складом
+- **14 фоновых автоматизаций** — демоны и проверки, работающие без участия человека
+- **~270 автотестов**, которые проверяют систему перед каждым обновлением
+
+---
+
+_Автор и единственный разработчик — Sergey Senkin._
