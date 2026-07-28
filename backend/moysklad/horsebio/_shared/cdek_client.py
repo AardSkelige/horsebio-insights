@@ -167,11 +167,19 @@ class CdekClient:
 
     # ─── Печатная форма (квитанция) ─────────────────────────────────────────
 
-    def create_waybill(self, order_uuid: str, copy_count: int = 2) -> dict:
-        """POST /v2/print/orders — заказать формирование квитанции по заказу.
+    @staticmethod
+    def _order_ref(order_uuid: str = None, cdek_number: str = None) -> dict:
+        """Ссылка на заказ для печатных форм: по uuid ИЛИ по номеру СДЭК."""
+        if order_uuid:
+            return {"order_uuid": order_uuid}
+        if cdek_number:
+            return {"cdek_number": str(cdek_number)}
+        raise CdekError("нужен order_uuid или cdek_number")
 
-        Возвращает ответ с uuid печатной формы (готовится асинхронно)."""
-        body = {"orders": [{"order_uuid": order_uuid}], "copy_count": copy_count}
+    def create_waybill(self, order_uuid: str = None, copy_count: int = 2, cdek_number: str = None) -> dict:
+        """POST /v2/print/orders — заказать формирование квитанции по заказу
+        (по uuid или по номеру СДЭК). Возвращает ответ с uuid печатной формы."""
+        body = {"orders": [self._order_ref(order_uuid, cdek_number)], "copy_count": copy_count}
         return self._post("/v2/print/orders", body)
 
     def poll_waybill(self, uuid: str, attempts: int = 10, delay: float = 2.0) -> dict:
@@ -201,11 +209,11 @@ class CdekClient:
     # готовности → скачивание PDF. Формат листа: A4/A5/A6/A7 (по умолчанию A6 —
     # так просил пользователь).
 
-    def create_barcode(self, order_uuid: str, fmt: str = "A6", copy_count: int = 1) -> dict:
-        """POST /v2/print/barcodes — заказать формирование ШК места по заказу.
-
-        Возвращает ответ с uuid печатной формы (готовится асинхронно)."""
-        body = {"orders": [{"order_uuid": order_uuid}], "copy_count": copy_count, "format": fmt}
+    def create_barcode(self, order_uuid: str = None, fmt: str = "A6", copy_count: int = 1,
+                        cdek_number: str = None) -> dict:
+        """POST /v2/print/barcodes — заказать формирование ШК места по заказу
+        (по uuid или по номеру СДЭК). Возвращает ответ с uuid печатной формы."""
+        body = {"orders": [self._order_ref(order_uuid, cdek_number)], "copy_count": copy_count, "format": fmt}
         return self._post("/v2/print/barcodes", body)
 
     def poll_barcode(self, uuid: str, attempts: int = 10, delay: float = 2.0) -> dict:
