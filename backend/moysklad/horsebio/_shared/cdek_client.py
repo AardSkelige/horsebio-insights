@@ -196,6 +196,40 @@ class CdekClient:
             raise CdekError(f"Скачивание PDF {uuid}: {resp.status_code} {resp.text}")
         return resp.content
 
+    # ─── ШК места (штрихкод) ─────────────────────────────────────────────────
+    # Отдельная печатная форма от накладной: POST /v2/print/barcodes → опрос
+    # готовности → скачивание PDF. Формат листа: A4/A5/A6/A7 (по умолчанию A6 —
+    # так просил пользователь).
+
+    def create_barcode(self, order_uuid: str, fmt: str = "A6", copy_count: int = 1) -> dict:
+        """POST /v2/print/barcodes — заказать формирование ШК места по заказу.
+
+        Возвращает ответ с uuid печатной формы (готовится асинхронно)."""
+        body = {"orders": [{"order_uuid": order_uuid}], "copy_count": copy_count, "format": fmt}
+        return self._post("/v2/print/barcodes", body)
+
+    def poll_barcode(self, uuid: str, attempts: int = 10, delay: float = 2.0) -> dict:
+        """Дождаться готовности ШК места (GET /v2/print/barcodes/{uuid})."""
+        last = None
+        for _ in range(attempts):
+            last = self._get(f"/v2/print/barcodes/{uuid}")
+            entity = last.get("entity") or {}
+            statuses = [s.get("code") for s in entity.get("statuses", [])]
+            if "READY" in statuses:
+                return last
+            if "INVALID" in statuses:
+                raise CdekError(f"ШК места {uuid} отклонён: {last}")
+            time.sleep(delay)
+        raise CdekError(f"ШК места {uuid} не готов за {attempts} попыток; последний ответ: {last}")
+
+    def download_barcode_pdf(self, uuid: str) -> bytes:
+        """GET /v2/print/barcodes/{uuid}.pdf — забрать готовый PDF ШК места (байты)."""
+        url = f"{self.base_url}/v2/print/barcodes/{uuid}.pdf"
+        resp = requests.get(url, headers=self._headers(), timeout=30)
+        if not resp.ok:
+            raise CdekError(f"Скачивание ШК {uuid}: {resp.status_code} {resp.text}")
+        return resp.content
+
 
 if __name__ == "__main__":
     # Быстрая проверка авторизации: python3 cdek_client.py
