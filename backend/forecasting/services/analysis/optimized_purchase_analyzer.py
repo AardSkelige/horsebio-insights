@@ -338,6 +338,16 @@ class OptimizedPurchaseAnalyzer:
                 calculator = PurchaseOptimizationCalculator(supplier_orders, material_id)
                 detailed_calcs = calculator.get_full_recommendations()
 
+                # get_full_recommendations возвращает {} при внутренней ошибке расчёта.
+                # Пропускаем такого поставщика, чтобы не терять анализ по остальным
+                # (иначе один проблемный поставщик роняет весь эндпоинт).
+                if not detailed_calcs or 'reorder_point' not in detailed_calcs:
+                    logger.warning(
+                        f"Пропущен поставщик {stats['supplier_name']} для материала "
+                        f"{material_id}: не удалось рассчитать рекомендации"
+                    )
+                    continue
+
                 # Берем все значения из калькулятора
                 recommendations.append({
                     'supplier_name': stats['supplier_name'],

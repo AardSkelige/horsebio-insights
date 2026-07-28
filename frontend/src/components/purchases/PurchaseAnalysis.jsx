@@ -1,7 +1,8 @@
 import { useState, useEffect } from 'react';
-import { Package } from 'lucide-react';
+import { Package, AlertTriangle } from 'lucide-react';
 import SupplierAnalysisCard from './components/SupplierAnalysisCard';
 import PurchaseRecommendations from './components/PurchaseRecommendations';
+import PurchaseVerdict from './components/PurchaseVerdict';
 import RelatedMaterialsTable from './components/RelatedMaterialsTable';
 import MaterialSearchPanel from './components/MaterialSearchPanel';
 import QuickInsightsCard from './components/QuickInsightsCard';
@@ -15,6 +16,7 @@ const PurchaseAnalysis = () => {
     const [materials, setMaterials] = useState([]);
     const [selectedMaterial, setSelectedMaterial] = useState(null);
     const [analysisData, setAnalysisData] = useState(null);
+    const [error, setError] = useState(null);
     const [activityThreshold, setActivityThreshold] = useState(6);
     const [showInactive, setShowInactive] = useState(false);
 
@@ -27,10 +29,19 @@ const PurchaseAnalysis = () => {
 
     const fetchAnalysis = async (materialId) => {
         setLoading(true);
+        setError(null);
         try {
             const data = await analysisApi.purchase.getMaterial(materialId);
-            if (data.status === 'success') setAnalysisData(data.data);
-        } catch { /* silent */ }
+            if (data.status === 'success') {
+                setAnalysisData(data.data);
+            } else {
+                setAnalysisData(null);
+                setError(data.message || 'Не удалось рассчитать анализ по этому материалу');
+            }
+        } catch (err) {
+            setAnalysisData(null);
+            setError(err.message || 'Не удалось загрузить анализ. Попробуйте позже.');
+        }
         finally { setLoading(false); }
     };
 
@@ -68,8 +79,19 @@ const PurchaseAnalysis = () => {
                 </div>
             )}
 
+            {selectedMaterial && !loading && !analysisData && error && (
+                <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', padding: '64px 0', gap: '10px' }}>
+                    <AlertTriangle style={{ width: 40, height: 40, color: 'var(--muted)' }} />
+                    <p style={{ fontFamily: 'var(--sans)', fontSize: '14px', fontWeight: 500, color: 'var(--ink)', margin: 0 }}>Не удалось построить анализ</p>
+                    <p style={{ fontFamily: 'var(--sans)', fontSize: '13px', color: 'var(--muted)', margin: 0, maxWidth: '420px', textAlign: 'center' }}>{error}</p>
+                </div>
+            )}
+
             {selectedMaterial && analysisData && (
                 <Stagger style={{ display: 'flex', flexDirection: 'column', gap: '16px', opacity: loading ? 0.45 : 1, pointerEvents: loading ? 'none' : 'auto', transition: 'opacity 200ms ease' }}>
+                    <StaggerItem>
+                        <PurchaseVerdict analysisData={analysisData} material={analysisData.material} />
+                    </StaggerItem>
                     <StaggerItem>
                         <QuickInsightsCard analysisData={analysisData} material={analysisData.material} onPeriodChange={() => fetchAnalysis(selectedMaterial.id)} />
                     </StaggerItem>
