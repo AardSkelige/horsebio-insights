@@ -62,6 +62,7 @@ ATTR_HEIGHT_ID = "48103faa-85d2-11f1-0a80-069b00109dbd"
 SHIPMENT_POINT = "KHME10"       # наш ПВЗ отправления (Химки)
 TARIFF_PVZ = 136                # посылка склад-склад (ПВЗ → ПВЗ)
 TARIFF_COURIER = 137            # посылка склад-дверь (ПВЗ → курьер)
+BARCODE_FORMAT = "A6"           # формат ШК места (A4/A5/A6/A7) — по просьбе пользователя A6
 
 # Пометки в комментарии заказа — и человеку видно, и служат маркерами состояния.
 # Успех: строка с номером накладной (+ трек); служит доп-маркером идемпотентности.
@@ -297,20 +298,29 @@ class WaybillCreator:
             st["cdek_number"] = cdek_number
             print(f"  Заказ {number}: номер СДЭК {cdek_number}")
 
-        # 2) Печатная форма → PDF → прикрепление к заказу МойСклад
+        # 2) Накладная (A4) → PDF → прикрепление к заказу МойСклад
         if not st.get("pdf_attached"):
             pr = self.cdek.create_waybill(cdek_uuid)
             print_uuid = (pr.get("entity") or {}).get("uuid")
             self.cdek.poll_waybill(print_uuid)
             pdf = self.cdek.download_waybill_pdf(print_uuid)
-            filename = f"Накладная СДЭК {cdek_number}.pdf"
-            self.ms._post(
-                f"/entity/customerorder/{order_id}/files",
-                [{"filename": filename, "content": base64.b64encode(pdf).decode()}],
-            )
+            self._attach_file(order_id, f"Накладная СДЭК {cdek_number}.pdf", pdf)
             st["pdf_attached"] = True
             st["print_uuid"] = print_uuid
-            print(f"  Заказ {number}: PDF ({len(pdf)} б) прикреплён к заказу МойСклад")
+            print(f"  Заказ {number}: накладная ({len(pdf)} б) прикреплена к заказу МойСклад")
+
+        # 2b) ШК места (A6) → PDF → прикрепление вторым файлом. Отдельный флаг
+        # идемпотентности: если накладная уже прикрепилась, а ШК упал — повторный
+        # прогон докрепит только ШК (POST /files добавляет, не заменяет файлы).
+        if not st.get("barcode_attached"):
+            br = self.cdek.create_barcode(cdek_uuid, fmt=BARCODE_FORMAT)
+            barcode_uuid = (br.get("entity") or {}).get("uuid")
+            self.cdek.poll_barcode(barcode_uuid)
+            bc = self.cdek.download_barcode_pdf(barcode_uuid)
+            self._attach_file(order_id, f"ШК места СДЭК {cdek_number} ({BARCODE_FORMAT}).pdf", bc)
+            st["barcode_attached"] = True
+            st["barcode_uuid"] = barcode_uuid
+            print(f"  Заказ {number}: ШК места {BARCODE_FORMAT} ({len(bc)} б) прикреплён к заказу МойСклад")
 
         # 3) Пометка в комментарии заказа — успех (снимает прежнюю причину, если была)
         self._write_order_note(order_id, success_number=cdek_number)
@@ -318,6 +328,13 @@ class WaybillCreator:
         st.pop("last_error", None)
         st.pop("last_error_at", None)
         return {"cdek_number": cdek_number}
+
+    def _attach_file(self, order_id: str, filename: str, content: bytes) -> None:
+        """Прикрепить PDF к заказу покупателя (POST /files — добавляет, не заменяет)."""
+        self.ms._post(
+            f"/entity/customerorder/{order_id}/files",
+            [{"filename": filename, "content": base64.b64encode(content).decode()}],
+        )
 
     @staticmethod
     def _is_managed_line(line: str) -> bool:
