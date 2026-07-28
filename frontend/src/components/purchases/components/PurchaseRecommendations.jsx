@@ -46,42 +46,105 @@ const DetailBlock = ({ title, content }) => content ? (
 
 DetailBlock.propTypes = { title: PropTypes.string.isRequired, content: PropTypes.string };
 
-const DetailedCalculations = ({ details }) => {
-    if (!details) return <div style={{ fontFamily: 'var(--sans)', fontSize: '13px', color: 'var(--muted)' }}>Нет детальных расчётов</div>;
+const fmt = (n) => Number(n || 0).toLocaleString('ru', { maximumFractionDigits: 0 });
+
+const SummaryPill = ({ label, value, uom, accent, note }) => (
+    <div style={{ backgroundColor: 'var(--surface-soft)', borderRadius: '8px', padding: '12px 14px', display: 'flex', flexDirection: 'column', gap: '4px' }}>
+        <div style={{ fontFamily: 'var(--sans)', fontSize: '11px', fontWeight: 600, letterSpacing: '0.06em', textTransform: 'uppercase', color: accent || 'var(--muted)' }}>{label}</div>
+        <div style={{ fontFamily: 'var(--serif)', fontSize: '20px', color: 'var(--ink)', lineHeight: 1, fontVariantNumeric: 'lining-nums', fontFeatureSettings: '"lnum" 1' }}>
+            {value}
+            {uom && value !== '—' && <span style={{ fontFamily: 'var(--sans)', fontSize: '12px', color: 'var(--muted)', marginLeft: '4px' }}>{uom}</span>}
+        </div>
+        {note && <div style={{ fontFamily: 'var(--sans)', fontSize: '11px', color: 'var(--muted)' }}>{note}</div>}
+    </div>
+);
+
+SummaryPill.propTypes = { label: PropTypes.string.isRequired, value: PropTypes.oneOfType([PropTypes.string, PropTypes.number]), uom: PropTypes.string, accent: PropTypes.string, note: PropTypes.string };
+
+const DetailedCalculations = ({ details, uom }) => {
+    const [showMath, setShowMath] = useState(false);
+    if (!details || !details.reorder_point) {
+        return <div style={{ fontFamily: 'var(--sans)', fontSize: '13px', color: 'var(--muted)' }}>Нет детальных расчётов</div>;
+    }
+
+    const reorder = details.reorder_point?.value || 0;
+    const optimal = details.optimal_order_quantity?.value || 0;
+    const optimalMissing = optimal <= 0;
+    const safety = details.safety_stock?.value || 0;
+    const leadAvg = details.lead_time?.avg || 0;
+    const monthly = details.periodic_orders?.frequent_orders?.total_size || 0;
+    const quarterly = details.periodic_orders?.quarterly_orders?.total_size || 0;
+
     return (
-        <div style={{ display: 'flex', flexDirection: 'column', gap: '4px', marginTop: '4px' }}>
-            <DetailBlock title="Точка заказа" content={details.reorder_point?.details} />
-            <DetailBlock title="Оптимальный размер заказа" content={details.optimal_order_quantity?.details} />
-            {details.periodic_orders && (
-                <div style={sectionStyle}>
-                    <div style={{ ...blockTitleStyle, marginBottom: '10px' }}>Варианты периодичности заказов</div>
-                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(300px, 1fr))', gap: '12px' }}>
-                        {details.periodic_orders.frequent_orders && (
-                            <div>
-                                <div style={{ fontFamily: 'var(--sans)', fontSize: '12px', fontWeight: 600, color: 'var(--body)', marginBottom: '6px' }}>Ежемесячные поставки</div>
-                                <div style={blockBodyStyle}>{details.periodic_orders.frequent_orders.details}</div>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '16px', marginTop: '4px' }}>
+            {/* Суть простым языком */}
+            <p style={{ fontFamily: 'var(--sans)', fontSize: '14px', color: 'var(--body)', margin: 0, lineHeight: 1.5 }}>
+                Заказывайте, когда остаток упадёт до <b style={{ color: 'var(--ink)' }}>{fmt(reorder)} {uom}</b>.
+                {!optimalMissing && <> Оптимальная партия — <b style={{ color: 'var(--ink)' }}>{fmt(optimal)} {uom}</b>.</>}
+            </p>
+
+            {/* Ключевые числа */}
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(150px, 1fr))', gap: '10px' }}>
+                <SummaryPill label="Точка заказа" value={fmt(reorder)} uom={uom} accent="var(--primary)" note="когда делать заказ" />
+                <SummaryPill label="Оптимальная партия" value={optimalMissing ? '—' : fmt(optimal)} uom={uom} note={optimalMissing ? 'нет данных о цене' : 'EOQ'} />
+                <SummaryPill label="Страховой запас" value={fmt(safety)} uom={uom} note="буфер на задержки" />
+                <SummaryPill label="Срок поставки" value={leadAvg.toFixed(1)} uom="дн." note="в среднем" />
+            </div>
+
+            {/* Периодичность */}
+            {(monthly > 0 || quarterly > 0) && (
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(150px, 1fr))', gap: '10px' }}>
+                    {monthly > 0 && <SummaryPill label="Ежемесячно" value={fmt(monthly)} uom={uom} note="партия на 30 дней" />}
+                    {quarterly > 0 && <SummaryPill label="Ежеквартально" value={fmt(quarterly)} uom={uom} note="партия на 90 дней" />}
+                </div>
+            )}
+
+            {/* Расчёт по клику */}
+            <div>
+                <button
+                    onClick={() => setShowMath(s => !s)}
+                    style={{ display: 'flex', alignItems: 'center', gap: '4px', background: 'none', border: 'none', cursor: 'pointer', padding: 0, fontFamily: 'var(--sans)', fontSize: '12px', color: 'var(--muted)' }}
+                >
+                    {showMath ? <ChevronDown style={{ width: 14, height: 14 }} /> : <ChevronRight style={{ width: 14, height: 14 }} />}
+                    {showMath ? 'Скрыть расчёт' : 'Показать расчёт'}
+                </button>
+                {showMath && (
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '4px', marginTop: '10px' }}>
+                        <DetailBlock title="Точка заказа" content={details.reorder_point?.details} />
+                        <DetailBlock title="Оптимальный размер заказа" content={details.optimal_order_quantity?.details} />
+                        {details.periodic_orders && (
+                            <div style={sectionStyle}>
+                                <div style={{ ...blockTitleStyle, marginBottom: '10px' }}>Варианты периодичности заказов</div>
+                                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(300px, 1fr))', gap: '12px' }}>
+                                    {details.periodic_orders.frequent_orders && (
+                                        <div>
+                                            <div style={{ fontFamily: 'var(--sans)', fontSize: '12px', fontWeight: 600, color: 'var(--body)', marginBottom: '6px' }}>Ежемесячные поставки</div>
+                                            <div style={blockBodyStyle}>{details.periodic_orders.frequent_orders.details}</div>
+                                        </div>
+                                    )}
+                                    {details.periodic_orders.quarterly_orders && (
+                                        <div>
+                                            <div style={{ fontFamily: 'var(--sans)', fontSize: '12px', fontWeight: 600, color: 'var(--body)', marginBottom: '6px' }}>Квартальные поставки</div>
+                                            <div style={blockBodyStyle}>{details.periodic_orders.quarterly_orders.details}</div>
+                                        </div>
+                                    )}
+                                </div>
                             </div>
                         )}
-                        {details.periodic_orders.quarterly_orders && (
-                            <div>
-                                <div style={{ fontFamily: 'var(--sans)', fontSize: '12px', fontWeight: 600, color: 'var(--body)', marginBottom: '6px' }}>Квартальные поставки</div>
-                                <div style={blockBodyStyle}>{details.periodic_orders.quarterly_orders.details}</div>
+                        {details.safety_stock && (
+                            <div style={{ ...sectionStyle, padding: '12px', backgroundColor: 'rgba(92,138,204,0.06)', borderRadius: '8px', border: '1px solid rgba(92,138,204,0.2)' }}>
+                                <div style={{ ...blockTitleStyle, color: '#5c8acc' }}>Страховой запас</div>
+                                <div style={{ ...blockBodyStyle, backgroundColor: 'transparent', padding: 0 }}>{details.safety_stock.details}</div>
                             </div>
                         )}
                     </div>
-                </div>
-            )}
-            {details.safety_stock && (
-                <div style={{ ...sectionStyle, padding: '12px', backgroundColor: 'rgba(92,138,204,0.06)', borderRadius: '8px', border: '1px solid rgba(92,138,204,0.2)' }}>
-                    <div style={{ ...blockTitleStyle, color: '#5c8acc' }}>Страховой запас</div>
-                    <div style={{ ...blockBodyStyle, backgroundColor: 'transparent', padding: 0 }}>{details.safety_stock.details}</div>
-                </div>
-            )}
+                )}
+            </div>
         </div>
     );
 };
 
-DetailedCalculations.propTypes = { details: PropTypes.object };
+DetailedCalculations.propTypes = { details: PropTypes.object, uom: PropTypes.string };
 
 const thStyle = {
     fontFamily: 'var(--sans)', fontSize: '11px', fontWeight: 600,
@@ -126,8 +189,8 @@ const PurchaseRecommendations = ({ recommendations = [], material, generalCalcul
 
     return (
         <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
-            <CollapsibleSection title="Общие рекомендации по закупкам" hint="нажмите чтобы развернуть">
-                <DetailedCalculations details={generalCalculations} />
+            <CollapsibleSection title="Общие рекомендации по закупкам" hint="сколько и когда закупать">
+                <DetailedCalculations details={generalCalculations} uom={material?.uom} />
             </CollapsibleSection>
 
             <CollapsibleSection
@@ -176,7 +239,7 @@ const PurchaseRecommendations = ({ recommendations = [], material, generalCalcul
                                     expanded && (
                                         <tr key={`${rec.supplier_name}-detail`}>
                                             <td colSpan={6} style={{ padding: '16px 20px', backgroundColor: 'var(--surface-soft)', borderBottom: '1px solid var(--hairline-soft)' }}>
-                                                <DetailedCalculations details={rec.detailed_calculations} />
+                                                <DetailedCalculations details={rec.detailed_calculations} uom={material?.uom} />
                                             </td>
                                         </tr>
                                     )

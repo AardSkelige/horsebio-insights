@@ -163,7 +163,12 @@ const SupplierAnalysisCard = ({ suppliers, material, activityThreshold, setActiv
             </div>
 
             {/* Supplier analysis */}
-            <CollapsibleSection title="Анализ поставщиков" rightSlot={<span style={{ fontFamily: 'var(--sans)', fontSize: '12px', color: 'var(--muted)' }}>нажмите чтобы развернуть</span>}>
+            <CollapsibleSection title="Анализ поставщиков" rightSlot={<span style={{ fontFamily: 'var(--sans)', fontSize: '12px', color: 'var(--muted)' }}>у кого выгоднее закупать</span>}>
+                <p style={{ fontFamily: 'var(--sans)', fontSize: '13px', color: 'var(--muted)', margin: '0 0 20px', lineHeight: 1.5, maxWidth: '720px' }}>
+                    Сравнение поставщиков материала: как менялась цена, насколько надёжно они поставляют,
+                    за какие сроки и какими объёмами. Помогает выбрать, у кого заказывать, а не гадать.
+                </p>
+
                 {/* Price chart */}
                 {priceHistoryData.length > 0 && (
                     <div style={{ marginBottom: '24px' }}>
@@ -177,7 +182,9 @@ const SupplierAnalysisCard = ({ suppliers, material, activityThreshold, setActiv
                                     <RechartsTooltip
                                         formatter={(v, name) => [`${Number(v).toLocaleString('ru')} ₽`, name]}
                                         labelFormatter={fmtDate}
-                                        contentStyle={{ fontFamily: 'var(--sans)', fontSize: 12, borderRadius: 8, border: '1px solid var(--hairline)' }}
+                                        contentStyle={{ backgroundColor: 'var(--canvas)', fontFamily: 'var(--sans)', fontSize: 12, borderRadius: 8, border: '1px solid var(--hairline)', boxShadow: '0 4px 16px rgba(0,0,0,0.12)' }}
+                                        labelStyle={{ color: 'var(--ink)', fontWeight: 600, marginBottom: 4 }}
+                                        cursor={{ stroke: 'var(--hairline)' }}
                                     />
                                     {filteredSuppliers.map((s, i) => (
                                         <Line {...CHART_ANIMATION} key={s.supplier_name} type="monotone" dataKey={s.supplier_name} stroke={CHART_COLORS[i % CHART_COLORS.length]} dot strokeWidth={2} />
