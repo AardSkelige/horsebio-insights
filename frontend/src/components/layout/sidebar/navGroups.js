@@ -25,6 +25,7 @@ const NAV_GROUPS = [
         label: 'Заказы сайта',
         items: [
             { path: '/site-orders', label: 'Заказы сайта', icon: Mail, description: 'Заказы с horse-bio.ru и их путь в МойСклад', pageKey: 'site-orders' },
+            { path: '/delivery/calculator', label: 'Расчёт доставки', icon: Truck, description: 'Раскладка по коробкам и цена ПЭК/СДЭК', pageKey: 'delivery-calc' },
         ],
     },
     {

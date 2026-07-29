@@ -36,6 +36,7 @@ const AccessAdminPage = lazy(() => import('./components/admin-access/AccessAdmin
 const InventoryTracking = lazy(() => import('./components/inventory-tracking/InventoryTracking'));
 const PaymentDeadlinesPage = lazy(() => import('./components/payment-deadlines/PaymentDeadlinesPage'));
 const SiteOrdersPage = lazy(() => import('./components/site-orders/SiteOrdersPage'));
+const DeliveryCalculatorPage = lazy(() => import('./components/delivery/DeliveryCalculatorPage'));
 
 const RouteFallback = () => (
   <div aria-busy="true" aria-label="Загрузка раздела" style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
@@ -297,6 +298,16 @@ function AppRoutes() {
             <LayoutWrapper>
               <LazyPage>
                 <SiteOrdersPage />
+              </LazyPage>
+            </LayoutWrapper>
+          </ProtectedRoute>
+        } />
+
+        <Route path="/delivery/calculator" element={
+          <ProtectedRoute>
+            <LayoutWrapper>
+              <LazyPage>
+                <DeliveryCalculatorPage />
               </LazyPage>
             </LayoutWrapper>
           </ProtectedRoute>

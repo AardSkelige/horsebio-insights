@@ -115,6 +115,31 @@ class CdekClient:
     def _post(self, path: str, body: dict) -> dict:
         return self._request("POST", path, json=body).json()
 
+    # ─── Расчёт стоимости ────────────────────────────────────────────────────
+
+    def get_city_code(self, city_name: str) -> int | None:
+        """Код города СДЭК по названию (GET /v2/location/cities?city=...).
+
+        Возвращает code первого совпадения (СДЭК ранжирует по релевантности) или
+        None, если город не найден. Код нужен для калькулятора тарифов."""
+        rows = self._get("/v2/location/cities", {"city": city_name, "size": 1})
+        if isinstance(rows, list) and rows:
+            return rows[0].get("code")
+        return None
+
+    def calculate_tarifflist(self, from_code: int, to_code: int, packages: list[dict]) -> dict:
+        """POST /v2/calculator/tarifflist — все доступные тарифы для направления.
+
+        packages: [{"weight": г, "length": см, "width": см, "height": см}, ...].
+        Ответ: {"tariff_codes": [{tariff_code, tariff_name, delivery_sum,
+        period_min, period_max, ...}]}."""
+        body = {
+            "from_location": {"code": from_code},
+            "to_location": {"code": to_code},
+            "packages": packages,
+        }
+        return self._post("/v2/calculator/tarifflist", body)
+
     # ─── Заказы ─────────────────────────────────────────────────────────────
 
     def create_order(self, order: dict) -> dict:

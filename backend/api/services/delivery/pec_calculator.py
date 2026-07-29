@@ -10,6 +10,7 @@
 """
 
 import time
+from difflib import SequenceMatcher
 
 import requests
 
@@ -54,6 +55,54 @@ def find_town_id(name: str) -> int | None:
         if lowered and lowered in town_name.lower():
             return tid
     return None
+
+
+def suggest_towns(query: str, limit: int = 8) -> list[dict]:
+    """Города ПЭК для автодополнения, включая близкие опечатки.
+
+    Точные совпадения и совпадения по началу строки всегда выше нечёткого
+    поиска. Возвращаем каноническое название из справочника, чтобы калькулятор
+    не получал произвольный пользовательский текст.
+    """
+    raw_query = (query or "").strip()
+    normalized_query = raw_query.casefold().replace("ё", "е")
+    if len(normalized_query) < 2:
+        return []
+
+    direct_matches: list[tuple[tuple, str]] = []
+    fuzzy_matches: list[tuple[float, str]] = []
+    fuzzy_threshold = 0.72 if len(normalized_query) < 4 else 0.58
+    for town_name in _load_towns():
+        normalized_name = town_name.casefold().replace("ё", "е")
+        if normalized_name == normalized_query:
+            rank = (0, 0, town_name)
+        elif normalized_name.startswith(normalized_query):
+            rank = (1, len(normalized_name) - len(normalized_query), town_name)
+        elif normalized_query in normalized_name:
+            rank = (2, normalized_name.index(normalized_query), town_name)
+        else:
+            similarity = SequenceMatcher(None, normalized_query, normalized_name).ratio()
+            if similarity < fuzzy_threshold:
+                continue
+            fuzzy_matches.append((similarity, town_name))
+            continue
+        direct_matches.append((rank, town_name))
+
+    safe_limit = max(1, min(limit, 20))
+    if direct_matches:
+        direct_matches.sort(key=lambda item: item[0])
+        return [{"name": town_name} for _, town_name in direct_matches[:safe_limit]]
+
+    fuzzy_matches.sort(key=lambda item: (-item[0], item[1]))
+    if not fuzzy_matches:
+        return []
+    best_similarity = fuzzy_matches[0][0]
+    close_matches = [
+        town_name
+        for similarity, town_name in fuzzy_matches
+        if similarity >= max(fuzzy_threshold, best_similarity - 0.1)
+    ]
+    return [{"name": town_name} for town_name in close_matches[:safe_limit]]
 
 
 def _places_params(result: PackResult) -> dict:
