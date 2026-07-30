@@ -16,6 +16,35 @@ const BUCKETS = [
     { from: 30, to: Infinity, color: 'var(--warning)', label: '⚠ дольше 30', warn: true },
 ];
 
+// Маркетплейсы: короткая подпись + цвет точки. Порядок — как показываем в разбивке.
+const MP_ORDER = ['ozon', 'wb', 'other'];
+const MP_META = {
+    ozon:  { label: 'Озон',   color: '#cc785c' },
+    wb:    { label: 'ВБ',     color: '#9a8778' },
+    other: { label: 'Прочее', color: 'var(--muted-soft)' },
+};
+
+// Относим возврат к маркетплейсу по имени контрагента (agentOf). Значения в МойСклад —
+// «Озон», «Вайлдберриз (Вб)»; старые записи могли писать Ozon/Wildberries — ловим по подстроке.
+function mpKey(it) {
+    const a = (agentOf(it) || '').toLowerCase();
+    if (a.includes('озон') || a.includes('ozon')) return 'ozon';
+    if (a.includes('вайлдбер') || a.includes('wildber') || a.includes('вб')) return 'wb';
+    return 'other';
+}
+
+// Разбивка списка возвратов по маркетплейсам → строки {key,label,color,count,sum}
+// только для непустых групп, в порядке MP_ORDER.
+function mpRows(list) {
+    const g = { ozon: { count: 0, sum: 0 }, wb: { count: 0, sum: 0 }, other: { count: 0, sum: 0 } };
+    for (const it of list) {
+        const b = g[mpKey(it)];
+        b.count += 1;
+        b.sum += it.sum_rub || 0;
+    }
+    return MP_ORDER.filter((k) => g[k].count > 0).map((k) => ({ key: k, ...MP_META[k], ...g[k] }));
+}
+
 const numStyle = (color, size = 26) => ({
     fontFamily: 'var(--serif)', fontSize: size, fontWeight: 400, letterSpacing: '-0.02em',
     lineHeight: 1.15, color, fontVariantNumeric: 'lining-nums', fontFeatureSettings: '"lnum" 1',
@@ -48,7 +77,11 @@ function AgeStrip({ items }) {
 
     const buckets = BUCKETS.map((b) => {
         const inb = items.filter((it) => (it.age_days ?? 0) >= b.from && (it.age_days ?? 0) < b.to);
-        return { ...b, count: inb.length, sum: inb.reduce((acc, it) => acc + (it.sum_rub || 0), 0) };
+        return {
+            ...b, count: inb.length,
+            sum: inb.reduce((acc, it) => acc + (it.sum_rub || 0), 0),
+            rows: mpRows(inb),
+        };
     }).filter((b) => b.count > 0);
     const total = buckets.reduce((acc, b) => acc + b.sum, 0);
     if (total <= 0 || buckets.length === 0) return null;
@@ -63,7 +96,15 @@ function AgeStrip({ items }) {
                     background: 'var(--surface-dark, #262521)', color: 'var(--on-dark, #f5f2ea)',
                     fontSize: 12, fontWeight: 500, lineHeight: 1.4, borderRadius: 9, padding: '7px 11px',
                     boxShadow: '0 6px 22px rgba(0,0,0,0.25)', whiteSpace: 'nowrap',
-                }}>{tip.text}</div>,
+                }}>
+                    <div style={{ fontWeight: 700 }}>{tip.title}</div>
+                    {tip.rows?.map((r) => (
+                        <div key={r.key} style={{ display: 'flex', alignItems: 'center', gap: 6, marginTop: 3, opacity: 0.92 }}>
+                            <span style={{ width: 7, height: 7, borderRadius: 999, background: r.color, flexShrink: 0 }} />
+                            {r.label} — {r.count} шт · {fmtRub(r.sum)}
+                        </div>
+                    ))}
+                </div>,
                 document.body
             )}
             <div style={{ fontSize: 11, fontWeight: 700, letterSpacing: '0.07em', textTransform: 'uppercase', color: 'var(--muted)', marginBottom: 8 }}>
@@ -74,7 +115,8 @@ function AgeStrip({ items }) {
                     <div key={b.label}
                         onMouseMove={(e) => setTip({
                             x: e.clientX, y: e.clientY,
-                            text: `${b.label}: ${b.count} ${plural(b.count, 'возврат', 'возврата', 'возвратов')} · ${fmtRub(b.sum)}`,
+                            title: `${b.label}: ${b.count} ${plural(b.count, 'возврат', 'возврата', 'возвратов')} · ${fmtRub(b.sum)}`,
+                            rows: b.rows,
                         })}
                         onMouseLeave={() => setTip(null)}
                         style={{ flex: b.sum, position: 'relative', background: b.color, minWidth: 14 }}>
@@ -175,6 +217,22 @@ function td() {
     return { padding: '8px 12px', borderBottom: '1px solid var(--hairline-soft)', color: 'var(--body)', verticalAlign: 'top' };
 }
 
+/** Разбивка метрики карточки по маркетплейсам: точка + подпись + значение.
+ *  mode='count' — штуки (для «Едут к нам»), mode='sum' — деньги (для «Денег в дороге»). */
+function MpBreakdown({ rows, mode }) {
+    return (
+        <div style={{ display: 'flex', gap: '4px 12px', flexWrap: 'wrap', marginTop: 7 }}>
+            {rows.map((r) => (
+                <span key={r.key} style={{ display: 'inline-flex', alignItems: 'center', gap: 5, fontSize: 11.5, color: 'var(--muted)', whiteSpace: 'nowrap' }}>
+                    <span style={{ width: 7, height: 7, borderRadius: 999, background: r.color, flexShrink: 0 }} />
+                    <b style={{ fontWeight: 600, color: 'var(--body)' }}>{r.label}</b> {mode === 'sum' ? fmtRub(r.sum) : r.count}
+                </span>
+            ))}
+        </div>
+    );
+}
+MpBreakdown.propTypes = { rows: PropTypes.array.isRequired, mode: PropTypes.oneOf(['count', 'sum']).isRequired };
+
 /** Деталка «Возвратов в пути»: сводка (две плитки + лента возраста), таблица застрявших,
  *  свёрнутая таблица едущих в срок. Формат C1. */
 export default function PendingReturnsDetail({ onBack }) {
@@ -196,6 +254,7 @@ export default function PendingReturnsDetail({ onBack }) {
     const warnDays = pending.warn_days || 30;
     const overdue = items.filter((it) => (it.age_days || 0) >= warnDays);
     const onTime = items.filter((it) => (it.age_days || 0) < warnDays);
+    const mp = mpRows(items); // разбивка всех едущих возвратов по маркетплейсам
 
     return (
         <div style={{ maxWidth: 1100, margin: '0 auto' }}>
@@ -244,12 +303,16 @@ export default function PendingReturnsDetail({ onBack }) {
                         <div style={kpi()}>
                             <div style={kpiLabel()}>Едут к нам</div>
                             <div style={numStyle('var(--ink)')}>{items.length}</div>
-                            <div style={kpiSub()}>{plural(items.length, 'возврат', 'возврата', 'возвратов')} с ВБ и Озона</div>
+                            {mp.length > 0
+                                ? <MpBreakdown rows={mp} mode="count" />
+                                : <div style={kpiSub()}>{plural(items.length, 'возврат', 'возврата', 'возвратов')} с ВБ и Озона</div>}
                         </div>
                         <div style={kpi()}>
                             <div style={kpiLabel()}>Денег в дороге</div>
                             <div style={numStyle('var(--ink)')}>{fmtRub(pending.total_rub ?? items.reduce((a, it) => a + (it.sum_rub || 0), 0))}</div>
-                            <div style={kpiSub()}>вернутся на склад товаром</div>
+                            {mp.length > 0
+                                ? <MpBreakdown rows={mp} mode="sum" />
+                                : <div style={kpiSub()}>вернутся на склад товаром</div>}
                         </div>
                     </div>
 
