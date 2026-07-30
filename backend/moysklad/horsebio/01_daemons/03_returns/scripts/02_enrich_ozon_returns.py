@@ -8,12 +8,19 @@
 видно: черновик просто висел.
 
 Этот скрипт для каждого черновика Озон подтягивает через Ozon API (/v1/returns/list)
-реальный статус и место товара и дописывает их в комментарий возврата в МойСклад.
-Так и Лера в МС, и проверки в Инсайте видят, где возврат и что с ним делать:
-  • Получен продавцом      → товар у нас, можно проводить
-  • Едет к нам             → скоро у нас, ждать
-  • На складе Ozon / Ожидает отправки / Едет на склад Ozon → у Озона, ждать
-  • Утилизация / списание   → товар не придёт, черновик можно удалить
+реальный статус, конечный пункт назначения (target_place) и место товара.
+
+Ключевое решение — по target_place (КОНЕЧНЫЙ пункт, не транзитный place):
+  • target_place == МО_ХИМКИ_96 (наш ПВЗ) → товар приедет к нам, мы его заберём,
+    документ возврата нужен. Оставляем черновик и дописываем статус в комментарий:
+      – Получен продавцом → товар у нас, можно проводить
+      – Едет к нам        → скоро у нас, ждать
+  • target_place == любой *_РФЦ_ВОЗВРАТЫ (склад Озона) → товар к нам НЕ приедет,
+    документ возврата не нужен. Удаляем черновик и пишем пометку в самом заказе
+    (куда уехал возврат), чтобы это было видно в МС.
+
+Берём именно target_place, а не place: place — где товар сейчас (транзитный РФЦ,
+товар может оказаться рядом проездом), target_place — куда он в итоге едет.
 
 Матчинг: возврат → отгрузка → заказ → номер отправления Ozon (в описании заказа)
 ↔ posting_number в API. Надёжно, без коллизий по номеру заказа.
@@ -47,6 +54,11 @@ OZON_RETURNS_URL = 'https://api-seller.ozon.ru/v1/returns/list'
 
 # Маркер, с которого начинается наш блок статуса в описании (для идемпотентной замены)
 MARK = ' · Ozon:'
+# Маркер пометки в описании ЗАКАЗА (не возврата), что возврат ушёл на склад Ozon
+ORDER_MARK = '\n↩ Возврат на склад Ozon:'
+# Наш ПВЗ: сюда Ozon свозит возвраты, которые мы физически забираем. Всё остальное
+# (*_РФЦ_ВОЗВРАТЫ) — склады Озона, куда товар уезжает и к нам не попадает.
+OUR_PVZ = 'МО_ХИМКИ_96'
 # Номер отправления Ozon в описании заказа: 43356677-1677-1 / 0112326660-1774-1
 POSTING_RE = re.compile(r'(\d{6,}-\d{3,}-\d)')
 
@@ -90,6 +102,7 @@ def build_ozon_map(months_back: int = 8) -> dict:
                 'status': display,
                 'sys': st.get('sys_name', ''),
                 'place': (x.get('place') or {}).get('name', ''),
+                'target': (x.get('target_place') or {}).get('name', ''),
                 'schema': x.get('schema', ''),
                 'action': classify(st.get('sys_name', ''), display),
             }
@@ -130,6 +143,12 @@ def build_description(base_desc: str, info: dict) -> str:
     return f"{base}{MARK} {info['status']} [{place}] → {info['action']} · {datetime.now():%d.%m}"
 
 
+def build_order_note(base_desc: str, info: dict) -> str:
+    """Идемпотентно добавить в описание ЗАКАЗА пометку, что возврат ушёл на склад Ozon."""
+    base = base_desc.split(ORDER_MARK)[0].rstrip()
+    return f"{base}{ORDER_MARK} {info['target']} · {info['status']} · {datetime.now():%d.%m}"
+
+
 def main():
     ap = argparse.ArgumentParser(description="Обогащение возвратов Озон статусом с Ozon API")
     ap.add_argument('--dry-run', action='store_true', help="Показать, ничего не писать в МС")
@@ -146,7 +165,7 @@ def main():
     drafts = fetch_ozon_drafts()
     print(f"Черновиков Озон в МС: {len(drafts)}\n")
 
-    counts = {'updated': 0, 'unchanged': 0, 'no_posting': 0, 'no_ozon_match': 0, 'error': 0}
+    counts = {'updated': 0, 'unchanged': 0, 'deleted': 0, 'no_posting': 0, 'no_ozon_match': 0, 'error': 0}
     by_action = {'получен — уточнить': [], 'едет к нам': [], 'у Ozon': [], 'не придёт': []}
 
     for d in drafts:
@@ -160,6 +179,42 @@ def main():
         if not info:
             counts['no_ozon_match'] += 1
             print(f"  WARN {name}: {pn} нет в Ozon API (старый/за окном)")
+            continue
+
+        # Конечный пункт — склад Озона (не наш ПВЗ): товар к нам не приедет,
+        # документ возврата не нужен. Помечаем заказ и удаляем черновик.
+        # target пустой = Ozon ещё не назначил маршрут → решение откладываем (оставляем).
+        target = info.get('target', '')
+        if target and target != OUR_PVZ:
+            co = (d.get('demand') or {}).get('customerOrder') or {}
+            note = build_order_note(co.get('description') or '', info)
+            print(f"  DEL  {name}: возврат → {target} ({info['status']}) — "
+                  f"удаляем черновик, метим заказ {co.get('name', '?')}")
+            if args.dry_run:
+                counts['deleted'] += 1
+                continue
+            # 1) пометка в заказе (best-effort, идемпотентно)
+            if co.get('id') and note != (co.get('description') or ''):
+                try:
+                    r1 = _requests.put(f"{BASE_URL}/entity/customerorder/{co['id']}",
+                                       headers=MS_HEADERS, json={'description': note}, timeout=30)
+                    if r1.status_code != 200:
+                        print(f"    WARN пометка заказа {r1.status_code}: {r1.text[:120]}")
+                except Exception as e:
+                    print(f"    WARN пометка заказа: {e}")
+            # 2) удаление черновика возврата
+            try:
+                r2 = _requests.delete(f"{BASE_URL}/entity/salesreturn/{d['id']}",
+                                      headers=MS_HEADERS, timeout=30)
+                if r2.status_code in (200, 204):
+                    counts['deleted'] += 1
+                else:
+                    counts['error'] += 1
+                    print(f"    ERROR удаление {r2.status_code}: {r2.text[:120]}")
+                time.sleep(0.15)
+            except Exception as e:
+                counts['error'] += 1
+                print(f"    ERROR удаление: {e}")
             continue
 
         by_action[info['action']].append(name)
@@ -188,6 +243,7 @@ def main():
     print(f"\n{'='*64}\nИтого:")
     print(f"  Обновлено комментариев:  {counts['updated']}")
     print(f"  Без изменений:           {counts['unchanged']}")
+    print(f"  Удалено (ушли на склад Ozon): {counts['deleted']}")
     print(f"  Нет номера отправления:  {counts['no_posting']}")
     print(f"  Нет в Ozon API:          {counts['no_ozon_match']}")
     print(f"  Ошибки:                  {counts['error']}")
