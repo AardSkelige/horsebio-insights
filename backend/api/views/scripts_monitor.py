@@ -59,6 +59,17 @@ SCRIPTS_CONFIG = [
         'structured': True,
     },
     {
+        'id': 'horsebio_returns_ozon_enrich',
+        'topic': 'Возвраты',
+        'name': 'Возвраты Озон — маршрут',
+        'account': 'HorseBio',
+        'schedule': 'Каждые 5 ч с 09:15',
+        'description': 'Сверяет черновики возвратов Озон с Ozon API: уехавшие на склад Озона удаляет и помечает заказ, идущие к нам (ПВЗ Химки) оставляет и дописывает статус',
+        'script': '/app/moysklad/horsebio/01_daemons/03_returns/scripts/02_enrich_ozon_returns.py',
+        'args': [],
+        'structured': True,
+    },
+    {
         'id': 'starpony_cost_prices',
         'topic': 'Себестоимость',
         'name': 'Себестоимость',

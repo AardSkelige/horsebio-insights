@@ -149,9 +149,58 @@ def build_order_note(base_desc: str, info: dict) -> str:
     return f"{base}{ORDER_MARK} {info['target']} · {info['status']} · {datetime.now():%d.%m}"
 
 
+def _export_results(counts, by_action, deleted_details, error_details, path):
+    """Структурированный JSON для страницы /checks: стат-карточки + раскрываемые списки."""
+    import json as _json
+    from datetime import datetime as _dt
+
+    received = by_action.get('получен — уточнить', [])  # в Химки/у нас — можно проводить
+    coming = by_action.get('едет к нам', [])
+    dl, er = counts.get('deleted', 0), counts.get('error', 0)
+
+    stats = [
+        {"label": "Удалено (ушли к Ozon)", "value": dl, "tone": "ok" if dl else "neutral",
+         **({"cat": "deleted"} if dl else {})},
+        {"label": "Можно проводить", "value": len(received), "tone": "warning" if received else "neutral",
+         **({"cat": "received"} if received else {})},
+        {"label": "Едут к нам", "value": len(coming), "tone": "neutral"},
+        {"label": "Обновлены комменты", "value": counts.get("updated", 0), "tone": "neutral"},
+        {"label": "Ошибки", "value": er, "tone": "critical" if er else "neutral",
+         **({"cat": "errors"} if er else {})},
+    ]
+
+    categories = []
+    if error_details:
+        categories.append({"key": "errors", "title": "Ошибки", "severity": "critical",
+            "kind": None, "ms_type": None, "count": len(error_details),
+            "items": [{"key": "", "ms_id": "", "object": e["obj"], "severity": "critical", "detail": e["msg"]}
+                      for e in error_details]})
+    if received:
+        categories.append({"key": "received", "title": "Возврат у нас — можно проводить", "severity": "important",
+            "kind": None, "ms_type": None, "count": len(received),
+            "items": [{"key": "", "ms_id": "", "object": f"Возврат {n}", "severity": "important",
+                       "detail": "получен, проверить и провести"} for n in received]})
+    if deleted_details:
+        categories.append({"key": "deleted", "title": "Удалены — уехали на склад Ozon", "severity": "ok",
+            "kind": None, "ms_type": None, "count": len(deleted_details),
+            "items": [{"key": "", "ms_id": "", "object": f"Заказ №{d['order']}", "severity": "ok",
+                       "detail": f"{d['target']} · {d['status']}"} for d in deleted_details]})
+
+    payload = {
+        "generated_at": _dt.now().isoformat(timespec="seconds"), "params": {},
+        "summary": {"critical": er, "important": len(received), "warnings": 0,
+                    "ok": dl, "stats": stats},
+        "categories": categories,
+    }
+    with open(path, "w", encoding="utf-8") as f:
+        _json.dump(payload, f, ensure_ascii=False, indent=2)
+
+
 def main():
     ap = argparse.ArgumentParser(description="Обогащение возвратов Озон статусом с Ozon API")
     ap.add_argument('--dry-run', action='store_true', help="Показать, ничего не писать в МС")
+    ap.add_argument('--results-out', type=str, default=None,
+                    help="Путь для структурированного JSON находок (для страницы /checks)")
     args = ap.parse_args()
 
     print(f"{'='*64}\nОбогащение возвратов Озон: {datetime.now():%Y-%m-%d %H:%M:%S}")
@@ -167,6 +216,8 @@ def main():
 
     counts = {'updated': 0, 'unchanged': 0, 'deleted': 0, 'no_posting': 0, 'no_ozon_match': 0, 'error': 0}
     by_action = {'получен — уточнить': [], 'едет к нам': [], 'у Ozon': [], 'не придёт': []}
+    deleted_details = []   # {order, target, status} — уехали на склад Ozon, черновик удалён
+    error_details = []     # {obj, msg}
 
     for d in drafts:
         name = d.get('name', '?')
@@ -190,6 +241,7 @@ def main():
             note = build_order_note(co.get('description') or '', info)
             print(f"  DEL  {name}: возврат → {target} ({info['status']}) — "
                   f"удаляем черновик, метим заказ {co.get('name', '?')}")
+            deleted_details.append({'order': co.get('name', '?'), 'target': target, 'status': info['status']})
             if args.dry_run:
                 counts['deleted'] += 1
                 continue
@@ -211,10 +263,12 @@ def main():
                 else:
                     counts['error'] += 1
                     print(f"    ERROR удаление {r2.status_code}: {r2.text[:120]}")
+                    error_details.append({'obj': f"Возврат {name}", 'msg': f"удаление {r2.status_code}"})
                 time.sleep(0.15)
             except Exception as e:
                 counts['error'] += 1
                 print(f"    ERROR удаление: {e}")
+                error_details.append({'obj': f"Возврат {name}", 'msg': f"удаление: {e}"})
             continue
 
         by_action[info['action']].append(name)
@@ -235,10 +289,12 @@ def main():
             else:
                 counts['error'] += 1
                 print(f"    ERROR {resp.status_code}: {resp.text[:120]}")
+                error_details.append({'obj': f"Возврат {name}", 'msg': f"комментарий {resp.status_code}"})
             time.sleep(0.15)
         except Exception as e:
             counts['error'] += 1
             print(f"    ERROR: {e}")
+            error_details.append({'obj': f"Возврат {name}", 'msg': f"комментарий: {e}"})
 
     print(f"\n{'='*64}\nИтого:")
     print(f"  Обновлено комментариев:  {counts['updated']}")
@@ -253,6 +309,12 @@ def main():
     print(f"    ⚪ у Ozon (ждать):        {len(by_action['у Ozon'])}")
     print(f"    🔴 не придёт (удалить):   {len(by_action['не придёт'])}  {by_action['не придёт']}")
     print('='*64)
+
+    if args.results_out:
+        try:
+            _export_results(counts, by_action, deleted_details, error_details, args.results_out)
+        except Exception as e:
+            print(f"Ошибка сохранения результатов JSON: {e}")
 
 
 if __name__ == '__main__':
