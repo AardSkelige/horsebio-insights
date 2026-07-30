@@ -11,7 +11,9 @@
 в МойСклад filter=externalCode={order_id} — на случай если state потерян.
 
 Если заказ не оплачен 24 часа — черновик автоматически удаляется из МойСклад
-(CANCEL_AFTER_HOURS), заказ помечается отменённым в state. Если оплата всё же
+(CANCEL_AFTER_HOURS), заказ помечается отменённым в state. Зависший черновик
+ищется по externalCode прямо в МойСклад (а не по id из state) — так удаляются и
+«осиротевшие» черновики, пересозданные при рассинхроне state. Если оплата всё же
 приходит позже — заводим заказ заново с нуля (черновик + сразу платёж).
 
 Перед созданием платежа и перед обновлением описания заказа скрипт сверяется
@@ -329,35 +331,58 @@ class OrderCreator:
 
     # ─── Автоотмена неоплаченных черновиков ────────────────────────────────
 
-    def _maybe_cancel_stale_draft(self, order_id: str, ms: dict):
-        """Черновик без оплаты дольше CANCEL_AFTER_HOURS — удаляем из МойСклад.
-        Заказ остаётся в state с отметкой cancelled_at — если оплата всё же
-        придёт позже, run_once заведёт заказ заново с нуля (см. ниже).
+    def _maybe_cancel_stale_draft(self, order_id: str, ms: dict) -> bool:
+        """Неоплаченный черновик старше CANCEL_AFTER_HOURS — удаляем из МойСклад.
+        Возвращает True, если черновик был реально удалён в этот заход.
 
-        Может бросить исключение (неверный формат created_at, сетевая ошибка
-        удаления) — вызывающий код (run_once) обязан оборачивать в try/except,
-        чтобы один битый заказ не прерывал обработку остальных."""
-        created_at = ms.get("created_at")
-        if not created_at:
-            return
-        age_hours = (datetime.now() - datetime.fromisoformat(created_at)).total_seconds() / 3600
+        Источник истины — сам МойСклад (поиск по externalCode=order_id), а НЕ
+        state. Так подхватываются и «осиротевшие» черновики: если при рассинхроне
+        state завёл заказ повторно с новым id, а в state остался старый (уже
+        удалённый) customerorder_id + cancelled_at, — по externalCode мы всё равно
+        найдём реальный висящий черновик и удалим его. Возраст берём из документа
+        МойСклад (created), а не из ms['created_at'], который может относиться к
+        прежнему черновику.
+
+        Может бросить исключение (сетевая ошибка) — вызывающий код (run_once)
+        обязан оборачивать в try/except, чтобы один битый заказ не прерывал
+        обработку остальных."""
+        live = self._find_existing_order_meta(order_id)
+        if not live:
+            return False  # в МойСклад черновика нет — удалять нечего
+
+        # Не трогаем оплаченный или уже проведённый заказ — это не «зависший черновик»
+        if live.get("payedSum") or live.get("applicable"):
+            return False
+
+        created = live.get("created")
+        if not created:
+            return False
+        age_hours = (datetime.now() - datetime.fromisoformat(created)).total_seconds() / 3600
         if age_hours < CANCEL_AFTER_HOURS:
-            return
+            return False
 
+        live_id = live.get("id")
+        live_name = live.get("name")
         if self.dry_run:
-            print(f"  [DRY-RUN] заказ {order_id}: не оплачен {age_hours:.1f} ч — удалил бы черновик {ms.get('customerorder_name')} из МойСклад")
-            return
+            print(f"  [DRY-RUN] заказ {order_id}: не оплачен {age_hours:.1f} ч — удалил бы черновик {live_name} из МойСклад")
+            return False
 
-        print(f"  Заказ {order_id}: не оплачен {age_hours:.1f} ч — удаляю черновик {ms.get('customerorder_name')} из МойСклад")
+        print(f"  Заказ {order_id}: не оплачен {age_hours:.1f} ч — удаляю черновик {live_name} из МойСклад")
         try:
-            self.helper._delete(f"/entity/customerorder/{ms['customerorder_id']}")
+            self.helper._delete(f"/entity/customerorder/{live_id}")
         except Exception as e:
             print(f"    ERROR: не удалось удалить черновик {order_id}: {e}")
             ms["last_error"] = f"Не удалось удалить неоплаченный черновик: {e}"
             ms["last_error_at"] = datetime.now().isoformat()
-            return
+            return False
+        # Синхронизируем state с тем, что реально удалили (в журнале /checks
+        # покажется корректный номер), и ставим cancelled_at — если оплата всё же
+        # придёт позже, run_once заведёт заказ заново с нуля (см. ниже).
+        ms["customerorder_id"] = live_id
+        ms["customerorder_name"] = live_name
         ms["cancelled_at"] = datetime.now().isoformat()
         ms["cancel_reason"] = f"Не оплачен {CANCEL_AFTER_HOURS} ч — черновик удалён автоматически"
+        return True
 
     # ─── Основной цикл ─────────────────────────────────────────────────────
 
@@ -386,18 +411,20 @@ class OrderCreator:
                     continue
                 ms = order.setdefault("ms", {})
 
-                # 24ч без оплаты — удаляем черновик (только если ещё не отменён и не оплачен)
-                if ms.get("customerorder_id") and not ms.get("cancelled_at") and not latest.get("paid"):
-                    before = ms.get("cancelled_at")
+                # 24ч без оплаты — сверяемся с реальностью в МойСклад (по externalCode)
+                # и удаляем зависший черновик. Триггерим для любого неоплаченного
+                # заказа — даже если в state уже стоит cancelled_at: так подхватывается
+                # «осиротевший» черновик, пересозданный при рассинхроне state (сверка
+                # идемпотентна — если в МойСклад пусто, метод просто вернёт False).
+                if not latest.get("paid"):
                     try:
-                        self._maybe_cancel_stale_draft(order_id, ms)
+                        if self._maybe_cancel_stale_draft(order_id, ms):
+                            counts["orders_cancelled"] += 1
                     except Exception as e:
                         print(f"    ERROR: автоотмена заказа {order_id} упала: {e}")
                         ms["last_error"] = str(e)
                         ms["last_error_at"] = datetime.now().isoformat()
                         counts["errors"] += 1
-                    if ms.get("cancelled_at") and not before:
-                        counts["orders_cancelled"] += 1
 
                 # Оплата пришла уже ПОСЛЕ автоотмены — прошлый черновик удалён, заводим заказ заново с нуля
                 if ms.get("cancelled_at") and latest.get("paid") and not ms.get("recreated_after_cancel"):
