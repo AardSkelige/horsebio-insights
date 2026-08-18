@@ -311,33 +311,35 @@ export default function PendingReturnsDetail({ onBack }) {
             {data && (
                 <>
                     <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap', marginTop: 16 }}>
-                        <div style={kpi()}>
-                            <div style={kpiLabel()}>Едут к нам</div>
-                            <div style={numStyle('var(--ink)')}>{inTransit.length}</div>
-                            {mp.length > 0
+                        <Kpi
+                            label="Едут к нам" value={inTransit.length} color="var(--ink)"
+                            sub={mp.length > 0
                                 ? <MpBreakdown rows={mp} mode="count" />
                                 : <div style={kpiSub()}>{plural(inTransit.length, 'возврат', 'возврата', 'возвратов')} с ВБ и Озона</div>}
-                        </div>
-                        <div style={kpi()}>
-                            <div style={kpiLabel()}>Денег в дороге</div>
-                            <div style={numStyle('var(--ink)')}>{fmtRub(transitRub)}</div>
-                            {mp.length > 0
+                        />
+                        <Kpi
+                            label="Денег в дороге" value={fmtRub(transitRub)} color="var(--ink)"
+                            sub={mp.length > 0
                                 ? <MpBreakdown rows={mp} mode="sum" />
                                 : <div style={kpiSub()}>вернутся на склад товаром</div>}
-                        </div>
+                        />
                         {atPickup.length > 0 && (
-                            <div style={kpi()}>
-                                <div style={kpiLabel()}>Забрать в ПВЗ</div>
-                                <div style={numStyle('#c96a1e')}>{atPickup.length}</div>
-                                <div style={kpiSub()}>{fmtRub(atPickupRub)} · ждут в пункте выдачи</div>
-                            </div>
+                            <Kpi
+                                label="Забрать в ПВЗ" value={atPickup.length} color="#c96a1e" jumpTo="grp-pickup"
+                                sub={<div style={kpiSub()}>{fmtRub(atPickupRub)} · ждут в пункте выдачи</div>}
+                            />
                         )}
                         {atSite.length > 0 && (
-                            <div style={kpi()}>
-                                <div style={kpiLabel()}>Уже у нас</div>
-                                <div style={numStyle('var(--warning)')}>{atSite.length}</div>
-                                <div style={kpiSub()}>{fmtRub(atSiteRub)} · ждут проведения</div>
-                            </div>
+                            <Kpi
+                                label="Уже у нас" value={atSite.length} color="var(--warning)" jumpTo="grp-atsite"
+                                sub={<div style={kpiSub()}>{fmtRub(atSiteRub)} · ждут проведения</div>}
+                            />
+                        )}
+                        {overdue.length > 0 && (
+                            <Kpi
+                                label={`Застряли ${warnDays}+ дней`} value={overdue.length} color="var(--warning)" jumpTo="grp-overdue"
+                                sub={<div style={kpiSub()}>{fmtRub(sumOf(overdue))} · писать в поддержку</div>}
+                            />
                         )}
                     </div>
 
@@ -349,54 +351,21 @@ export default function PendingReturnsDetail({ onBack }) {
                         </div>
                     ) : (
                         <>
-                            {atPickup.length > 0 && (
-                                <div style={sect()}>
-                                    <div style={sectHead()}>
-                                        <span style={{ width: 9, height: 9, borderRadius: 999, background: '#c96a1e', flexShrink: 0 }} />
-                                        Лежат в пункте выдачи — съездить забрать
-                                        <span style={{ marginLeft: 'auto', fontSize: 12, fontWeight: 700, color: '#8a5a13', background: 'rgba(176,138,31,0.12)', padding: '1px 9px', borderRadius: 999 }}>
-                                            {atPickup.length}
-                                        </span>
-                                    </div>
-                                    <SectNote>
-                                        Коробка доехала до пункта выдачи и ждёт. Срок хранения ограничен —
-                                        если не забрать, товар пропадёт. Это к тому, кто ездит за возвратами.
-                                    </SectNote>
-                                    <ReturnsTable items={atPickup} warn />
-                                </div>
-                            )}
-                            {atSite.length > 0 && (
-                                <div style={sect()}>
-                                    <div style={sectHead()}>
-                                        <span style={{ width: 9, height: 9, borderRadius: 999, background: 'var(--warning)', flexShrink: 0 }} />
-                                        Товар у нас — проверить и провести
-                                        <span style={{ marginLeft: 'auto', fontSize: 12, fontWeight: 700, color: '#8a5a13', background: 'rgba(176,138,31,0.12)', padding: '1px 9px', borderRadius: 999 }}>
-                                            {atSite.length}
-                                        </span>
-                                    </div>
-                                    <SectNote>
-                                        Коробки уже на складе. Осталось разобрать и провести документ —
-                                        после этого возврат отсюда исчезнет, а товар встанет на остатки.
-                                    </SectNote>
-                                    <ReturnsTable items={atSite} warn />
-                                </div>
-                            )}
-                            {overdue.length > 0 && (
-                                <div style={sect()}>
-                                    <div style={sectHead()}>
-                                        <span style={{ width: 9, height: 9, borderRadius: 999, background: 'var(--warning)', flexShrink: 0 }} />
-                                        Застряли дольше {warnDays} дней — проверить в кабинете маркетплейса
-                                        <span style={{ marginLeft: 'auto', fontSize: 12, fontWeight: 700, color: '#8a5a13', background: 'rgba(176,138,31,0.12)', padding: '1px 9px', borderRadius: 999 }}>
-                                            {overdue.length}
-                                        </span>
-                                    </div>
-                                    <SectNote>
-                                        Товар едет к нам, но встал по дороге. Сам не поедет —
-                                        нужно писать в поддержку маркетплейса по номеру возврата.
-                                    </SectNote>
-                                    <ReturnsTable items={overdue} warn />
-                                </div>
-                            )}
+                            <Group
+                                id="grp-pickup" dot="#c96a1e" items={atPickup} openByDefault
+                                title="Лежат в пункте выдачи — съездить забрать"
+                                note="Коробка доехала до пункта выдачи и ждёт. Срок хранения ограничен — если не забрать, товар пропадёт. Это к тому, кто ездит за возвратами."
+                            />
+                            <Group
+                                id="grp-atsite" dot="var(--warning)" items={atSite}
+                                title="Товар у нас — проверить и провести"
+                                note="Коробки уже на складе. Осталось разобрать и провести документ — после этого возврат отсюда исчезнет, а товар встанет на остатки."
+                            />
+                            <Group
+                                id="grp-overdue" dot="var(--warning)" items={overdue} openByDefault
+                                title={`Застряли дольше ${warnDays} дней — проверить в кабинете маркетплейса`}
+                                note="Товар едет к нам, но встал по дороге. Сам не поедет — нужно писать в поддержку маркетплейса по номеру возврата."
+                            />
                             {onTime.length > 0 && (
                                 <div style={sect()}>
                                     <button onClick={() => setShowOnTime((v) => !v)} style={{
@@ -418,6 +387,70 @@ export default function PendingReturnsDetail({ onBack }) {
         </div>
     );
 }
+
+/** Плитка-итог. Если у неё есть своя группа ниже — кликается и ведёт туда. */
+function Kpi({ label, value, sub, color, jumpTo }) {
+    const go = () => {
+        const el = document.getElementById(jumpTo);
+        if (!el) return;
+        el.scrollIntoView({ behavior: 'smooth', block: 'start' });
+        // Свёрнутую группу раскрываем: человек пришёл именно за этим списком
+        if (el.querySelectorAll('table').length === 0) el.querySelector('button')?.click();
+    };
+    return (
+        <div
+            onClick={jumpTo ? go : undefined}
+            role={jumpTo ? 'button' : undefined}
+            tabIndex={jumpTo ? 0 : undefined}
+            onKeyDown={jumpTo ? (e) => { if (e.key === 'Enter') go(); } : undefined}
+            style={{ ...kpi(), cursor: jumpTo ? 'pointer' : 'default' }}
+        >
+            <div style={kpiLabel()}>{label}{jumpTo && <span style={{ color: 'var(--primary)' }}> ↓</span>}</div>
+            <div style={numStyle(color)}>{value}</div>
+            {sub}
+        </div>
+    );
+}
+Kpi.propTypes = {
+    label: PropTypes.string, value: PropTypes.node, sub: PropTypes.node,
+    color: PropTypes.string, jumpTo: PropTypes.string,
+};
+
+/** Секция с группой возвратов: заголовок-кнопка, подпись «что делать», таблица.
+ *  Свёрнута по умолчанию — списки длинные, а сверху уже есть плитки с итогами. */
+function Group({ id, title, note, items, dot, openByDefault }) {
+    const [open, setOpen] = useState(!!openByDefault);
+    if (items.length === 0) return null;
+    return (
+        <div id={id} style={sect()}>
+            <button onClick={() => setOpen((v) => !v)} style={{
+                ...sectHead(), width: '100%', background: 'none', border: 'none',
+                cursor: 'pointer', textAlign: 'left',
+            }}>
+                <ChevronRight size={15} style={{
+                    color: 'var(--muted-soft)', transform: open ? 'rotate(90deg)' : 'none',
+                    transition: 'transform 0.15s', flexShrink: 0,
+                }} />
+                <span style={{ width: 9, height: 9, borderRadius: 999, background: dot, flexShrink: 0 }} />
+                {title}
+                <span style={{
+                    marginLeft: 'auto', fontSize: 12, fontWeight: 700, color: '#8a5a13',
+                    background: 'rgba(176,138,31,0.12)', padding: '1px 9px', borderRadius: 999,
+                }}>{items.length}</span>
+            </button>
+            {open && (
+                <>
+                    <SectNote>{note}</SectNote>
+                    <ReturnsTable items={items} warn />
+                </>
+            )}
+        </div>
+    );
+}
+Group.propTypes = {
+    id: PropTypes.string, title: PropTypes.string, note: PropTypes.node,
+    items: PropTypes.array, dot: PropTypes.string, openByDefault: PropTypes.bool,
+};
 
 /** Подпись под заголовком группы: чьё это дело и что именно сделать.
  *  Без неё список читается как «просто данные» — непонятно, кому идти работать. */

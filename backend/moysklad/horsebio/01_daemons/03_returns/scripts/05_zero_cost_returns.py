@@ -102,6 +102,10 @@ def build_payload(found: list, checked: int) -> dict:
     category = {
         "key": "zero_cost", "title": "Проведены с нулевой себестоимостью — занижают FIFO",
         "severity": "critical", "kind": None, "ms_type": None, "count": len(found),
+        "note": "Товар вернулся на склад по нулевой цене — из-за этого FIFO-себестоимость "
+                "готовой продукции занижена, и отчёты о прибыли врут. Поправить: проставить "
+                "себестоимость в позициях документа. Если так и задумано — написать [ok] "
+                "в описании возврата, робот перестанет о нём напоминать.",
         "items": [
             {'key': '', 'ms_id': f['doc_id'],
              'ms_href': MS_DOC_URL + f['doc_id'],
@@ -116,7 +120,10 @@ def build_payload(found: list, checked: int) -> dict:
     return {
         'generated_at': datetime.now().isoformat(timespec='seconds'), 'params': {},
         'summary': {'critical': len(found), 'important': 0, 'warnings': 0,
-                    'ok': checked - len(found), 'stats': stats},
+                    'ok': checked - len(found), 'stats': stats, 'view': 'snapshot',
+                    'empty_note': f"Проверено {checked} возвратов без привязки к отгрузке — "
+                                  f"у всех себестоимость проставлена, FIFO не занижается. "
+                                  f"Возвраты с привязкой не проверяем: там МойСклад считает сам."},
         'categories': [category] if category else [],
     }
 

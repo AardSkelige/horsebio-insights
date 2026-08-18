@@ -159,7 +159,8 @@ def build_payload(items: list) -> dict:
                 'at_pickup': len(at_pickup), 'at_pickup_rub': s(at_pickup),
                 'warn_days': WARN_DAYS,
             },
-            'stats': stats,
+            'stats': stats, 'view': 'snapshot',
+            'empty_note': 'Незакрытых возвратов нет — всё, что вернулось, разобрано и проведено.',
         },
         'categories': [category],
     }

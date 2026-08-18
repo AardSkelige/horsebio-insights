@@ -697,11 +697,11 @@ def _export_results(counts, details, path):
          **({"cat": "errors"} if errors else {})},
     ]
 
-    def cat(key, title, sev, src_items, detail):
+    def cat(key, title, sev, src_items, detail, note=""):
         if not src_items:
             return None
         return {"key": key, "title": title, "severity": sev, "kind": None, "ms_type": None,
-                "count": len(src_items),
+                "note": note, "count": len(src_items),
                 "items": [{"key": "", "ms_id": d.get("return_id", ""),
                            "ms_href": (MS_RETURN_URL + d["return_id"]) if d.get("return_id") else "",
                            "object": d["object"], "severity": sev, "detail": detail(d)}
@@ -710,21 +710,35 @@ def _export_results(counts, details, path):
     categories = [c for c in [
         cat("errors", "Не смог завести документ", "critical",
             [{**d, "object": f"Заказ №{d['order_name']}"} for d in errors],
-            lambda d: f"{d.get('agent', '')} · заказ от {d.get('order_date', '')}"),
+            lambda d: f"{d.get('agent', '')} · заказ от {d.get('order_date', '')}",
+            note="Робот споткнулся на этих заказах. Возврат придётся завести руками, "
+                 "а причину — посмотреть в логе запуска."),
         # Чаще всего это ФБО: продажа прошла отчётом комиссионера, отдельного заказа
         # под неё нет, и привязать возврат не к чему. Оформляют вручную, сборным.
         cat("no_order", "Возвраты без заказа в МойСкладе — оформить вручную (обычно ФБО)", "important",
             [{**d, "object": f"Отправление {d['order_name']}"} for d in no_order],
-            lambda d: f"{d.get('agent', '')} · {d.get('status_name', '')} · с {d.get('order_date', '')}"),
+            lambda d: f"{d.get('agent', '')} · {d.get('status_name', '')} · с {d.get('order_date', '')}",
+            note="Маркетплейс вернул нам товар, а заказа под него в МойСкладе нет — "
+                 "чаще всего это ФБО: продажа прошла отчётом комиссионера, отдельного заказа "
+                 "не создаётся, и привязать возврат не к чему. Такие Лера оформляет вручную, "
+                 "сборным документом, как вывозы с ФБО."),
         cat("created", "Заведены новые документы возврата", "ok",
             [{**d, "object": f"Возврат №{d.get('return_name', '?')}"} for d in created],
-            lambda d: f"заказ №{d['order_name']} · {d.get('agent', '')} · {d.get('status_name', '')}"),
+            lambda d: f"заказ №{d['order_name']} · {d.get('agent', '')} · {d.get('status_name', '')}",
+            note="Робот только что завёл эти документы. Дальше они попадут в «Что разобрать "
+                 "из возвратов» — там видно, что с ними делать."),
     ] if c]
 
     payload = {
         "generated_at": _dt.now().isoformat(timespec="seconds"), "params": {},
         "summary": {"critical": counts.get("error", 0), "important": len(no_order),
-                    "warnings": 0, "ok": len(created), "stats": stats},
+                    "warnings": 0, "ok": len(created), "stats": stats,
+                    # Показываем последний прогон, а не слепок за 14 дней: иначе цифры
+                    # в плитках расходятся со списками, а старые записи висят неделями.
+                    "view": "snapshot",
+                    "empty_note": "Все возвраты маркетплейсов заведены документами — "
+                                  "заводить нечего. Что с ними делать дальше, смотри в "
+                                  "«Что разобрать из возвратов»."},
         "categories": categories,
     }
     with open(path, "w", encoding="utf-8") as f:

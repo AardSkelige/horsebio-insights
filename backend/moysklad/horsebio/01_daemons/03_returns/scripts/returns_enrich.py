@@ -245,6 +245,8 @@ def _export_results(source, by_state, deleted, errors, path):
         categories.append({
             "key": "errors", "title": "Не смог проставить статус", "severity": "critical",
             "kind": None, "ms_type": None, "count": len(errors),
+            "note": "Статус на этих документах остался старым — значит в списке возвратов "
+                    "они показывают не то, где товар на самом деле. Причина в логе запуска.",
             "items": [{"key": "", "ms_id": "", "object": f"Возврат {e['name']}",
                        "severity": "critical", "detail": e['msg']} for e in errors],
         })
@@ -252,7 +254,10 @@ def _export_results(source, by_state, deleted, errors, path):
     payload = {
         "generated_at": datetime.now().isoformat(timespec="seconds"), "params": {},
         "summary": {"critical": len(errors), "important": 0, "warnings": 0,
-                    "ok": total, "stats": stats},
+                    "ok": total, "stats": stats, "view": "snapshot",
+                    "empty_note": f"Робот разметил все {total} документов — у каждого видно, "
+                                  f"где коробка. Списки и суммы смотри в «Что разобрать из возвратов», "
+                                  f"эта страница только про работу робота."},
         "categories": categories,
     }
     with open(path, "w", encoding="utf-8") as f:

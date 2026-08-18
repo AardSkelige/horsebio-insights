@@ -334,10 +334,10 @@ FindingRow.propTypes = {
 /** Секция находок одной проверки: проблемные развёрнуты, «норма» — свёрнута до строки. */
 function Category({ cat, excKeys, excMap, onChanged }) {
     const [hidden, setHidden] = useState(new Set());
-    // Сворачиваем только разобранные отклонения хелс-чека; у роботов ok-категории
-    // («Созданные возвраты») — основное содержимое, их прятать нельзя
-    const collapsible = cat.key === 'deviations_normal';
-    const [open, setOpen] = useState(!collapsible);
+    // Списки длинные и почти всегда справочные — сворачиваем всё, разворачивает человек.
+    // Открытыми оставляем только то, что требует действия прямо сейчас.
+    const collapsible = true;
+    const [open, setOpen] = useState(cat.severity === 'critical');
     const c = sevOf(cat.severity);
 
     const excFor = (it) => (cat.kind && it.key ? (excMap[cat.kind] || {})[it.key] : undefined);
@@ -381,6 +381,12 @@ function Category({ cat, excKeys, excMap, onChanged }) {
                 </span>
             </HeaderTag>
             <div style={{ display: open ? 'block' : 'none' }}>
+                {cat.note && (
+                    <div style={{
+                        padding: '9px 14px 11px', fontSize: 12.5, color: 'var(--muted)',
+                        lineHeight: 1.5, borderBottom: '1px solid var(--hairline)',
+                    }}>{cat.note}</div>
+                )}
                 {visible.slice(0, shown).map((it) => {
                     const ekey = it.key || it.object;
                     const excepted = cat.kind && it.key && (excKeys[cat.kind] || []).includes(it.key);
@@ -461,7 +467,10 @@ export default function HealthResults({ scriptId, runId, running, onExceptionCha
     // почти всегда пуст — интересное случается раз в несколько дней).
     // Хелс-чек: снимок последнего запуска; «помечены нормой» — вниз.
     const robotCats = data.recent_changes || [];
-    const visibleCats = isRobot && !runId
+    // view: 'snapshot' — скрипт просит показывать последний прогон, а не слепок за 14 дней.
+    // Иначе цифры в плитках расходятся со списками, а устаревшие записи висят неделями.
+    const snapshot = data.summary?.view === 'snapshot';
+    const visibleCats = isRobot && !runId && !snapshot
         ? robotCats
         : [...data.categories.filter((c) => c.key !== 'pending_returns')]
             .sort((a, b) => (a.severity === 'ok') - (b.severity === 'ok'));
@@ -476,15 +485,23 @@ export default function HealthResults({ scriptId, runId, running, onExceptionCha
             {Array.isArray(data.summary?.checks) && data.summary.checks.length > 0 && (
                 <ChecksGrid checks={data.summary.checks} onJump={handleJump} />
             )}
-            {isRobot && !runId && (
+            {isRobot && !runId && !snapshot && (
                 <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 11, fontWeight: 700, letterSpacing: '0.07em', textTransform: 'uppercase', color: 'var(--muted)', margin: '4px 0 10px' }}>
                     <span>Что робот делал за последние {data.recent_days || 14} дней</span>
                     <span style={{ textTransform: 'none', letterSpacing: 0 }}><InfoTip text={RECENT_CHANGES_HINT} width={280} /></span>
                 </div>
             )}
             {visibleCats.length === 0 ? (
-                <div style={{ textAlign: 'center', padding: 32, color: isRobot ? 'var(--muted)' : 'var(--success)', fontWeight: isRobot ? 400 : 600 }}>
-                    {isRobot ? `Ничего не менялось за ${data.recent_days || 14} дней — всё актуально` : '✓ Проблем не найдено'}
+                <div style={{
+                    maxWidth: 620, margin: '8px auto', padding: '26px 22px', textAlign: 'center',
+                    background: 'var(--surface-card)', border: '1px solid var(--hairline)', borderRadius: 12,
+                    color: 'var(--muted)', fontSize: 13.5, lineHeight: 1.6,
+                }}>
+                    <div style={{ color: 'var(--success)', fontWeight: 600, marginBottom: data.summary?.empty_note ? 8 : 0 }}>
+                        ✓ Всё чисто
+                    </div>
+                    {data.summary?.empty_note
+                        || (isRobot ? `Ничего не менялось за ${data.recent_days || 14} дней` : 'Проблем не найдено')}
                 </div>
             ) : (
                 visibleCats.map((cat) => (
