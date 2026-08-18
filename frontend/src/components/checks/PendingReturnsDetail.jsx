@@ -2,11 +2,11 @@ import { useState, useEffect, useCallback, useLayoutEffect, useRef } from 'react
 import { createPortal } from 'react-dom';
 import PropTypes from 'prop-types';
 import { ArrowLeft, ExternalLink, Loader2, PackageOpen, ChevronRight } from 'lucide-react';
-import { checksApi, relTime, fmtRub, plural, PENDING_RETURNS_HINT } from './checksShared';
+import { checksApi, relTime, fmtRub, plural, PENDING_RETURNS_HINT, PENDING_RETURNS_ID } from './checksShared';
 import { AccountBadge } from './ScriptCard';
 import InfoTip from './InfoTip';
 
-const HEALTH_ID = 'horsebio_health_check';
+
 
 // Корзины возраста для ленты: [от, до) дней, цвет, подпись
 const BUCKETS = [
@@ -241,7 +241,7 @@ export default function PendingReturnsDetail({ onBack }) {
 
     const load = useCallback(async () => {
         try {
-            const res = await checksApi.results(HEALTH_ID);
+            const res = await checksApi.results(PENDING_RETURNS_ID);
             setData(res.results || null);
         } catch { setData(null); }
     }, []);
@@ -291,7 +291,7 @@ export default function PendingReturnsDetail({ onBack }) {
                     </div>
                     {data?.finished_at && (
                         <div style={{ fontSize: 12, color: 'var(--muted-soft)', marginTop: 6 }}>
-                            по данным Health Check · {relTime(data.finished_at)}
+                            проверка · {relTime(data.finished_at)}
                         </div>
                     )}
                 </div>

@@ -53,17 +53,6 @@ from health_report import ReportingMixin
 class CostHealthCheck(DocumentChecksMixin, PriceChecksMixin, ReportingMixin):
     """Проверка здоровья себестоимости"""
 
-    # Возврат-черновик старше этого срока — товар, похоже, застрял по дороге
-    PENDING_RETURN_WARN_DAYS = 30
-
-    # Статусы черновиков возвратов (заводит return_states.py в демоне возвратов).
-    # Здесь только те два, что меняют трактовку возраста черновика.
-    RETURN_STATE_PICKUP = 'Забрать в ПВЗ'
-    RETURN_STATE_AT_SITE = 'У нас — разобрать'
-    RETURN_STATE_STUCK = 'Завис в пути'
-    RETURN_STATE_GONE = 'Ушёл на склад МП'
-    RETURN_STATE_DONE = 'Разложено по полкам'
-
     def __init__(self, helper, threshold=5.0, supply_threshold=15.0, prev_count=3,
                  max_months=12, enter_months=3, doc_months=3,
                  inv_threshold=50, move_threshold=10000, full_mode=False):
@@ -118,7 +107,6 @@ class CostHealthCheck(DocumentChecksMixin, PriceChecksMixin, ReportingMixin):
             'code_duplicates': {},        # {code: [products]} — дублирующиеся коды
             'code_suspect': [],           # Товары с кодом-аномалией (не соответствует паттерну группы)
             'stale_drafts': [],           # Непроведённые документы старше порога [{type, doc_name, age_days}]
-            'pending_returns': [],        # Возвраты-черновики, ждущие поступления товара [{doc_name, age_days, sum_rub, ...}]
         }
 
     def _elapsed_str(self):
@@ -582,12 +570,6 @@ def main():
         checker.check_stale_drafts()
     except Exception as e:
         print(f"❌ Ошибка при проверке черновиков: {e}\n")
-
-    # 16. Возвраты, ждущие поступления товара (всегда)
-    try:
-        checker.check_pending_returns()
-    except Exception as e:
-        print(f"❌ Ошибка при проверке ожидающих возвратов: {e}\n")
 
     # 11. Полный режим: скачки цен в приёмках
     if args.full:

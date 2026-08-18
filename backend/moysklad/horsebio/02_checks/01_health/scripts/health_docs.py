@@ -732,7 +732,7 @@ class DocumentChecksMixin:
 
         Порог: supply, enter, loss, move, inventory — 7 дней.
         Возвраты от покупателей здесь не проверяются — их черновики создаёт
-        монитор возвратов намеренно (см. check_pending_returns).
+        монитор возвратов намеренно (см. проверку «Возвраты в пути»).
 
         Признак «старый»: поле updated (дата последнего изменения) старше порога.
         Используем updated, а не moment, чтобы не ловить намеренно задним числом.
@@ -799,111 +799,5 @@ class DocumentChecksMixin:
 
         if not found_any:
             print("  ✅ Незавершённых черновиков не найдено\n")
-
-        print()
-
-    def check_pending_returns(self):
-        """Возвраты от покупателей, ждущие поступления товара.
-
-        Монитор возвратов (01_monitor_returns.py) создаёт возврат черновиком, когда
-        маркетплейс объявил возврат. Черновик — штатное состояние: документ проводят,
-        когда товар физически вернулся на склад. Проверка собирает непроведённые
-        возвраты за doc_months и считает зависшие деньги; возраст от даты документа
-        (moment) — с этого момента начался процесс возврата.
-
-        Статус документа (его ставит 02_enrich_ozon_returns.py по данным Ozon API)
-        меняет смысл возраста, поэтому учитываем его:
-          • «Ушёл на склад МП» — товар к нам не приедет, это не деньги в дороге;
-            такие черновики скрипт обогащения удалит сам. Из выборки убираем.
-          • «У нас — разобрать» — коробка уже на складе, ждёт разбора. Возраст тут
-            говорит не «искать в кабинете маркетплейса», а «провести документ»,
-            поэтому в просрочку такие не пишем — им отдельная группа.
-          • «Забрать в ПВЗ» — коробка доехала до пункта выдачи и ждёт, пока за ней
-            приедут. Тоже не просрочка, но и не «едет в срок»: если этого не
-            видеть, срок хранения на ПВЗ истекает и товар пропадает — так у нас
-            сгорел 21 вывоз со склада ВБ.
-        У возвратов ВБ статуса нет (из API ВБ маршрут не достать) — они, как и
-        раньше, оцениваются по одному возрасту.
-        """
-        self._section_header("Возвраты: ждут поступления товара")
-
-        now = datetime.now()
-        date_from = (now - timedelta(days=self.doc_months * 30)).strftime('%Y-%m-%d %H:%M:%S')
-
-        try:
-            docs = self.h._get_all_pages("/entity/salesreturn", {
-                "filter": f"moment>={date_from}",
-                "order": "moment,asc",
-                "expand": "agent,state",
-            })
-        except Exception as e:
-            print(f"  ❌ Ошибка при загрузке возвратов: {e}\n")
-            return
-
-        for doc in docs:
-            if doc.get('applicable', True):
-                continue
-            state = (doc.get('state') or {}).get('name', '')
-            if state == self.RETURN_STATE_GONE:
-                continue
-            moment = (doc.get('moment') or '')[:10]
-            try:
-                age_days = (now - datetime.strptime(moment, '%Y-%m-%d')).days
-            except ValueError:
-                age_days = 0
-            # «Разложено по полкам» человек ставит руками: товар разобран и на месте,
-            # остаётся только провести документ — по смыслу это то же «у нас».
-            at_our_site = state in (self.RETURN_STATE_AT_SITE, self.RETURN_STATE_DONE)
-            at_pickup = state == self.RETURN_STATE_PICKUP
-            desc = doc.get('description') or ''
-            # Возраст документа врёт для возвратов, найденных через Ozon API:
-            # документ заведён сегодня, а деньги висят с даты возврата у Озона.
-            # Её пишет 02_enrich_ozon_returns.py маркером «· с ГГГГ-ММ-ДД».
-            m = re.search(r'· с (\d{4}-\d{2}-\d{2})', desc)
-            if m:
-                try:
-                    age_days = max(age_days, (now - datetime.strptime(m.group(1), '%Y-%m-%d')).days)
-                except ValueError:
-                    pass
-            self.stats['pending_returns'].append({
-                'doc_id':      doc.get('id', ''),
-                'doc_name':    doc.get('name', '?'),
-                'moment':      moment,
-                'age_days':    age_days,
-                'sum_rub':     round(doc.get('sum', 0) / 100, 2),
-                'agent':       (doc.get('agent') or {}).get('name', ''),
-                'description': (doc.get('description') or '')[:120],
-                'state':       state,
-                'at_our_site': at_our_site,
-                'at_pickup':   at_pickup,
-                # Для Озона верим статусу: его выставил робот по данным Ozon API,
-                # где видно и где коробка, и сколько она там лежит. Возраст —
-                # запасной критерий для ВБ, у которого статуса нет.
-                'overdue':     (state == self.RETURN_STATE_STUCK if state
-                                else age_days >= self.PENDING_RETURN_WARN_DAYS),
-            })
-
-        pending = self.stats['pending_returns']
-        if pending:
-            total = sum(p['sum_rub'] for p in pending)
-            overdue = [p for p in pending if p['overdue']]
-            at_site = [p for p in pending if p['at_our_site']]
-            at_pickup = [p for p in pending if p['at_pickup']]
-            print(f"  📦 Ждут поступления: {len(pending)} возвратов на {total:,.0f}р")
-            if at_pickup:
-                print(f"  🚚 Из них лежат в ПВЗ, надо забрать: "
-                      f"{len(at_pickup)} на {sum(p['sum_rub'] for p in at_pickup):,.0f}р")
-            if at_site:
-                print(f"  📥 Из них уже у нас, ждут проведения: "
-                      f"{len(at_site)} на {sum(p['sum_rub'] for p in at_site):,.0f}р")
-            if overdue:
-                print(f"  ⚠️  Из них дольше {self.PENDING_RETURN_WARN_DAYS} дн.: "
-                      f"{len(overdue)} на {sum(p['sum_rub'] for p in overdue):,.0f}р")
-            for p in pending:
-                marker = '⚠️ ' if p['overdue'] else '  '
-                print(f"    {marker}№{p['doc_name']:<10} {p['moment']}  {p['age_days']:>3} дн."
-                      f"  {p['sum_rub']:>10,.0f}р  {p['agent']}")
-        else:
-            print("  ✅ Непроведённых возвратов нет")
 
         print()

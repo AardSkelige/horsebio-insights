@@ -1,75 +1,14 @@
 import { useState, useEffect, useCallback } from 'react';
 import { useNavigate, useParams, useLocation } from 'react-router-dom';
-import { Loader2, ShieldCheck, PackageOpen, ChevronRight, CheckCircle, AlertCircle, Clock } from 'lucide-react';
-import PropTypes from 'prop-types';
-import { checksApi, plural, relTime, SEV, PENDING_RETURNS_HINT } from './checksShared';
-import ScriptCard, { AccountBadge, StatusBadge } from './ScriptCard';
+import { Loader2, ShieldCheck } from 'lucide-react';
+import { checksApi, PENDING_RETURNS_ID } from './checksShared';
+import ScriptCard from './ScriptCard';
 import CheckDetail from './CheckDetail';
 import PendingReturnsDetail from './PendingReturnsDetail';
-import InfoTip from './InfoTip';
 
 // Порядок тем внутри аккаунта; скрипты без темы — в конец без заголовка
 const TOPIC_ORDER = ['Себестоимость', 'Возвраты', 'Оплаты', 'Производство'];
 
-/** Строка-индикатор «Возвраты в пути» — самостоятельный пункт в теме «Возвраты»:
- *  робот создаёт черновики, а этот пункт следит, сколько их ждёт товара и как долго. */
-function PendingReturnsRow({ pending, lastRun, onOpen }) {
-    const { overdue = 0, at_our_site: atSite = 0, at_pickup: atPickup = 0, warn_days: warnDays = 30 } = pending;
-    // Требуют действия три состояния: застряли в пути (писать в поддержку),
-    // лежат в ПВЗ (съездить забрать), уже у нас (разобрать и провести).
-    const problems = overdue + atSite + atPickup;
-    return (
-        <div
-            role="button"
-            tabIndex={0}
-            onClick={onOpen}
-            onKeyDown={(e) => { if (e.key === 'Enter') onOpen(); }}
-            className="checks-script-card"
-            style={{
-                width: '100%', textAlign: 'left',
-                background: 'var(--surface-card)', border: '1px solid var(--hairline)',
-                borderRadius: 12, padding: '13px 16px', cursor: 'pointer',
-                transition: 'background 0.15s, border-color 0.15s',
-            }}
-            onMouseEnter={(e) => { e.currentTarget.style.background = 'var(--surface-cream-strong)'; e.currentTarget.style.borderColor = 'var(--primary)'; }}
-            onMouseLeave={(e) => { e.currentTarget.style.background = 'var(--surface-card)'; e.currentTarget.style.borderColor = 'var(--hairline)'; }}
-        >
-            <div className="checks-script-card__row">
-                <div className="checks-script-card__content">
-                    <div style={{ display: 'flex', alignItems: 'center', gap: 7, fontSize: 14.5, fontWeight: 600, color: 'var(--ink)', lineHeight: 1.3 }}>
-                        <PackageOpen size={16} style={{ color: 'var(--muted)', flexShrink: 0 }} />
-                        Возвраты в пути
-                        <AccountBadge account="HorseBio" />
-                        <InfoTip text={PENDING_RETURNS_HINT} width={300} />
-                    </div>
-                    <div style={{ fontSize: 12, color: 'var(--muted)', marginTop: 3, lineHeight: 1.45 }}>
-                        <div><b style={{ color: 'var(--body)', fontWeight: 600 }}>Что проверяем:</b> черновики возвратов не висят без товара дольше {warnDays} дней</div>
-                        <div><b style={{ color: 'var(--body)', fontWeight: 600 }}>Как:</b> считаем возраст и сумму каждого непроведённого возврата; приехавшие отделяем от едущих по статусу</div>
-                    </div>
-                </div>
-                <div className="checks-script-card__meta">
-                    <div className="checks-script-card__status">
-                        {problems > 0 ? (
-                            <StatusBadge color={SEV.warning.color} icon={AlertCircle}>
-                                {problems} {plural(problems, 'проблема', 'проблемы', 'проблем')}
-                            </StatusBadge>
-                        ) : (
-                            <StatusBadge color="var(--success)" icon={CheckCircle}>ОК</StatusBadge>
-                        )}
-                    </div>
-                    {lastRun?.finished_at && (
-                        <span className="checks-script-card__timing">
-                            <Clock size={13} />
-                            {relTime(lastRun.finished_at)}
-                        </span>
-                    )}
-                </div>
-                <ChevronRight className="checks-script-card__arrow" size={17} />
-            </div>
-        </div>
-    );
-}
-PendingReturnsRow.propTypes = { pending: PropTypes.object.isRequired, lastRun: PropTypes.object, onOpen: PropTypes.func };
 
 export default function ChecksPage() {
     const [scripts, setScripts] = useState(null);
@@ -105,14 +44,10 @@ export default function ChecksPage() {
             else navigate('/checks', { replace: true });
         };
         const backLabel = fromProfile ? 'Личный кабинет' : 'Все проверки';
-        if (scriptId === 'pending-returns') return <PendingReturnsDetail onBack={goBack} />;
+        // У «Возвратов в пути» своя деталка: плитки, лента возраста, группы по статусу
+        if (scriptId === PENDING_RETURNS_ID) return <PendingReturnsDetail onBack={goBack} />;
         return <CheckDetail scriptId={scriptId} initial={script} onBack={goBack} backLabel={backLabel} />;
     }
-
-    // Индикатор возвратов — из сводки последнего запуска хелс-чека;
-    // встроен в карточку робота возвратов (horsebio_returns)
-    const healthScript = (scripts || []).find((s) => s.is_health);
-    const pendingReturns = healthScript?.summary?.pending_returns;
 
     // Группировка по темам (аккаунт — бейдж в строке, не секция).
     // StarPony на сетке проверок не показываем — он виден только в личном кабинете
@@ -169,13 +104,6 @@ export default function ChecksPage() {
                         {t.items.map((s) => (
                             <ScriptCard key={s.id} script={s} onOpen={(id) => navigate(`/checks/${id}`)} />
                         ))}
-                        {t.topic === 'Возвраты' && pendingReturns && (
-                            <PendingReturnsRow
-                                pending={pendingReturns}
-                                lastRun={healthScript?.last_run}
-                                onOpen={() => navigate('/checks/pending-returns')}
-                            />
-                        )}
                     </div>
                 </section>
             ))}

@@ -446,15 +446,6 @@ class ReportingMixin:
             print(f"  🕐 Незавершённых черновиков: {stale_cnt} — не проведены дольше порога")
         else:
             print(f"  ✅ Незавершённых черновиков не найдено")
-        pending = self.stats['pending_returns']
-        if pending:
-            overdue = sum(1 for p in pending if p['overdue'])
-            total = sum(p['sum_rub'] for p in pending)
-            tail = f", из них {overdue} дольше {self.PENDING_RETURN_WARN_DAYS} дн." if overdue else ''
-            print(f"  📦 Возвраты ждут товара: {len(pending)} на {total:,.0f}р{tail}")
-        else:
-            print(f"  ✅ Возвратов в ожидании нет")
-
         print("="*70 + "\n")
 
     # ─── Стандартизированный JSON результатов (для страницы /checks) ──────────
@@ -720,30 +711,6 @@ class ReportingMixin:
             for it in self.stats['stale_drafts']
         ])
 
-        # 18. Возвраты, ждущие поступления товара. Не часть хелс-чека — отдельный
-        # индикатор на странице /checks (черновик тут штатное состояние), поэтому
-        # категория не участвует в сводке severity ниже.
-        add('pending_returns', 'Возвраты: ждут поступления товара', None, None, [
-            {
-                'key': '', 'ms_id': it['doc_id'],
-                'ms_href': (f"https://online.moysklad.ru/app/#salesreturn/edit?id={it['doc_id']}"
-                            if it['doc_id'] else ''),
-                'object': f"№{it['doc_name']}",
-                'severity': 'warning' if (it['overdue'] or it['at_our_site'] or it['at_pickup']) else 'info',
-                'sum_rub': it['sum_rub'],
-                'age_days': it['age_days'],
-                'moment': it['moment'],
-                'agent': it['agent'],
-                'state': it['state'],
-                'at_our_site': it['at_our_site'],
-                'at_pickup': it['at_pickup'],
-                'detail': f"{it['moment']} · {it['age_days']} дн · {money(it['sum_rub'])}"
-                          + (f" · {it['agent']}" if it['agent'] else '')
-                          + (f" · {it['state']}" if it['state'] else ''),
-            }
-            for it in self.stats['pending_returns']
-        ])
-
         # Сетка статусов всех проверок, включая чистые (для деталки /checks).
         # Одна плитка = одна проверка; cats — ключи категорий с её находками.
         _CHECKS_GRID = [
@@ -779,13 +746,11 @@ class ReportingMixin:
                 'cats': [c['key'] for c in present],
             })
 
-        # Сводка (pending_returns — индикатор, не находки чека)
+        # Сводка
         sev_counts = {'critical': 0, 'important': 0, 'warning': 0}
         cat_counts = {}
         for cat in categories:
             cat_counts[cat['key']] = cat['count']
-            if cat['key'] == 'pending_returns':
-                continue
             for it in cat['items']:
                 s = it['severity']
                 if s in sev_counts:
@@ -805,20 +770,6 @@ class ReportingMixin:
                 'warnings': sev_counts['warning'],
                 'ok': self.stats.get('ok', 0),
                 'categories': cat_counts,
-                'pending_returns': {
-                    'count': len(self.stats['pending_returns']),
-                    'total_rub': round(sum(p['sum_rub'] for p in self.stats['pending_returns']), 2),
-                    'overdue': sum(1 for p in self.stats['pending_returns'] if p['overdue']),
-                    'overdue_rub': round(sum(p['sum_rub'] for p in self.stats['pending_returns'] if p['overdue']), 2),
-                    # Уже приехали и ждут проведения — это не «деньги в дороге»,
-                    # но и не норма: коробка лежит на складе неразобранной.
-                    'at_our_site': sum(1 for p in self.stats['pending_returns'] if p['at_our_site']),
-                    'at_our_site_rub': round(sum(p['sum_rub'] for p in self.stats['pending_returns'] if p['at_our_site']), 2),
-                    # Лежат в пункте выдачи — надо съездить забрать, иначе сгорит
-                    'at_pickup': sum(1 for p in self.stats['pending_returns'] if p['at_pickup']),
-                    'at_pickup_rub': round(sum(p['sum_rub'] for p in self.stats['pending_returns'] if p['at_pickup']), 2),
-                    'warn_days': self.PENDING_RETURN_WARN_DAYS,
-                },
                 # Внутри summary, потому что ingest сохраняет в БД только summary и categories
                 'checks': checks_grid,
             },

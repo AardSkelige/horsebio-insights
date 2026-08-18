@@ -60,6 +60,8 @@ export function fmtRub(v) {
     return `${Math.round(v || 0).toLocaleString('ru-RU')} ₽`;
 }
 
+export const PENDING_RETURNS_ID = 'horsebio_pending_returns';
+
 export const PENDING_RETURNS_HINT =
     'Когда маркетплейс объявляет возврат, робот сам создаёт черновик документа — так видно, что товар '
     + 'должен вернуться и сколько денег в нём зависло. Когда товар физически приходит на склад, документ '

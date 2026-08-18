@@ -81,6 +81,17 @@ SCRIPTS_CONFIG = [
         'structured': True,
     },
     {
+        'id': 'horsebio_pending_returns',
+        'topic': 'Возвраты',
+        'name': 'Возвраты в пути',
+        'account': 'HorseBio',
+        'schedule': 'Каждые 5 ч с 09:45',
+        'description': 'Сколько денег висит в непроведённых возвратах и как долго',
+        'script': '/app/moysklad/horsebio/01_daemons/03_returns/scripts/04_pending_returns.py',
+        'args': [],
+        'structured': True,
+    },
+    {
         'id': 'starpony_cost_prices',
         'topic': 'Себестоимость',
         'name': 'Себестоимость',
