@@ -661,7 +661,7 @@ def _export_results(counts, details, path):
     stats = [
         {"label": "Создано возвратов", "value": cr, "tone": "ok" if cr else "neutral", **({"cat": "created"} if cr else {})},
         {"label": "Уже существуют", "value": re_, "tone": "neutral"},
-        {"label": "Нет отгрузки", "value": nd, "tone": "warning" if nd else "neutral", **({"cat": "no_demand"} if nd else {})},
+        {"label": "Возврат не нужен", "value": nd, "tone": "neutral", **({"cat": "no_demand"} if nd else {})},
         {"label": "Ошибки", "value": er, "tone": "critical" if er else "neutral", **({"cat": "errors"} if er else {})},
         {"label": "Не ВБ/Озон", "value": sk, "tone": "neutral"},
     ]
@@ -676,14 +676,16 @@ def _export_results(counts, details, path):
 
     categories = [c for c in [
         cat("errors", "Ошибки создания", "critical", "error"),
-        cat("no_demand", "Нет отгрузки (возврат не создан)", "important", "no_demand"),
+        # Заказ не отгружался — товар со склада не списывался, значит и возвращать
+        # его в учёте нечего. Физически он уехал и вернулся, остаток сходится.
+        cat("no_demand", "Возврат не нужен — заказ не отгружался", "ok", "no_demand"),
         cat("created", "Созданные возвраты", "ok", "return_created"),
     ] if c]
 
     payload = {
         "generated_at": _dt.now().isoformat(timespec="seconds"), "params": {},
-        "summary": {"critical": counts.get("error", 0), "important": counts.get("no_demand", 0),
-                    "warnings": 0, "ok": counts.get("return_created", 0), "stats": stats},
+        "summary": {"critical": counts.get("error", 0), "important": 0, "warnings": 0,
+                    "ok": counts.get("return_created", 0) + counts.get("no_demand", 0), "stats": stats},
         "categories": categories,
     }
     with open(path, "w", encoding="utf-8") as f:

@@ -242,7 +242,9 @@ def _export_results(source, by_state, deleted, errors, path):
     categories = [c for c in [
         cat("errors", "Ошибки", "critical", errors, lambda i: i['msg']),
         cat("pickup", "Лежат в пункте выдачи — забрать", "important", pickup, detail_of),
-        cat("at_site", "Товар у нас — проверить и провести", "important", at_site, detail_of),
+        # Разобрать коробку и провести документ — обычная работа склада, а не сбой.
+        # В счётчик проблем не идёт, иначе карточка кричит на каждый штатный возврат.
+        cat("at_site", "Товар у нас — проверить и провести", "ok", at_site, detail_of),
         cat("stuck", f"Зависли дольше {WARN_DAYS} дн — писать в поддержку", "important", stuck, detail_of),
         cat("gone", "Ушли на склад маркетплейса — к нам не приедут", "ok", gone, detail_of),
         cat("deleted", "Удалены — осели на складе маркетплейса", "ok", deleted, detail_of),
@@ -250,9 +252,13 @@ def _export_results(source, by_state, deleted, errors, path):
 
     payload = {
         "generated_at": datetime.now().isoformat(timespec="seconds"), "params": {},
+        # «Проблема» — только то, что требует нештатного действия: съездить за
+        # коробкой, пока не сгорела, или разбираться с маркетплейсом. Штатный
+        # разбор и осевшее у МП сюда не входят.
         "summary": {"critical": len(errors),
-                    "important": len(pickup) + len(at_site) + len(stuck),
-                    "warnings": 0, "ok": len(gone) + len(deleted), "stats": stats},
+                    "important": len(pickup) + len(stuck),
+                    "warnings": 0,
+                    "ok": len(at_site) + len(gone) + len(deleted), "stats": stats},
         "categories": categories,
     }
     with open(path, "w", encoding="utf-8") as f:
