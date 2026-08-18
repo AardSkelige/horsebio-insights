@@ -74,11 +74,19 @@ def posting_from_return(doc: dict) -> str | None:
 
 
 def build_description(base_desc: str, infos: list) -> str:
-    """Идемпотентно заменить/добавить блок статуса Ozon в описании."""
+    """Идемпотентно заменить/добавить блок статуса Ozon в описании.
+
+    Дату начала возврата пишем в ISO — её читает проверка «Возвраты в пути»
+    (health_docs.check_pending_returns). Возраст самого документа там врёт: у
+    возвратов, найденных через Ozon API, документ создан сегодня, а деньги висят
+    с того дня, когда покупатель вернул товар.
+    """
     base = base_desc.split(MARK)[0].rstrip()
     head = infos[0]
     where = head['place'][:34] or '—'
-    return f"{base}{MARK} {head['status']} [{where}] · {ozr.age_days(head)} дн · {datetime.now():%d.%m}"
+    since = f" · с {head['return_date']}" if head['return_date'] else ''
+    return (f"{base}{MARK} {head['status']} [{where}]{since} · "
+            f"{ozr.age_days(head)} дн · {datetime.now():%d.%m}")
 
 
 def build_order_note(base_desc: str, info: dict) -> str:

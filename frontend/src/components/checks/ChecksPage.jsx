@@ -14,7 +14,10 @@ const TOPIC_ORDER = ['Себестоимость', 'Возвраты', 'Опла
 /** Строка-индикатор «Возвраты в пути» — самостоятельный пункт в теме «Возвраты»:
  *  робот создаёт черновики, а этот пункт следит, сколько их ждёт товара и как долго. */
 function PendingReturnsRow({ pending, lastRun, onOpen }) {
-    const { overdue = 0, warn_days = 30 } = pending;
+    const { overdue = 0, at_our_site: atSite = 0, warn_days: warnDays = 30 } = pending;
+    // Требуют действия и застрявшие в пути, и уже приехавшие: первые — writing в
+    // поддержку маркетплейса, вторые — разобрать коробку и провести документ.
+    const problems = overdue + atSite;
     return (
         <div
             role="button"
@@ -40,15 +43,15 @@ function PendingReturnsRow({ pending, lastRun, onOpen }) {
                         <InfoTip text={PENDING_RETURNS_HINT} width={300} />
                     </div>
                     <div style={{ fontSize: 12, color: 'var(--muted)', marginTop: 3, lineHeight: 1.45 }}>
-                        <div><b style={{ color: 'var(--body)', fontWeight: 600 }}>Что проверяем:</b> черновики возвратов не висят без товара дольше {warn_days} дней</div>
-                        <div><b style={{ color: 'var(--body)', fontWeight: 600 }}>Как:</b> считаем возраст и сумму каждого непроведённого возврата</div>
+                        <div><b style={{ color: 'var(--body)', fontWeight: 600 }}>Что проверяем:</b> черновики возвратов не висят без товара дольше {warnDays} дней</div>
+                        <div><b style={{ color: 'var(--body)', fontWeight: 600 }}>Как:</b> считаем возраст и сумму каждого непроведённого возврата; приехавшие отделяем от едущих по статусу</div>
                     </div>
                 </div>
                 <div className="checks-script-card__meta">
                     <div className="checks-script-card__status">
-                        {overdue > 0 ? (
+                        {problems > 0 ? (
                             <StatusBadge color={SEV.warning.color} icon={AlertCircle}>
-                                {overdue} {plural(overdue, 'проблема', 'проблемы', 'проблем')}
+                                {problems} {plural(problems, 'проблема', 'проблемы', 'проблем')}
                             </StatusBadge>
                         ) : (
                             <StatusBadge color="var(--success)" icon={CheckCircle}>ОК</StatusBadge>

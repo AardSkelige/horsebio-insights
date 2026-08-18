@@ -252,9 +252,17 @@ export default function PendingReturnsDetail({ onBack }) {
     const items = [...(cat?.items || [])].sort((a, b) => (b.age_days || 0) - (a.age_days || 0));
     const pending = data?.summary?.pending_returns || {};
     const warnDays = pending.warn_days || 30;
-    const overdue = items.filter((it) => (it.age_days || 0) >= warnDays);
-    const onTime = items.filter((it) => (it.age_days || 0) < warnDays);
-    const mp = mpRows(items); // разбивка всех едущих возвратов по маркетплейсам
+    // Товар уже на складе — возраст тут значит «не разобрали», а не «потерялся
+    // по дороге». Такие не едут и в счётчиках дороги не участвуют.
+    const atSite = items.filter((it) => it.at_our_site);
+    const inTransit = items.filter((it) => !it.at_our_site);
+    const overdue = inTransit.filter((it) => (it.age_days || 0) >= warnDays);
+    const onTime = inTransit.filter((it) => (it.age_days || 0) < warnDays);
+    const transitRub = pending.total_rub != null && pending.at_our_site_rub != null
+        ? pending.total_rub - pending.at_our_site_rub
+        : inTransit.reduce((a, it) => a + (it.sum_rub || 0), 0);
+    const atSiteRub = pending.at_our_site_rub ?? atSite.reduce((a, it) => a + (it.sum_rub || 0), 0);
+    const mp = mpRows(inTransit); // разбивка едущих возвратов по маркетплейсам
 
     return (
         <div style={{ maxWidth: 1100, margin: '0 auto' }}>
@@ -302,21 +310,28 @@ export default function PendingReturnsDetail({ onBack }) {
                     <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap', marginTop: 16 }}>
                         <div style={kpi()}>
                             <div style={kpiLabel()}>Едут к нам</div>
-                            <div style={numStyle('var(--ink)')}>{items.length}</div>
+                            <div style={numStyle('var(--ink)')}>{inTransit.length}</div>
                             {mp.length > 0
                                 ? <MpBreakdown rows={mp} mode="count" />
-                                : <div style={kpiSub()}>{plural(items.length, 'возврат', 'возврата', 'возвратов')} с ВБ и Озона</div>}
+                                : <div style={kpiSub()}>{plural(inTransit.length, 'возврат', 'возврата', 'возвратов')} с ВБ и Озона</div>}
                         </div>
                         <div style={kpi()}>
                             <div style={kpiLabel()}>Денег в дороге</div>
-                            <div style={numStyle('var(--ink)')}>{fmtRub(pending.total_rub ?? items.reduce((a, it) => a + (it.sum_rub || 0), 0))}</div>
+                            <div style={numStyle('var(--ink)')}>{fmtRub(transitRub)}</div>
                             {mp.length > 0
                                 ? <MpBreakdown rows={mp} mode="sum" />
                                 : <div style={kpiSub()}>вернутся на склад товаром</div>}
                         </div>
+                        {atSite.length > 0 && (
+                            <div style={kpi()}>
+                                <div style={kpiLabel()}>Уже у нас</div>
+                                <div style={numStyle('var(--warning)')}>{atSite.length}</div>
+                                <div style={kpiSub()}>{fmtRub(atSiteRub)} · ждут проведения</div>
+                            </div>
+                        )}
                     </div>
 
-                    <AgeStrip items={items} />
+                    <AgeStrip items={inTransit} />
 
                     {items.length === 0 ? (
                         <div style={{ textAlign: 'center', padding: 40, color: 'var(--success)', fontWeight: 600 }}>
@@ -324,6 +339,18 @@ export default function PendingReturnsDetail({ onBack }) {
                         </div>
                     ) : (
                         <>
+                            {atSite.length > 0 && (
+                                <div style={sect()}>
+                                    <div style={sectHead()}>
+                                        <span style={{ width: 9, height: 9, borderRadius: 999, background: 'var(--warning)', flexShrink: 0 }} />
+                                        Товар у нас — проверить и провести
+                                        <span style={{ marginLeft: 'auto', fontSize: 12, fontWeight: 700, color: '#8a5a13', background: 'rgba(176,138,31,0.12)', padding: '1px 9px', borderRadius: 999 }}>
+                                            {atSite.length}
+                                        </span>
+                                    </div>
+                                    <ReturnsTable items={atSite} warn />
+                                </div>
+                            )}
                             {overdue.length > 0 && (
                                 <div style={sect()}>
                                     <div style={sectHead()}>

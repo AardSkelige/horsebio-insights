@@ -729,13 +729,16 @@ class ReportingMixin:
                 'ms_href': (f"https://online.moysklad.ru/app/#salesreturn/edit?id={it['doc_id']}"
                             if it['doc_id'] else ''),
                 'object': f"№{it['doc_name']}",
-                'severity': 'warning' if it['overdue'] else 'info',
+                'severity': 'warning' if (it['overdue'] or it['at_our_site']) else 'info',
                 'sum_rub': it['sum_rub'],
                 'age_days': it['age_days'],
                 'moment': it['moment'],
                 'agent': it['agent'],
+                'state': it['state'],
+                'at_our_site': it['at_our_site'],
                 'detail': f"{it['moment']} · {it['age_days']} дн · {money(it['sum_rub'])}"
-                          + (f" · {it['agent']}" if it['agent'] else ''),
+                          + (f" · {it['agent']}" if it['agent'] else '')
+                          + (f" · {it['state']}" if it['state'] else ''),
             }
             for it in self.stats['pending_returns']
         ])
@@ -806,6 +809,10 @@ class ReportingMixin:
                     'total_rub': round(sum(p['sum_rub'] for p in self.stats['pending_returns']), 2),
                     'overdue': sum(1 for p in self.stats['pending_returns'] if p['overdue']),
                     'overdue_rub': round(sum(p['sum_rub'] for p in self.stats['pending_returns'] if p['overdue']), 2),
+                    # Уже приехали и ждут проведения — это не «деньги в дороге»,
+                    # но и не норма: коробка лежит на складе неразобранной.
+                    'at_our_site': sum(1 for p in self.stats['pending_returns'] if p['at_our_site']),
+                    'at_our_site_rub': round(sum(p['sum_rub'] for p in self.stats['pending_returns'] if p['at_our_site']), 2),
                     'warn_days': self.PENDING_RETURN_WARN_DAYS,
                 },
                 # Внутри summary, потому что ingest сохраняет в БД только summary и categories

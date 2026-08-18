@@ -1,6 +1,7 @@
 """Проверки документов МойСклад: остатки, оприходования, списания, инвентаризации,
 перемещения, приёмки, возвраты, зависшие черновики."""
 import json
+import re
 from collections import defaultdict
 from datetime import datetime, timedelta
 
@@ -805,12 +806,20 @@ class DocumentChecksMixin:
         """Возвраты от покупателей, ждущие поступления товара.
 
         Монитор возвратов (01_monitor_returns.py) создаёт возврат черновиком, когда
-        интеграция маркетплейса ставит заказу статус «возврат». Черновик — штатное
-        состояние: документ проводят, когда товар физически вернулся на склад.
-        Проверка собирает все непроведённые возвраты за doc_months и считает
-        зависшие деньги; возраст от даты документа (moment) — с этого момента
-        начался процесс возврата. Старше PENDING_RETURN_WARN_DAYS — пора выяснять
-        в кабинете маркетплейса, где товар.
+        маркетплейс объявил возврат. Черновик — штатное состояние: документ проводят,
+        когда товар физически вернулся на склад. Проверка собирает непроведённые
+        возвраты за doc_months и считает зависшие деньги; возраст от даты документа
+        (moment) — с этого момента начался процесс возврата.
+
+        Статус документа (его ставит 02_enrich_ozon_returns.py по данным Ozon API)
+        меняет смысл возраста, поэтому учитываем его:
+          • «Ушёл на склад МП» — товар к нам не приедет, это не деньги в дороге;
+            такие черновики скрипт обогащения удалит сам. Из выборки убираем.
+          • «У нас — разобрать» — коробка уже на складе, ждёт разбора. Возраст тут
+            говорит не «искать в кабинете маркетплейса», а «провести документ»,
+            поэтому в просрочку такие не пишем — им отдельная группа.
+        У возвратов ВБ статуса нет (из API ВБ маршрут не достать) — они, как и
+        раньше, оцениваются по одному возрасту.
         """
         self._section_header("Возвраты: ждут поступления товара")
 
@@ -821,7 +830,7 @@ class DocumentChecksMixin:
             docs = self.h._get_all_pages("/entity/salesreturn", {
                 "filter": f"moment>={date_from}",
                 "order": "moment,asc",
-                "expand": "agent",
+                "expand": "agent,state",
             })
         except Exception as e:
             print(f"  ❌ Ошибка при загрузке возвратов: {e}\n")
@@ -830,11 +839,25 @@ class DocumentChecksMixin:
         for doc in docs:
             if doc.get('applicable', True):
                 continue
+            state = (doc.get('state') or {}).get('name', '')
+            if state == self.RETURN_STATE_GONE:
+                continue
             moment = (doc.get('moment') or '')[:10]
             try:
                 age_days = (now - datetime.strptime(moment, '%Y-%m-%d')).days
             except ValueError:
                 age_days = 0
+            at_our_site = state == self.RETURN_STATE_AT_SITE
+            desc = doc.get('description') or ''
+            # Возраст документа врёт для возвратов, найденных через Ozon API:
+            # документ заведён сегодня, а деньги висят с даты возврата у Озона.
+            # Её пишет 02_enrich_ozon_returns.py маркером «· с ГГГГ-ММ-ДД».
+            m = re.search(r'· с (\d{4}-\d{2}-\d{2})', desc)
+            if m:
+                try:
+                    age_days = max(age_days, (now - datetime.strptime(m.group(1), '%Y-%m-%d')).days)
+                except ValueError:
+                    pass
             self.stats['pending_returns'].append({
                 'doc_id':      doc.get('id', ''),
                 'doc_name':    doc.get('name', '?'),
@@ -843,14 +866,24 @@ class DocumentChecksMixin:
                 'sum_rub':     round(doc.get('sum', 0) / 100, 2),
                 'agent':       (doc.get('agent') or {}).get('name', ''),
                 'description': (doc.get('description') or '')[:120],
-                'overdue':     age_days >= self.PENDING_RETURN_WARN_DAYS,
+                'state':       state,
+                'at_our_site': at_our_site,
+                # Для Озона верим статусу: его выставил робот по данным Ozon API,
+                # где видно и где коробка, и сколько она там лежит. Возраст —
+                # запасной критерий для ВБ, у которого статуса нет.
+                'overdue':     (state == self.RETURN_STATE_STUCK if state
+                                else age_days >= self.PENDING_RETURN_WARN_DAYS),
             })
 
         pending = self.stats['pending_returns']
         if pending:
             total = sum(p['sum_rub'] for p in pending)
             overdue = [p for p in pending if p['overdue']]
+            at_site = [p for p in pending if p['at_our_site']]
             print(f"  📦 Ждут поступления: {len(pending)} возвратов на {total:,.0f}р")
+            if at_site:
+                print(f"  📥 Из них уже у нас, ждут проведения: "
+                      f"{len(at_site)} на {sum(p['sum_rub'] for p in at_site):,.0f}р")
             if overdue:
                 print(f"  ⚠️  Из них дольше {self.PENDING_RETURN_WARN_DAYS} дн.: "
                       f"{len(overdue)} на {sum(p['sum_rub'] for p in overdue):,.0f}р")

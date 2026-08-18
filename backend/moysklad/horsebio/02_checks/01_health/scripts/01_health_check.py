@@ -56,6 +56,12 @@ class CostHealthCheck(DocumentChecksMixin, PriceChecksMixin, ReportingMixin):
     # Возврат-черновик старше этого срока — товар, похоже, застрял по дороге
     PENDING_RETURN_WARN_DAYS = 30
 
+    # Статусы черновиков возвратов (заводит return_states.py в демоне возвратов).
+    # Здесь только те два, что меняют трактовку возраста черновика.
+    RETURN_STATE_AT_SITE = 'У нас — разобрать'
+    RETURN_STATE_STUCK = 'Завис в пути'
+    RETURN_STATE_GONE = 'Ушёл на склад МП'
+
     def __init__(self, helper, threshold=5.0, supply_threshold=15.0, prev_count=3,
                  max_months=12, enter_months=3, doc_months=3,
                  inv_threshold=50, move_threshold=10000, full_mode=False):
