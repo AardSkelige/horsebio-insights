@@ -134,7 +134,13 @@ def run(source, dry_run: bool = False, results_out: str | None = None, days_back
         infos = omap.get(key)
         if not infos:
             counts['no_match'] += 1
-            print(f"  WARN {name}: {key} нет в данных {source.LABEL} (старый или за окном)")
+            # Возврат старше окна опроса. Если статус уже стоял — он верен на момент
+            # последней сверки, оставляем как есть. Если статуса нет — стоит знать.
+            had = (d.get('state') or {}).get('name')
+            if had:
+                print(f"  вне окна {name}: {key} — оставляем статус «{had}»")
+            else:
+                print(f"  WARN {name}: {key} нет в данных {source.LABEL} и статуса тоже нет")
             continue
 
         if source.is_draft_dead(infos, WARN_DAYS):
@@ -201,7 +207,7 @@ def _print_summary(source, counts, deleted, errors, by_state):
     print(f"  Без изменений:           {counts['unchanged']}")
     print(f"  Без ключа (не трогали):  {counts['no_key']}")
     print(f"  Закрыты руками:          {counts['done_by_hand']}")
-    print(f"  Нет у {source.LABEL:18} {counts['no_match']}")
+    print(f"  Вне окна опроса:         {counts['no_match']}")
     print(f"  Удалено черновиков:      {len(deleted)}")
     print(f"  Ошибки:                  {len(errors)}")
     print("\n  Раскладка по статусам:")

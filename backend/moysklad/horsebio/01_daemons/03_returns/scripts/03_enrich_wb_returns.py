@@ -29,7 +29,7 @@ def main():
     ap.add_argument('--results-out', type=str, default=None,
                     help="Путь для структурированного JSON находок (для страницы /checks)")
     args = ap.parse_args()
-    returns_enrich.run(wb_returns, dry_run=args.dry_run, results_out=args.results_out, days_back=210)
+    returns_enrich.run(wb_returns, dry_run=args.dry_run, results_out=args.results_out, days_back=90)
 
 
 if __name__ == '__main__':

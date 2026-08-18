@@ -402,7 +402,9 @@ def _run_script_async(script_id, script_path, args):
     try:
         log_fh = open(log_file, 'w', encoding='utf-8')
         proc = subprocess.Popen(
-            ['python3', script_path] + run_args,
+            # -u: без буферизации. Иначе вывод копится блоками по 4 КБ и лог на
+            # странице выглядит замершим, пока скрипт на самом деле работает.
+            ['python3', '-u', script_path] + run_args,
             stdout=log_fh,
             stderr=subprocess.STDOUT,
             start_new_session=True,

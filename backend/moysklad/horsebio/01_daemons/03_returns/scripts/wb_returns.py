@@ -27,6 +27,10 @@ GOODS_RETURN_URL = 'https://seller-analytics-api.wildberries.ru/api/v1/analytics
 # Отчёт отдаётся окнами не больше 31 дня — ходим несколькими запросами.
 WINDOW_DAYS = 30
 
+# Насколько глубоко имеет смысл спрашивать ВБ. Каждое лишнее окно — до
+# полуминуты ожидания после 429, а возвраты старше трёх месяцев уже закрыты.
+MAX_DAYS_BACK = 90
+
 # Номер задания ВБ в описании заказа МС
 TASK_RE = re.compile(r'Номер задания в Wildberries:\s*(\d+)')
 
@@ -44,13 +48,21 @@ def _headers() -> dict:
     return {'Authorization': token, 'Content-Type': 'application/json'}
 
 
-def fetch_returns(days_back: int = 210) -> list:
-    """Строки отчёта возвратов ВБ за период, нормализованные."""
+def fetch_returns(days_back: int = 90) -> list:
+    """Строки отчёта возвратов ВБ за период, нормализованные.
+
+    Глубину держим небольшой намеренно: ВБ отдаёт отчёт окнами максимум по 31 дню
+    и жёстко лимитирует запросы — на каждое лишнее окно уходит до полуминуты
+    ожидания после 429. Черновики возвратов столько не живут: самый старый у нас
+    был 72 дня, обычные закрываются за пару недель.
+    """
     headers = _headers()
     seen, out = set(), []
-    for back in range(0, days_back, WINDOW_DAYS):
+    windows = list(range(0, days_back, WINDOW_DAYS))
+    for i, back in enumerate(windows, 1):
         date_from = (datetime.now() - timedelta(days=back + WINDOW_DAYS)).strftime('%Y-%m-%d')
         date_to = (datetime.now() - timedelta(days=back)).strftime('%Y-%m-%d')
+        print(f"  окно {i}/{len(windows)}: {date_from}…{date_to}", flush=True)
         rows = _get_window(headers, date_from, date_to)
         for x in rows:
             key = (x.get('orderId'), x.get('shkId'))
@@ -62,17 +74,20 @@ def fetch_returns(days_back: int = 210) -> list:
     return out
 
 
-def _get_window(headers: dict, date_from: str, date_to: str, tries: int = 5) -> list:
+def _get_window(headers: dict, date_from: str, date_to: str, tries: int = 4) -> list:
     """Одно окно отчёта. ВБ щедр на 429 — уважаем лимит и ждём."""
-    for _ in range(tries):
+    for attempt in range(1, tries + 1):
         r = _requests.get(GOODS_RETURN_URL, headers=headers,
                           params={'dateFrom': date_from, 'dateTo': date_to}, timeout=120)
         if r.status_code == 429:
-            time.sleep(int(r.headers.get('X-Ratelimit-Retry', 25)) + 5)
+            wait = int(r.headers.get('X-Ratelimit-Retry', 20)) + 2
+            print(f"    лимит ВБ, ждём {wait}с (попытка {attempt}/{tries})", flush=True)
+            time.sleep(wait)
             continue
         r.raise_for_status()
         body = r.json()
         return (body.get('report') if isinstance(body, dict) else body) or []
+    print(f"    окно {date_from}…{date_to} пропущено: ВБ так и не ответил", flush=True)
     return []
 
 

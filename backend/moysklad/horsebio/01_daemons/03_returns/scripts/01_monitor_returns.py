@@ -502,8 +502,11 @@ class ReturnsMonitor:
         details = {}
 
         print(f"\n--- Источник: {source.LABEL} (возвраты, требующие документа) ---")
+        # Глубину ограничивает источник: отчёт ВБ отдаётся окнами по 30 дней и
+        # жёстко лимитируется, поэтому там окно короче.
+        days = min(getattr(source, 'MAX_DAYS_BACK', RETURN_MAX_AGE_DAYS), RETURN_MAX_AGE_DAYS)
         try:
-            rows = source.fetch_returns(days_back=RETURN_MAX_AGE_DAYS)
+            rows = source.fetch_returns(days_back=days)
         except Exception as e:
             print(f"  ERROR: не удалось получить возвраты {source.LABEL}: {e}")
             counts["error"] += 1
@@ -513,7 +516,7 @@ class ReturnsMonitor:
         for info in rows:
             if source.needs_document(info):
                 wanted.setdefault(str(source.info_key(info)), []).append(info)
-        print(f"Возвратов {source.LABEL} за {RETURN_MAX_AGE_DAYS} дн: {len(rows)}; "
+        print(f"Возвратов {source.LABEL} за {days} дн: {len(rows)}; "
               f"требуют документа: {len(wanted)}")
 
         for key, infos in sorted(wanted.items(), key=lambda kv: kv[1][0]["return_date"]):
