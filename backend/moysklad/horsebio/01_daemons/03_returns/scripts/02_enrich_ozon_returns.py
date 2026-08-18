@@ -1,125 +1,63 @@
 #!/usr/bin/env python3
 """
-Обогащение черновиков возвратов Озон реальным статусом с Ozon API.
+Простановка статуса и комментария на черновиках возвратов Озон.
 
-Монитор (01_monitor_returns.py) создаёт черновик возврата, когда заказ Озон
-уходит в «Отменен/Возврат». Но физически товар при этом чаще всего едет НЕ к нам,
-а на склад Озона — и Лера справедливо не может его провести. Раньше это было не
-видно: черновик просто висел.
+Монитор (01_monitor_returns.py) заводит черновик на каждый возврат, который едет
+к нам. Этот скрипт отвечает на вопрос «где коробка сейчас»: тянет статус из Ozon
+API и раскладывает черновики по статусам МС — чтобы в списке возвратов было видно
+глазами, что забирать, чего ждать и что пинать в поддержке.
 
-Этот скрипт для каждого черновика Озон подтягивает через Ozon API (/v1/returns/list)
-реальный статус, конечный пункт назначения (target_place) и место товара.
-
-Ключевое решение — по target_place (КОНЕЧНЫЙ пункт, не транзитный place):
-  • target_place == МО_ХИМКИ_96 (наш ПВЗ) → товар приедет к нам, мы его заберём,
-    документ возврата нужен. Оставляем черновик и дописываем статус в комментарий:
-      – Получен продавцом → товар у нас, можно проводить
-      – Едет к нам        → скоро у нас, ждать
-  • target_place == любой *_РФЦ_ВОЗВРАТЫ (склад Озона) → товар к нам НЕ приедет,
-    документ возврата не нужен. Удаляем черновик и пишем пометку в самом заказе
-    (куда уехал возврат), чтобы это было видно в МС.
-
-Берём именно target_place, а не place: place — где товар сейчас (транзитный РФЦ,
-товар может оказаться рядом проездом), target_place — куда он в итоге едет.
-
-Матчинг: возврат → отгрузка → заказ → номер отправления Ozon (в описании заказа)
-↔ posting_number в API. Надёжно, без коллизий по номеру заказа.
+Раньше скрипт удалял черновики, уезжающие на склад Озона. Так мы потеряли два
+документа (заказы 06405 и 06469): Озон переназначил конечную точку на наш ПВЗ уже
+после удаления, а восстановить удалённое некому. Теперь вместо удаления ставим
+статус «Ушёл на склад МП» — документ остаётся, и если маршрут переиграется,
+статус просто вернётся обратно.
 
 Запуск:
-  python3 02_enrich_ozon_returns.py            # обновить комментарии в МС
+  python3 02_enrich_ozon_returns.py            # проставить статусы и комментарии
   python3 02_enrich_ozon_returns.py --dry-run  # показать, ничего не писать
 """
 import os
-import re
 import sys
 import time
 import argparse
-import requests as _requests
-from datetime import datetime, timedelta
+from collections import defaultdict
+from datetime import datetime
 
+import requests as _requests
+
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', '..', '..', '_shared'))
 from api_client import MOYSKLAD_TOKEN, BASE_URL  # noqa: E402  (грузит backend/.env, включая OZON_*)
+import ozon_returns as ozr  # noqa: E402
+from return_states import ensure_states, AT_OUR_SITE, STUCK, GONE_TO_MP  # noqa: E402
 
 MS_HEADERS = {
     'Authorization': f'Bearer {MOYSKLAD_TOKEN}',
     'Accept-Encoding': 'gzip',
     'Content-Type': 'application/json',
 }
-OZON_HEADERS = {
-    'Client-Id': os.getenv('OZON_CLIENT_ID', ''),
-    'Api-Key':   os.getenv('OZON_API_KEY', ''),
-    'Content-Type': 'application/json',
-}
-OZON_RETURNS_URL = 'https://api-seller.ozon.ru/v1/returns/list'
 
 # Маркер, с которого начинается наш блок статуса в описании (для идемпотентной замены)
 MARK = ' · Ozon:'
-# Маркер пометки в описании ЗАКАЗА (не возврата), что возврат ушёл на склад Ozon
+# Маркер пометки в описании ЗАКАЗА: черновик удалён, возврат осел у Озона.
+# След в МС остаётся, даже когда самого документа уже нет.
 ORDER_MARK = '\n↩ Возврат на склад Ozon:'
-# Наш ПВЗ: сюда Ozon свозит возвраты, которые мы физически забираем. Всё остальное
-# (*_РФЦ_ВОЗВРАТЫ) — склады Озона, куда товар уезжает и к нам не попадает.
-OUR_PVZ = 'МО_ХИМКИ_96'
-# Номер отправления Ozon в описании заказа: 43356677-1677-1 / 0112326660-1774-1
-POSTING_RE = re.compile(r'(\d{6,}-\d{3,}-\d)')
 
-# Классификация статусов Ozon → где товar (НЕ команда проводить — это решает Лера,
-# когда коробка физически придёт к нам на склад в Подрезково; Ozon этого не знает).
-def classify(sys_name: str, display: str) -> str:
-    s = (sys_name or '').lower()
-    d = (display or '').lower()
-    if 'утилиз' in d or 'списан' in d or 'dispos' in s or 'utiliz' in s:
-        return 'не придёт'        # утилизирован/списан → товар не вернётся, черновик удалить
-    if 'едет' in d and ('вам' in d or 'продавц' in d) or 'movingtoseller' in s:
-        return 'едет к нам'       # реально едет к продавцу → ждать поступление
-    if s == 'receivedbyseller' or 'получен' in d:
-        return 'получен — уточнить'  # Ozon пишет «получен», но место может быть его склад/ПВЗ
-    return 'у Ozon'              # На складе Ozon / Ожидает отправки / Едет на склад Ozon
-
-
-def build_ozon_map(months_back: int = 8) -> dict:
-    """posting_number → {status, sys, place, schema, action}. Возвраты за последние N мес."""
-    if not OZON_HEADERS['Client-Id'] or not OZON_HEADERS['Api-Key']:
-        raise SystemExit("Нет OZON_CLIENT_ID / OZON_API_KEY в окружении (.env)")
-    time_from = (datetime.utcnow() - timedelta(days=months_back * 30)).strftime('%Y-%m-%dT%H:%M:%SZ')
-    time_to = (datetime.utcnow() + timedelta(days=1)).strftime('%Y-%m-%dT%H:%M:%SZ')
-    omap = {}
-    last_id = 0
-    while True:
-        body = {'filter': {'logistic_return_date': {'time_from': time_from, 'time_to': time_to}},
-                'limit': 500, 'last_id': last_id}
-        r = _requests.post(OZON_RETURNS_URL, headers=OZON_HEADERS, json=body, timeout=60)
-        r.raise_for_status()
-        rows = r.json().get('returns', [])
-        if not rows:
-            break
-        for x in rows:
-            pn = x.get('posting_number')
-            if not pn:
-                continue
-            st = (x.get('visual') or {}).get('status', {})
-            display = st.get('display_name', '')
-            omap[pn] = {
-                'status': display,
-                'sys': st.get('sys_name', ''),
-                'place': (x.get('place') or {}).get('name', ''),
-                'target': (x.get('target_place') or {}).get('name', ''),
-                'schema': x.get('schema', ''),
-                'action': classify(st.get('sys_name', ''), display),
-            }
-        last_id = rows[-1]['id']
-    return omap
+# Столько дней в пути — и возврат считается зависшим (согласовано с проверкой
+# «Возвраты в пути», PENDING_RETURN_WARN_DAYS).
+WARN_DAYS = 30
 
 
 def fetch_ozon_drafts() -> list:
-    """Непроведённые возвраты Озон с раскрытыми отгрузкой и заказом."""
-    docs = []
-    offset = 0
+    """Непроведённые возвраты Озон с раскрытыми отгрузкой, заказом и статусом."""
+    docs, offset = [], 0
     while True:
         r = _requests.get(f'{BASE_URL}/entity/salesreturn', headers=MS_HEADERS, params={
             'filter': 'applicable=false',
-            'expand': 'demand.customerOrder,agent',
+            'expand': 'demand.customerOrder,agent,state',
             'limit': 100, 'offset': offset,
-        }, timeout=40)
+        }, timeout=60)
         r.raise_for_status()
         rows = r.json().get('rows', [])
         docs.extend(rows)
@@ -132,64 +70,91 @@ def fetch_ozon_drafts() -> list:
 def posting_from_return(doc: dict) -> str | None:
     """Номер отправления Ozon из описания связанного заказа."""
     co = (doc.get('demand') or {}).get('customerOrder') or {}
-    m = POSTING_RE.search(co.get('description') or '')
-    return m.group(1) if m else None
+    return ozr.posting_from_text(co.get('description'))
 
 
-def build_description(base_desc: str, info: dict) -> str:
+def build_description(base_desc: str, infos: list) -> str:
     """Идемпотентно заменить/добавить блок статуса Ozon в описании."""
     base = base_desc.split(MARK)[0].rstrip()
-    place = (info['place'] or '')[:34]
-    return f"{base}{MARK} {info['status']} [{place}] → {info['action']} · {datetime.now():%d.%m}"
+    head = infos[0]
+    where = head['place'][:34] or '—'
+    return f"{base}{MARK} {head['status']} [{where}] · {ozr.age_days(head)} дн · {datetime.now():%d.%m}"
 
 
 def build_order_note(base_desc: str, info: dict) -> str:
-    """Идемпотентно добавить в описание ЗАКАЗА пометку, что возврат ушёл на склад Ozon."""
+    """Идемпотентно добавить в описание ЗАКАЗА пометку об удалённом черновике."""
     base = base_desc.split(ORDER_MARK)[0].rstrip()
     return f"{base}{ORDER_MARK} {info['target']} · {info['status']} · {datetime.now():%d.%m}"
 
 
-def _export_results(counts, by_action, deleted_details, error_details, path):
+def delete_dead_draft(doc: dict, order: dict, info: dict, dry_run: bool) -> str | None:
+    """Пометить заказ и удалить черновик. Возвращает текст ошибки или None."""
+    if dry_run:
+        return None
+    note = build_order_note(order.get('description') or '', info)
+    if order.get('id') and note != (order.get('description') or ''):
+        try:
+            r = _requests.put(f"{BASE_URL}/entity/customerorder/{order['id']}",
+                              headers=MS_HEADERS, json={'description': note}, timeout=30)
+            if r.status_code != 200:
+                print(f"    WARN пометка заказа {r.status_code}: {r.text[:120]}")
+        except Exception as e:
+            print(f"    WARN пометка заказа: {e}")
+    try:
+        r = _requests.delete(f"{BASE_URL}/entity/salesreturn/{doc['id']}",
+                             headers=MS_HEADERS, timeout=30)
+        if r.status_code not in (200, 204):
+            return f"удаление {r.status_code}: {r.text[:100]}"
+    except Exception as e:
+        return f"удаление: {e}"
+    time.sleep(0.15)
+    return None
+
+
+def _export_results(by_state, deleted, errors, path):
     """Структурированный JSON для страницы /checks: стат-карточки + раскрываемые списки."""
     import json as _json
-    from datetime import datetime as _dt
 
-    received = by_action.get('получен — уточнить', [])  # в Химки/у нас — можно проводить
-    coming = by_action.get('едет к нам', [])
-    dl, er = counts.get('deleted', 0), counts.get('error', 0)
+    at_site = by_state.get(AT_OUR_SITE, [])
+    stuck = by_state.get(STUCK, [])
+    gone = by_state.get(GONE_TO_MP, [])
 
     stats = [
-        {"label": "Удалено (ушли к Ozon)", "value": dl, "tone": "ok" if dl else "neutral",
-         **({"cat": "deleted"} if dl else {})},
-        {"label": "Можно проводить", "value": len(received), "tone": "warning" if received else "neutral",
-         **({"cat": "received"} if received else {})},
-        {"label": "Едут к нам", "value": len(coming), "tone": "neutral"},
-        {"label": "Обновлены комменты", "value": counts.get("updated", 0), "tone": "neutral"},
-        {"label": "Ошибки", "value": er, "tone": "critical" if er else "neutral",
-         **({"cat": "errors"} if er else {})},
+        {"label": "Можно проводить", "value": len(at_site), "tone": "warning" if at_site else "neutral",
+         **({"cat": "at_site"} if at_site else {})},
+        {"label": "Зависли в пути", "value": len(stuck), "tone": "warning" if stuck else "neutral",
+         **({"cat": "stuck"} if stuck else {})},
+        {"label": "Едут к нам", "value": len(by_state.get('Едет к нам', [])), "tone": "neutral"},
+        {"label": "Ушли на склад МП", "value": len(gone), "tone": "neutral",
+         **({"cat": "gone"} if gone else {})},
+        {"label": "Удалено черновиков", "value": len(deleted), "tone": "ok" if deleted else "neutral",
+         **({"cat": "deleted"} if deleted else {})},
+        {"label": "Ошибки", "value": len(errors), "tone": "critical" if errors else "neutral",
+         **({"cat": "errors"} if errors else {})},
     ]
 
-    categories = []
-    if error_details:
-        categories.append({"key": "errors", "title": "Ошибки", "severity": "critical",
-            "kind": None, "ms_type": None, "count": len(error_details),
-            "items": [{"key": "", "ms_id": "", "object": e["obj"], "severity": "critical", "detail": e["msg"]}
-                      for e in error_details]})
-    if received:
-        categories.append({"key": "received", "title": "Возврат у нас — можно проводить", "severity": "important",
-            "kind": None, "ms_type": None, "count": len(received),
-            "items": [{"key": "", "ms_id": "", "object": f"Возврат {n}", "severity": "important",
-                       "detail": "получен, проверить и провести"} for n in received]})
-    if deleted_details:
-        categories.append({"key": "deleted", "title": "Удалены — уехали на склад Ozon", "severity": "ok",
-            "kind": None, "ms_type": None, "count": len(deleted_details),
-            "items": [{"key": "", "ms_id": "", "object": f"Заказ №{d['order']}", "severity": "ok",
-                       "detail": f"{d['target']} · {d['status']}"} for d in deleted_details]})
+    def cat(key, title, sev, items, detail):
+        return {"key": key, "title": title, "severity": sev, "kind": None, "ms_type": None,
+                "count": len(items),
+                "items": [{"key": "", "ms_id": i.get('id', ''), "object": f"Возврат {i['name']}",
+                           "severity": sev, "detail": detail(i)} for i in items]} if items else None
+
+    categories = [c for c in [
+        cat("errors", "Ошибки", "critical", errors, lambda i: i['msg']),
+        cat("at_site", "Возврат у нас — можно проводить", "important", at_site,
+            lambda i: f"{i['status']} · получен {i['received_at'] or '—'} · заказ №{i['order']}"),
+        cat("stuck", f"Зависли дольше {WARN_DAYS} дн — писать в поддержку Ozon", "important", stuck,
+            lambda i: f"{i['status']} · {i['place']} · {i['age']} дн в пути"),
+        cat("gone", "Ушли на склад Ozon — к нам не приедут", "ok", gone,
+            lambda i: f"{i['status']} · {i['target']}"),
+        cat("deleted", "Удалены — осели на складе Ozon", "ok", deleted,
+            lambda i: f"{i['target']} · {i['status']} · заказ №{i['order']}"),
+    ] if c]
 
     payload = {
-        "generated_at": _dt.now().isoformat(timespec="seconds"), "params": {},
-        "summary": {"critical": er, "important": len(received), "warnings": 0,
-                    "ok": dl, "stats": stats},
+        "generated_at": datetime.now().isoformat(timespec="seconds"), "params": {},
+        "summary": {"critical": len(errors), "important": len(at_site) + len(stuck),
+                    "warnings": 0, "ok": len(gone) + len(deleted), "stats": stats},
         "categories": categories,
     }
     with open(path, "w", encoding="utf-8") as f:
@@ -197,122 +162,116 @@ def _export_results(counts, by_action, deleted_details, error_details, path):
 
 
 def main():
-    ap = argparse.ArgumentParser(description="Обогащение возвратов Озон статусом с Ozon API")
+    ap = argparse.ArgumentParser(description="Статусы черновиков возвратов Озон по данным Ozon API")
     ap.add_argument('--dry-run', action='store_true', help="Показать, ничего не писать в МС")
     ap.add_argument('--results-out', type=str, default=None,
                     help="Путь для структурированного JSON находок (для страницы /checks)")
     args = ap.parse_args()
 
-    print(f"{'='*64}\nОбогащение возвратов Озон: {datetime.now():%Y-%m-%d %H:%M:%S}")
+    print(f"{'='*64}\nСтатусы возвратов Озон: {datetime.now():%Y-%m-%d %H:%M:%S}")
     if args.dry_run:
-        print("[DRY-RUN — комментарии НЕ пишутся]")
+        print("[DRY-RUN — в МС ничего не пишется]")
     print('='*64)
 
-    omap = build_ozon_map()
-    print(f"Ozon-возвратов в карте: {len(omap)}")
+    states = ensure_states(create=not args.dry_run)
+
+    omap = defaultdict(list)
+    for info in ozr.fetch_returns(days_back=240):
+        omap[info['posting']].append(info)
+    print(f"Отправлений с возвратами в Ozon: {len(omap)}")
 
     drafts = fetch_ozon_drafts()
     print(f"Черновиков Озон в МС: {len(drafts)}\n")
 
-    counts = {'updated': 0, 'unchanged': 0, 'deleted': 0, 'no_posting': 0, 'no_ozon_match': 0, 'error': 0}
-    by_action = {'получен — уточнить': [], 'едет к нам': [], 'у Ozon': [], 'не придёт': []}
-    deleted_details = []   # {order, target, status} — уехали на склад Ozon, черновик удалён
-    error_details = []     # {obj, msg}
+    by_state = defaultdict(list)
+    deleted = []
+    errors = []
+    counts = {'updated': 0, 'unchanged': 0, 'no_posting': 0, 'no_ozon_match': 0}
 
     for d in drafts:
         name = d.get('name', '?')
+        co = (d.get('demand') or {}).get('customerOrder') or {}
         pn = posting_from_return(d)
         if not pn:
             counts['no_posting'] += 1
             print(f"  SKIP {name}: не нашёл номер отправления (ручной/ФБО?)")
             continue
-        info = omap.get(pn)
-        if not info:
+        infos = omap.get(pn)
+        if not infos:
             counts['no_ozon_match'] += 1
             print(f"  WARN {name}: {pn} нет в Ozon API (старый/за окном)")
             continue
 
-        # Конечный пункт — склад Озона (не наш ПВЗ): товар к нам не приедет,
-        # документ возврата не нужен. Помечаем заказ и удаляем черновик.
-        # target пустой = Ozon ещё не назначил маршрут → решение откладываем (оставляем).
-        target = info.get('target', '')
-        if target and target != OUR_PVZ:
-            co = (d.get('demand') or {}).get('customerOrder') or {}
-            note = build_order_note(co.get('description') or '', info)
-            print(f"  DEL  {name}: возврат → {target} ({info['status']}) — "
-                  f"удаляем черновик, метим заказ {co.get('name', '?')}")
-            deleted_details.append({'order': co.get('name', '?'), 'target': target, 'status': info['status']})
-            if args.dry_run:
-                counts['deleted'] += 1
-                continue
-            # 1) пометка в заказе (best-effort, идемпотентно)
-            if co.get('id') and note != (co.get('description') or ''):
-                try:
-                    r1 = _requests.put(f"{BASE_URL}/entity/customerorder/{co['id']}",
-                                       headers=MS_HEADERS, json={'description': note}, timeout=30)
-                    if r1.status_code != 200:
-                        print(f"    WARN пометка заказа {r1.status_code}: {r1.text[:120]}")
-                except Exception as e:
-                    print(f"    WARN пометка заказа: {e}")
-            # 2) удаление черновика возврата
-            try:
-                r2 = _requests.delete(f"{BASE_URL}/entity/salesreturn/{d['id']}",
-                                      headers=MS_HEADERS, timeout=30)
-                if r2.status_code in (200, 204):
-                    counts['deleted'] += 1
-                else:
-                    counts['error'] += 1
-                    print(f"    ERROR удаление {r2.status_code}: {r2.text[:120]}")
-                    error_details.append({'obj': f"Возврат {name}", 'msg': f"удаление {r2.status_code}"})
-                time.sleep(0.15)
-            except Exception as e:
-                counts['error'] += 1
-                print(f"    ERROR удаление: {e}")
-                error_details.append({'obj': f"Возврат {name}", 'msg': f"удаление: {e}"})
+        head = infos[0]
+        target_state = ozr.state_for_group(infos, WARN_DAYS)
+
+        # Возврат осел у Озона окончательно — документ бессмыслен, убираем.
+        # Статус «Ушёл на склад МП» до этого момента служил надгробием: он был
+        # виден в списке те 30 дней, пока маршрут ещё мог переиграться.
+        if ozr.is_draft_dead(infos, WARN_DAYS):
+            print(f"  DEL  {name}: {head['status']} → {head['target']} "
+                  f"({ozr.age_days(head)} дн) — удаляем, метим заказ {co.get('name', '?')}")
+            err = delete_dead_draft(d, co, head, args.dry_run)
+            if err:
+                errors.append({'name': name, 'msg': err})
+                print(f"    ERROR {err}")
+            else:
+                deleted.append({'name': name, 'id': d.get('id', ''), 'order': co.get('name', '?'),
+                                'status': head['status'], 'target': head['target']})
             continue
 
-        by_action[info['action']].append(name)
-        new_desc = build_description(d.get('description') or '', info)
-        if new_desc == (d.get('description') or ''):
+        by_state[target_state].append({
+            'name': name, 'id': d.get('id', ''), 'order': co.get('name', '?'),
+            'status': head['status'], 'place': head['place'], 'target': head['target'],
+            'age': ozr.age_days(head), 'received_at': head['received_at'],
+        })
+
+        payload = {}
+        if (d.get('state') or {}).get('name') != target_state:
+            if target_state not in states:
+                errors.append({'name': name, 'msg': f"статуса «{target_state}» нет в МС"})
+                continue
+            payload['state'] = states[target_state]
+        new_desc = build_description(d.get('description') or '', infos)
+        if new_desc != (d.get('description') or ''):
+            payload['description'] = new_desc
+
+        if not payload:
             counts['unchanged'] += 1
             continue
 
-        print(f"  {name} → {info['status']:22} @ {info['place']:28} → {info['action']}")
+        print(f"  {name} → {target_state:20} ({head['status']} @ {head['place'][:24]})")
         if args.dry_run:
             counts['updated'] += 1
             continue
         try:
             resp = _requests.put(f"{BASE_URL}/entity/salesreturn/{d['id']}",
-                                 headers=MS_HEADERS, json={'description': new_desc}, timeout=30)
+                                 headers=MS_HEADERS, json=payload, timeout=30)
             if resp.status_code == 200:
                 counts['updated'] += 1
             else:
-                counts['error'] += 1
+                errors.append({'name': name, 'msg': f"запись {resp.status_code}: {resp.text[:100]}"})
                 print(f"    ERROR {resp.status_code}: {resp.text[:120]}")
-                error_details.append({'obj': f"Возврат {name}", 'msg': f"комментарий {resp.status_code}"})
             time.sleep(0.15)
         except Exception as e:
-            counts['error'] += 1
+            errors.append({'name': name, 'msg': str(e)})
             print(f"    ERROR: {e}")
-            error_details.append({'obj': f"Возврат {name}", 'msg': f"комментарий: {e}"})
 
     print(f"\n{'='*64}\nИтого:")
-    print(f"  Обновлено комментариев:  {counts['updated']}")
+    print(f"  Обновлено:               {counts['updated']}")
     print(f"  Без изменений:           {counts['unchanged']}")
-    print(f"  Удалено (ушли на склад Ozon): {counts['deleted']}")
     print(f"  Нет номера отправления:  {counts['no_posting']}")
     print(f"  Нет в Ozon API:          {counts['no_ozon_match']}")
-    print(f"  Ошибки:                  {counts['error']}")
-    print(f"\n  Где товар (проводит всегда Лера вручную, когда коробка придёт в Подрезково):")
-    print(f"    🟡 едет к нам:            {len(by_action['едет к нам'])}  {by_action['едет к нам']}")
-    print(f"    🔵 получен — уточнить:    {len(by_action['получен — уточнить'])}  {by_action['получен — уточнить']}")
-    print(f"    ⚪ у Ozon (ждать):        {len(by_action['у Ozon'])}")
-    print(f"    🔴 не придёт (удалить):   {len(by_action['не придёт'])}  {by_action['не придёт']}")
+    print(f"  Удалено (осели у Озона): {len(deleted)}")
+    print(f"  Ошибки:                  {len(errors)}")
+    print(f"\n  Раскладка по статусам:")
+    for st, items in sorted(by_state.items()):
+        print(f"    {st:20} {len(items):3}  {[i['name'] for i in items]}")
     print('='*64)
 
     if args.results_out:
         try:
-            _export_results(counts, by_action, deleted_details, error_details, args.results_out)
+            _export_results(by_state, deleted, errors, args.results_out)
         except Exception as e:
             print(f"Ошибка сохранения результатов JSON: {e}")
 

@@ -25,8 +25,10 @@ import requests as _requests
 from datetime import datetime
 from pathlib import Path
 
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', '..', '..', '_shared'))
 from api_client import ProductionHelper, MOYSKLAD_TOKEN, BASE_URL
+import ozon_returns as ozr
 
 # Файл состояния
 STATE_FILE = Path(__file__).parent.parent / "data" / ".returns_state.json"
@@ -46,8 +48,13 @@ STATES = {
     "Отменен": f"{BASE_URL}/entity/customerorder/metadata/states/41e67be8-266b-11eb-0a80-090200155ca1",
 }
 
-# Агенты для обработки — только ВБ и Озон
-TARGET_AGENTS = ["Вайлдберриз (Вб)", "Вб Вайлдберриз", "Озон"]
+# Агенты для обработки по статусу заказа — только ВБ.
+# Озон идёт отдельным путём, от Ozon API (_process_ozon_source): в МойСкладе
+# возвратов FBS нет как сущности, а статус заказа ловит лишь половину случаев —
+# при возврате уже выкупленного товара заказ навсегда остаётся «Доставлен».
+# Заодно это убирает старую свистопляску «создали черновик → удалили»: черновик
+# теперь заводится только на то, что реально едет к нам.
+TARGET_AGENTS = ["Вайлдберриз (Вб)", "Вб Вайлдберриз"]
 
 
 class ReturnsMonitor:
@@ -116,6 +123,37 @@ class ReturnsMonitor:
             f"/entity/demand/{demand_id}",
             {"expand": "positions.assortment,organization,agent,store,contract,salesChannel"}
         )
+
+    def _pick_demand_with_positions(self, demands: list, order_name: str) -> tuple:
+        """Выбрать отгрузку, из которой можно сделать возврат.
+
+        У заказа отгрузок может быть несколько, в том числе пустых (0 позиций) —
+        из пустой возврат не создать. Попутно перепроверяем наличие возврата по
+        полным данным отгрузки: в expand заказа коллекция returns бывает неполной.
+
+        Returns: (detail | None, 'ok' | 'return_exists' | 'error')
+        """
+        for dm in demands:
+            demand_id = dm.get("id") or dm.get("meta", {}).get("href", "").split("/")[-1].split("?")[0]
+            if not demand_id:
+                continue
+            try:
+                detail = self._get_demand_details(demand_id)
+            except Exception as e:
+                print(f"  ERROR: {order_name} — ошибка получения отгрузки {demand_id}: {e}")
+                return None, "error"
+
+            if self._demand_has_return(detail):
+                return None, "return_exists"
+
+            positions = detail.get("positions", {})
+            rows = positions.get("rows", []) if isinstance(positions, dict) else positions
+            if rows:
+                return detail, "ok"
+            print(f"    WARNING: отгрузка {detail.get('name', '?')} без позиций — пробуем следующую")
+
+        print(f"  ERROR: {order_name} — ни в одной из {len(demands)} отгрузок нет позиций")
+        return None, "error"
 
     def _demand_has_return(self, demand: dict) -> bool:
         """
@@ -202,10 +240,14 @@ class ReturnsMonitor:
             print(f"    WARNING: wizard evaluate_cost — ошибка {e} — создаём без себестоимости")
             return {}
 
-    def _create_sales_return(self, order: dict, demand: dict) -> dict | None:
-        """Создать черновик возврата покупателя на основе отгрузки"""
+    def _create_sales_return(self, order: dict, demand: dict, note: str | None = None) -> dict | None:
+        """Создать черновик возврата покупателя на основе отгрузки.
+
+        note — чем объяснить возврат в описании. Для пути «от статуса заказа» это
+        сам статус, для пути «от Ozon API» — номер отправления и причина возврата.
+        """
         order_name = order.get("name", "?")
-        status_name = order.get("state", {}).get("name", "?")
+        status_name = (order.get("state") or {}).get("name", "?")
         demand_name = demand.get("name", "?")
 
         # Позиции из отгрузки
@@ -262,7 +304,7 @@ class ReturnsMonitor:
 
         payload = {
             "applicable": False,
-            "description": f"Авто: возврат по заказу {order_name} (статус: {status_name})",
+            "description": f"Авто: возврат по заказу {order_name} ({note or f'статус: {status_name}'})",
             "organization": self._extract_meta(demand.get("organization", {})),
             "agent": self._extract_meta(demand.get("agent", {})),
             "store": self._extract_meta(demand.get("store", {})),
@@ -375,40 +417,18 @@ class ReturnsMonitor:
             }
             return "return_exists"
 
-        # Выбираем отгрузку с позициями: у заказа их может быть несколько,
-        # в т.ч. пустых (0 позиций) — из пустой возврат не создать
-        demand_detail = None
-        for dm in demands:
-            demand_id = dm.get("id") or dm.get("meta", {}).get("href", "").split("/")[-1].split("?")[0]
-            if not demand_id:
-                continue
-            try:
-                detail = self._get_demand_details(demand_id)
-            except Exception as e:
-                print(f"  ERROR: {order_name} — ошибка получения отгрузки {demand_id}: {e}")
-                return "error"
-
-            # Повторная проверка возвратов (на случай если в expand не было данных)
-            if self._demand_has_return(detail):
-                print(f"  OK: {order_name} ({agent_name}) — возврат уже есть (подтверждено)")
-                self.state["processed_orders"][order_id] = {
-                    "order_name": order_name,
-                    "agent": agent_name,
-                    "status_name": status_name,
-                    "status": "return_exists",
-                    "processed_at": datetime.now().isoformat()
-                }
-                return "return_exists"
-
-            positions = detail.get("positions", {})
-            rows = positions.get("rows", []) if isinstance(positions, dict) else positions
-            if rows:
-                demand_detail = detail
-                break
-            print(f"    WARNING: отгрузка {detail.get('name', '?')} без позиций — пробуем следующую")
-
+        demand_detail, verdict = self._pick_demand_with_positions(demands, order_name)
+        if verdict == "return_exists":
+            print(f"  OK: {order_name} ({agent_name}) — возврат уже есть (подтверждено)")
+            self.state["processed_orders"][order_id] = {
+                "order_name": order_name,
+                "agent": agent_name,
+                "status_name": status_name,
+                "status": "return_exists",
+                "processed_at": datetime.now().isoformat()
+            }
+            return "return_exists"
         if demand_detail is None:
-            print(f"  ERROR: {order_name} — ни в одной из {len(demands)} отгрузок нет позиций")
             return "error"
 
         # Создаём возврат
@@ -438,6 +458,112 @@ class ReturnsMonitor:
             print(f"  ERROR: {order_name} — ошибка создания возврата: {e}")
             return "error"
 
+    def _find_order_by_posting(self, posting: str) -> dict | None:
+        """Заказ МС по номеру отправления Ozon (номер лежит в описании заказа).
+
+        Точечный запрос вместо полного скана: заказов за полгода тысячи,
+        выкачивать их целиком на каждый прогон незачем.
+        """
+        try:
+            r = _requests.get(f"{BASE_URL}/entity/customerorder",
+                              headers=self.helper.headers,
+                              params={"filter": f"description~{posting}",
+                                      "expand": "demands", "limit": 10},
+                              timeout=30)
+            r.raise_for_status()
+            rows = r.json().get("rows", [])
+        except Exception as e:
+            print(f"  ERROR: поиск заказа по {posting}: {e}")
+            return None
+        if not rows:
+            return None
+        # Номер отправления уникален, но подстрочный поиск может зацепить лишнее —
+        # берём самый свежий заказ с точным совпадением номера.
+        exact = [o for o in rows if ozr.posting_from_text(o.get("description")) == posting]
+        return max(exact or rows, key=lambda o: o.get("moment", ""))
+
+    def _process_ozon_source(self) -> tuple:
+        """Возвраты Озона — от Ozon API, а не от статуса заказа.
+
+        Черновик заводим только на то, что едет к нам (target_place = наш ПВЗ).
+        Возвраты, оседающие на складах Озона, документа не требуют — их мы больше
+        не создаём (раньше создавали и следом удаляли).
+        """
+        counts = {"return_created": 0, "return_exists": 0, "no_order": 0,
+                  "no_demand": 0, "too_old": 0, "error": 0}
+        details = {}
+
+        print(f"\n--- Источник: Ozon API (возвраты, едущие к нам) ---")
+        try:
+            rows = ozr.fetch_returns(days_back=RETURN_MAX_AGE_DAYS)
+        except Exception as e:
+            print(f"  ERROR: не удалось получить возвраты Ozon: {e}")
+            counts["error"] += 1
+            return counts, details
+
+        homeward = {}
+        for info in rows:
+            if info["schema"] == "Fbs" and ozr.is_homeward(info):
+                homeward.setdefault(info["posting"], []).append(info)
+        print(f"Возвратов Ozon за {RETURN_MAX_AGE_DAYS} дн: {len(rows)}; "
+              f"едут к нам (FBS): {len(homeward)} отправлений")
+
+        for posting, infos in sorted(homeward.items(), key=lambda kv: kv[1][0]["return_date"]):
+            head = infos[0]
+            order = self._find_order_by_posting(posting)
+            if not order:
+                print(f"  SKIP: {posting} — заказ в МС не найден ({head['status']})")
+                counts["no_order"] += 1
+                details.setdefault("no_order", []).append({
+                    "order_name": posting, "agent": "Озон",
+                    "status_name": head["status"], "order_date": head["return_date"]})
+                continue
+
+            order_name = order.get("name", "?")
+            if self._is_too_old(order.get("moment", "")):
+                counts["too_old"] += 1
+                continue
+
+            demands = order.get("demands") or []
+            if not demands:
+                print(f"  SKIP: {order_name} — нет отгрузки, возврат не из чего создать")
+                counts["no_demand"] += 1
+                details.setdefault("no_demand", []).append({
+                    "order_name": order_name, "agent": "Озон",
+                    "status_name": head["status"], "order_date": (order.get("moment") or "")[:10]})
+                continue
+
+            if any(self._demand_has_return(dm) for dm in demands):
+                counts["return_exists"] += 1
+                continue
+
+            demand_detail, verdict = self._pick_demand_with_positions(demands, order_name)
+            if verdict == "return_exists":
+                counts["return_exists"] += 1
+                continue
+            if demand_detail is None:
+                counts["error"] += 1
+                continue
+
+            print(f"  CREATE: {order_name} (Озон, {head['status']}) → отгрузка "
+                  f"{demand_detail.get('name', '?')} · {head['reason'][:40]}")
+            try:
+                result = self._create_sales_return(order, demand_detail,
+                                                   note=f"возврат Ozon {posting}: {head['reason']}")
+                if result is None:
+                    counts["error"] += 1
+                    continue
+                print(f"  ✅ Создан черновик возврата {result.get('name', '?')} для заказа {order_name}")
+                counts["return_created"] += 1
+                details.setdefault("return_created", []).append({
+                    "order_name": order_name, "agent": "Озон",
+                    "status_name": head["status"], "order_date": (order.get("moment") or "")[:10]})
+            except Exception as e:
+                print(f"  ERROR: {order_name} — создание возврата: {e}")
+                counts["error"] += 1
+
+        return counts, details
+
     def run_once(self):
         """Одна итерация мониторинга"""
         print(f"\n{'='*60}")
@@ -460,12 +586,19 @@ class ReturnsMonitor:
             "cancelled_no_ship": 0,
             "return_exists": 0,
             "return_created": 0,
+            "no_order": 0,
             "error": 0,
         }
         details = {}
 
+        oz_counts, oz_details = self._process_ozon_source()
+        for k, v in oz_counts.items():
+            counts[k] = counts.get(k, 0) + v
+        for k, v in oz_details.items():
+            details.setdefault(k, []).extend(v)
+
         for status_name, state_href in STATES.items():
-            print(f"\n--- Статус: {status_name} ---")
+            print(f"\n--- Источник: заказы МС, статус «{status_name}» ---")
             orders = self._get_orders_with_status(status_name, state_href)
 
             target_count = sum(
@@ -498,6 +631,7 @@ class ReturnsMonitor:
         print(f"  Отменён без отгрузки:        {counts['cancelled_no_ship']}")
         print(f"  Нет отгрузки (WARNING):      {counts['no_demand']}")
         print(f"  Возврат уже существует:      {counts['return_exists']}")
+        print(f"  Заказ по возврату не найден: {counts['no_order']}")
         print(f"  Создано новых возвратов:     {counts['return_created']}")
         print(f"  Ошибки:                      {counts['error']}")
         print(f"{'='*60}")
