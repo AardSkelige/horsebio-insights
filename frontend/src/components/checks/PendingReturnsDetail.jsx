@@ -255,13 +255,16 @@ export default function PendingReturnsDetail({ onBack }) {
     // Товар уже на складе — возраст тут значит «не разобрали», а не «потерялся
     // по дороге». Такие не едут и в счётчиках дороги не участвуют.
     const atSite = items.filter((it) => it.at_our_site);
-    const inTransit = items.filter((it) => !it.at_our_site);
+    // Доехали до пункта выдачи и ждут, пока заберут. Отдельное действие и
+    // отдельный человек — если не показать, срок хранения истечёт и товар пропадёт.
+    const atPickup = items.filter((it) => it.at_pickup);
+    const inTransit = items.filter((it) => !it.at_our_site && !it.at_pickup);
     const overdue = inTransit.filter((it) => (it.age_days || 0) >= warnDays);
     const onTime = inTransit.filter((it) => (it.age_days || 0) < warnDays);
-    const transitRub = pending.total_rub != null && pending.at_our_site_rub != null
-        ? pending.total_rub - pending.at_our_site_rub
-        : inTransit.reduce((a, it) => a + (it.sum_rub || 0), 0);
-    const atSiteRub = pending.at_our_site_rub ?? atSite.reduce((a, it) => a + (it.sum_rub || 0), 0);
+    const sumOf = (list) => list.reduce((a, it) => a + (it.sum_rub || 0), 0);
+    const transitRub = sumOf(inTransit);
+    const atSiteRub = pending.at_our_site_rub ?? sumOf(atSite);
+    const atPickupRub = pending.at_pickup_rub ?? sumOf(atPickup);
     const mp = mpRows(inTransit); // разбивка едущих возвратов по маркетплейсам
 
     return (
@@ -322,6 +325,13 @@ export default function PendingReturnsDetail({ onBack }) {
                                 ? <MpBreakdown rows={mp} mode="sum" />
                                 : <div style={kpiSub()}>вернутся на склад товаром</div>}
                         </div>
+                        {atPickup.length > 0 && (
+                            <div style={kpi()}>
+                                <div style={kpiLabel()}>Забрать в ПВЗ</div>
+                                <div style={numStyle('#c96a1e')}>{atPickup.length}</div>
+                                <div style={kpiSub()}>{fmtRub(atPickupRub)} · ждут в пункте выдачи</div>
+                            </div>
+                        )}
                         {atSite.length > 0 && (
                             <div style={kpi()}>
                                 <div style={kpiLabel()}>Уже у нас</div>
@@ -339,6 +349,18 @@ export default function PendingReturnsDetail({ onBack }) {
                         </div>
                     ) : (
                         <>
+                            {atPickup.length > 0 && (
+                                <div style={sect()}>
+                                    <div style={sectHead()}>
+                                        <span style={{ width: 9, height: 9, borderRadius: 999, background: '#c96a1e', flexShrink: 0 }} />
+                                        Лежат в пункте выдачи — съездить забрать
+                                        <span style={{ marginLeft: 'auto', fontSize: 12, fontWeight: 700, color: '#8a5a13', background: 'rgba(176,138,31,0.12)', padding: '1px 9px', borderRadius: 999 }}>
+                                            {atPickup.length}
+                                        </span>
+                                    </div>
+                                    <ReturnsTable items={atPickup} warn />
+                                </div>
+                            )}
                             {atSite.length > 0 && (
                                 <div style={sect()}>
                                     <div style={sectHead()}>

@@ -58,9 +58,11 @@ class CostHealthCheck(DocumentChecksMixin, PriceChecksMixin, ReportingMixin):
 
     # Статусы черновиков возвратов (заводит return_states.py в демоне возвратов).
     # Здесь только те два, что меняют трактовку возраста черновика.
+    RETURN_STATE_PICKUP = 'Забрать в ПВЗ'
     RETURN_STATE_AT_SITE = 'У нас — разобрать'
     RETURN_STATE_STUCK = 'Завис в пути'
     RETURN_STATE_GONE = 'Ушёл на склад МП'
+    RETURN_STATE_DONE = 'Разложено по полкам'
 
     def __init__(self, helper, threshold=5.0, supply_threshold=15.0, prev_count=3,
                  max_months=12, enter_months=3, doc_months=3,

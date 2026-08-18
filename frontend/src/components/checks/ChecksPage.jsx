@@ -14,10 +14,10 @@ const TOPIC_ORDER = ['Себестоимость', 'Возвраты', 'Опла
 /** Строка-индикатор «Возвраты в пути» — самостоятельный пункт в теме «Возвраты»:
  *  робот создаёт черновики, а этот пункт следит, сколько их ждёт товара и как долго. */
 function PendingReturnsRow({ pending, lastRun, onOpen }) {
-    const { overdue = 0, at_our_site: atSite = 0, warn_days: warnDays = 30 } = pending;
-    // Требуют действия и застрявшие в пути, и уже приехавшие: первые — writing в
-    // поддержку маркетплейса, вторые — разобрать коробку и провести документ.
-    const problems = overdue + atSite;
+    const { overdue = 0, at_our_site: atSite = 0, at_pickup: atPickup = 0, warn_days: warnDays = 30 } = pending;
+    // Требуют действия три состояния: застряли в пути (писать в поддержку),
+    // лежат в ПВЗ (съездить забрать), уже у нас (разобрать и провести).
+    const problems = overdue + atSite + atPickup;
     return (
         <div
             role="button"

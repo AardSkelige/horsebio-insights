@@ -22,7 +22,7 @@ from datetime import datetime, timedelta
 
 import requests as _requests
 
-from return_states import IN_TRANSIT, AT_OUR_SITE, STUCK, GONE_TO_MP
+from return_states import IN_TRANSIT, AT_PICKUP, AT_OUR_SITE, STUCK, GONE_TO_MP
 
 OZON_RETURNS_URL = 'https://api-seller.ozon.ru/v1/returns/list'
 
@@ -120,7 +120,15 @@ def state_for(info: dict, warn_days: int = 30) -> str:
     if is_homeward(info):
         if is_at_our_site(info):
             return AT_OUR_SITE
-        return STUCK if age >= warn_days else IN_TRANSIT
+        if age >= warn_days:
+            return STUCK
+        # Коробка физически уже в нашем ПВЗ, но нам её ещё не выдали — значит
+        # лежит и ждёт, пока приедут. Отдельное действие и отдельный человек,
+        # поэтому не смешиваем с «едет». Определяем по месту, а не по названию
+        # статуса: place — то, что Ozon знает точно, названия он меняет.
+        if info.get('place') == OUR_PVZ:
+            return AT_PICKUP
+        return IN_TRANSIT
     # Едет на склад маркетплейса. Пока не доехал, конечная точка ещё может
     # смениться на наш ПВЗ — держим черновик, потерять документ дороже. Но окно
     # на переигровку конечное: за warn_days Озон определяется окончательно,
@@ -132,7 +140,7 @@ def state_for(info: dict, warn_days: int = 30) -> str:
 
 # Чем меньше число, тем важнее статус: на один posting_number Ozon может завести
 # несколько возвратов (частичный возврат — часть коробок уже у нас, часть в пути).
-_STATE_PRIORITY = {AT_OUR_SITE: 0, STUCK: 1, IN_TRANSIT: 2, GONE_TO_MP: 3}
+_STATE_PRIORITY = {AT_PICKUP: 0, AT_OUR_SITE: 1, STUCK: 2, IN_TRANSIT: 3, GONE_TO_MP: 4}
 
 
 def state_for_group(infos: list, warn_days: int = 30) -> str:
@@ -167,3 +175,57 @@ def posting_from_text(text: str) -> str | None:
     """Номер отправления Ozon из описания заказа/возврата."""
     m = POSTING_RE.search(text or '')
     return m.group(1) if m else None
+
+
+# ─── Интерфейс источника для returns_enrich.py ────────────────────────────────
+LABEL = 'Ozon'
+AGENT_NAMES = ('Озон',)
+MARK = ' · Ozon:'
+ORDER_MARK = '\n↩ Возврат на склад Ozon:'
+
+
+def fetch_map(days_back: int = 240) -> dict:
+    """posting_number → список записей возврата."""
+    out = {}
+    for info in fetch_returns(days_back):
+        out.setdefault(info['posting'], []).append(info)
+    return out
+
+
+def key_from_order(order: dict) -> str | None:
+    """Ключ сопоставления — номер отправления Ozon из описания заказа."""
+    return posting_from_text(order.get('description'))
+
+
+def describe(infos: list) -> str:
+    """Хвост описания документа: где коробка и с какого числа."""
+    head = infos[0]
+    where = (head['place'] or '—')[:34]
+    since = f" · с {head['return_date']}" if head['return_date'] else ''
+    return f" {head['status']} [{where}]{since} · {age_days(head)} дн"
+
+
+def order_note(infos: list) -> str:
+    """Хвост пометки в заказе, когда черновик удаляется."""
+    head = infos[0]
+    return f" {head['target']} · {head['status']}"
+
+
+def info_key(info: dict) -> str:
+    """Ключ группировки — номер отправления."""
+    return info['posting']
+
+
+def needs_document(info: dict) -> bool:
+    """Нужен ли документ возврата: FBS и едет к нам (ФБО ведёт Лера сборными)."""
+    return info.get('schema') == 'Fbs' and is_homeward(info)
+
+
+def order_filter(key: str) -> str:
+    """Фильтр МС для поиска заказа по номеру отправления."""
+    return f'description~{key}'
+
+
+def draft_note(key: str, infos: list) -> str:
+    """Чем объяснить возврат в описании создаваемого черновика."""
+    return f"возврат Ozon {key}: {infos[0]['reason']}"

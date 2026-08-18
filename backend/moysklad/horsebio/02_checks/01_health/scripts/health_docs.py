@@ -818,6 +818,10 @@ class DocumentChecksMixin:
           • «У нас — разобрать» — коробка уже на складе, ждёт разбора. Возраст тут
             говорит не «искать в кабинете маркетплейса», а «провести документ»,
             поэтому в просрочку такие не пишем — им отдельная группа.
+          • «Забрать в ПВЗ» — коробка доехала до пункта выдачи и ждёт, пока за ней
+            приедут. Тоже не просрочка, но и не «едет в срок»: если этого не
+            видеть, срок хранения на ПВЗ истекает и товар пропадает — так у нас
+            сгорел 21 вывоз со склада ВБ.
         У возвратов ВБ статуса нет (из API ВБ маршрут не достать) — они, как и
         раньше, оцениваются по одному возрасту.
         """
@@ -847,7 +851,10 @@ class DocumentChecksMixin:
                 age_days = (now - datetime.strptime(moment, '%Y-%m-%d')).days
             except ValueError:
                 age_days = 0
-            at_our_site = state == self.RETURN_STATE_AT_SITE
+            # «Разложено по полкам» человек ставит руками: товар разобран и на месте,
+            # остаётся только провести документ — по смыслу это то же «у нас».
+            at_our_site = state in (self.RETURN_STATE_AT_SITE, self.RETURN_STATE_DONE)
+            at_pickup = state == self.RETURN_STATE_PICKUP
             desc = doc.get('description') or ''
             # Возраст документа врёт для возвратов, найденных через Ozon API:
             # документ заведён сегодня, а деньги висят с даты возврата у Озона.
@@ -868,6 +875,7 @@ class DocumentChecksMixin:
                 'description': (doc.get('description') or '')[:120],
                 'state':       state,
                 'at_our_site': at_our_site,
+                'at_pickup':   at_pickup,
                 # Для Озона верим статусу: его выставил робот по данным Ozon API,
                 # где видно и где коробка, и сколько она там лежит. Возраст —
                 # запасной критерий для ВБ, у которого статуса нет.
@@ -880,7 +888,11 @@ class DocumentChecksMixin:
             total = sum(p['sum_rub'] for p in pending)
             overdue = [p for p in pending if p['overdue']]
             at_site = [p for p in pending if p['at_our_site']]
+            at_pickup = [p for p in pending if p['at_pickup']]
             print(f"  📦 Ждут поступления: {len(pending)} возвратов на {total:,.0f}р")
+            if at_pickup:
+                print(f"  🚚 Из них лежат в ПВЗ, надо забрать: "
+                      f"{len(at_pickup)} на {sum(p['sum_rub'] for p in at_pickup):,.0f}р")
             if at_site:
                 print(f"  📥 Из них уже у нас, ждут проведения: "
                       f"{len(at_site)} на {sum(p['sum_rub'] for p in at_site):,.0f}р")

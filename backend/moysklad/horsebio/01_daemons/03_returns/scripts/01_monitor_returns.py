@@ -29,6 +29,7 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', '..', '..', '_shared'))
 from api_client import ProductionHelper, MOYSKLAD_TOKEN, BASE_URL
 import ozon_returns as ozr
+import wb_returns as wbr
 
 # Файл состояния
 STATE_FILE = Path(__file__).parent.parent / "data" / ".returns_state.json"
@@ -458,8 +459,8 @@ class ReturnsMonitor:
             print(f"  ERROR: {order_name} — ошибка создания возврата: {e}")
             return "error"
 
-    def _find_order_by_posting(self, posting: str) -> dict | None:
-        """Заказ МС по номеру отправления Ozon (номер лежит в описании заказа).
+    def _find_order_by_key(self, source, key: str) -> dict | None:
+        """Заказ МС по ключу маркетплейса (номер отправления Ozon / задания ВБ).
 
         Точечный запрос вместо полного скана: заказов за полгода тысячи,
         выкачивать их целиком на каждый прогон незачем.
@@ -467,60 +468,71 @@ class ReturnsMonitor:
         try:
             r = _requests.get(f"{BASE_URL}/entity/customerorder",
                               headers=self.helper.headers,
-                              params={"filter": f"description~{posting}",
+                              params={"filter": source.order_filter(key),
                                       "expand": "demands", "limit": 10},
                               timeout=30)
             r.raise_for_status()
             rows = r.json().get("rows", [])
         except Exception as e:
-            print(f"  ERROR: поиск заказа по {posting}: {e}")
+            print(f"  ERROR: поиск заказа по {key}: {e}")
             return None
         if not rows:
             return None
-        # Номер отправления уникален, но подстрочный поиск может зацепить лишнее —
-        # берём самый свежий заказ с точным совпадением номера.
-        exact = [o for o in rows if ozr.posting_from_text(o.get("description")) == posting]
+        # Подстрочный поиск может зацепить лишнее — оставляем заказы, где ключ
+        # действительно тот, и берём самый свежий.
+        exact = [o for o in rows if source.key_from_order(o) == key]
         return max(exact or rows, key=lambda o: o.get("moment", ""))
 
-    def _process_ozon_source(self) -> tuple:
-        """Возвраты Озона — от Ozon API, а не от статуса заказа.
+    def _process_marketplace_source(self, source) -> tuple:
+        """Возвраты от самого маркетплейса, а не от статуса заказа.
 
-        Черновик заводим только на то, что едет к нам (target_place = наш ПВЗ).
-        Возвраты, оседающие на складах Озона, документа не требуют — их мы больше
-        не создаём (раньше создавали и следом удаляли).
+        Статус заказа ловит хорошо если половину случаев: возврат уже выкупленного
+        товара оставляет заказ «Доставлен», заказы в «Споре» монитор не смотрит
+        вовсе, а по разу проверенный заказ он больше не перепроверяет — если
+        отгрузка появилась позже, второго шанса нет. Триггер от самого возврата
+        снимает все три ограничения разом: статус заказа перестаёт иметь значение,
+        а проверка идёт заново на каждом прогоне.
+
+        Что именно требует документа, решает источник (needs_document): у Озона
+        это FBS, едущие к нам, у ВБ — возвраты покупателей (наши вывозы со склада
+        маркетплейса документа не требуют, их приходует Лера, когда привезут).
         """
         counts = {"return_created": 0, "return_exists": 0, "no_order": 0,
                   "no_demand": 0, "too_old": 0, "error": 0}
         details = {}
 
-        print(f"\n--- Источник: Ozon API (возвраты, едущие к нам) ---")
+        print(f"\n--- Источник: {source.LABEL} (возвраты, требующие документа) ---")
         try:
-            rows = ozr.fetch_returns(days_back=RETURN_MAX_AGE_DAYS)
+            rows = source.fetch_returns(days_back=RETURN_MAX_AGE_DAYS)
         except Exception as e:
-            print(f"  ERROR: не удалось получить возвраты Ozon: {e}")
+            print(f"  ERROR: не удалось получить возвраты {source.LABEL}: {e}")
             counts["error"] += 1
             return counts, details
 
-        homeward = {}
+        wanted = {}
         for info in rows:
-            if info["schema"] == "Fbs" and ozr.is_homeward(info):
-                homeward.setdefault(info["posting"], []).append(info)
-        print(f"Возвратов Ozon за {RETURN_MAX_AGE_DAYS} дн: {len(rows)}; "
-              f"едут к нам (FBS): {len(homeward)} отправлений")
+            if source.needs_document(info):
+                wanted.setdefault(str(source.info_key(info)), []).append(info)
+        print(f"Возвратов {source.LABEL} за {RETURN_MAX_AGE_DAYS} дн: {len(rows)}; "
+              f"требуют документа: {len(wanted)}")
 
-        for posting, infos in sorted(homeward.items(), key=lambda kv: kv[1][0]["return_date"]):
+        for key, infos in sorted(wanted.items(), key=lambda kv: kv[1][0]["return_date"]):
             head = infos[0]
-            order = self._find_order_by_posting(posting)
+            order = self._find_order_by_key(source, key)
             if not order:
-                print(f"  SKIP: {posting} — заказ в МС не найден ({head['status']})")
+                print(f"  SKIP: {key} — заказ в МС не найден ({head['status']})")
                 counts["no_order"] += 1
                 details.setdefault("no_order", []).append({
-                    "order_name": posting, "agent": "Озон",
+                    "order_name": key, "agent": source.LABEL,
                     "status_name": head["status"], "order_date": head["return_date"]})
                 continue
 
             order_name = order.get("name", "?")
-            if self._is_too_old(order.get("moment", "")):
+            # Два ограничителя. RETURN_MAX_AGE_DAYS — возврат по полуторагодовалой
+            # отгрузке смысла не имеет. START_DATE — общая граница проекта: историю
+            # до неё не трогаем, документы задним числом не заводим.
+            order_moment = order.get("moment", "")
+            if self._is_too_old(order_moment) or order_moment < START_DATE:
                 counts["too_old"] += 1
                 continue
 
@@ -529,7 +541,7 @@ class ReturnsMonitor:
                 print(f"  SKIP: {order_name} — нет отгрузки, возврат не из чего создать")
                 counts["no_demand"] += 1
                 details.setdefault("no_demand", []).append({
-                    "order_name": order_name, "agent": "Озон",
+                    "order_name": order_name, "agent": source.LABEL,
                     "status_name": head["status"], "order_date": (order.get("moment") or "")[:10]})
                 continue
 
@@ -545,18 +557,18 @@ class ReturnsMonitor:
                 counts["error"] += 1
                 continue
 
-            print(f"  CREATE: {order_name} (Озон, {head['status']}) → отгрузка "
-                  f"{demand_detail.get('name', '?')} · {head['reason'][:40]}")
+            print(f"  CREATE: {order_name} ({source.LABEL}, {head['status']}) → отгрузка "
+                  f"{demand_detail.get('name', '?')}")
             try:
                 result = self._create_sales_return(order, demand_detail,
-                                                   note=f"возврат Ozon {posting}: {head['reason']}")
+                                                   note=source.draft_note(key, infos))
                 if result is None:
                     counts["error"] += 1
                     continue
                 print(f"  ✅ Создан черновик возврата {result.get('name', '?')} для заказа {order_name}")
                 counts["return_created"] += 1
                 details.setdefault("return_created", []).append({
-                    "order_name": order_name, "agent": "Озон",
+                    "order_name": order_name, "agent": source.LABEL,
                     "status_name": head["status"], "order_date": (order.get("moment") or "")[:10]})
             except Exception as e:
                 print(f"  ERROR: {order_name} — создание возврата: {e}")
@@ -591,11 +603,12 @@ class ReturnsMonitor:
         }
         details = {}
 
-        oz_counts, oz_details = self._process_ozon_source()
-        for k, v in oz_counts.items():
-            counts[k] = counts.get(k, 0) + v
-        for k, v in oz_details.items():
-            details.setdefault(k, []).extend(v)
+        for source in (ozr, wbr):
+            s_counts, s_details = self._process_marketplace_source(source)
+            for k, v in s_counts.items():
+                counts[k] = counts.get(k, 0) + v
+            for k, v in s_details.items():
+                details.setdefault(k, []).extend(v)
 
         for status_name, state_href in STATES.items():
             print(f"\n--- Источник: заказы МС, статус «{status_name}» ---")
