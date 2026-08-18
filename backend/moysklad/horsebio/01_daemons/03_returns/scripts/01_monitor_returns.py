@@ -43,6 +43,9 @@ START_DATE = "2026-03-04 00:00:00"
 # отгрузке полуторагодовой давности бессмыслен — отсекаем по дате заказа.
 RETURN_MAX_AGE_DAYS = 183  # ~6 месяцев
 
+# Ссылка на документ возврата в интерфейсе МойСклад
+MS_RETURN_URL = 'https://online.moysklad.ru/app/#salesreturn/edit?id='
+
 # Статусы заказов для обработки
 STATES = {
     "Возврат": f"{BASE_URL}/entity/customerorder/metadata/states/41e67a4d-266b-11eb-0a80-090200155ca0",
@@ -65,6 +68,8 @@ class ReturnsMonitor:
         self.helper = helper
         self.dry_run = dry_run
         self.state = self._load_state()
+        # Последний созданный документ — чтобы отчёт мог дать на него ссылку
+        self._last_created = None
 
     def _load_state(self) -> dict:
         """Загрузить состояние из файла"""
@@ -453,6 +458,7 @@ class ReturnsMonitor:
                 "return_name": return_name,
                 "processed_at": datetime.now().isoformat()
             }
+            self._last_created = {"id": return_id, "name": return_name}
             return "return_created"
 
         except Exception as e:
@@ -572,6 +578,7 @@ class ReturnsMonitor:
                 counts["return_created"] += 1
                 details.setdefault("return_created", []).append({
                     "order_name": order_name, "agent": source.LABEL,
+                    "return_id": result.get("id", ""), "return_name": result.get("name", "?"),
                     "status_name": head["status"], "order_date": (order.get("moment") or "")[:10]})
             except Exception as e:
                 print(f"  ERROR: {order_name} — создание возврата: {e}")
@@ -624,14 +631,20 @@ class ReturnsMonitor:
             print(f"Найдено: {len(orders)} заказов (ВБ+Озон: {target_count})")
 
             for order in orders:
+                self._last_created = None
                 result = self._process_order(order)
                 counts[result] = counts.get(result, 0) + 1
-                details.setdefault(result, []).append({
+                entry = {
                     "order_name": order.get("name", "?"),
                     "agent": order.get("agent", {}).get("name", ""),
                     "status_name": status_name,
                     "order_date": (order.get("moment") or "")[:10],
-                })
+                }
+                # Номер созданного документа нужен, чтобы дать на него ссылку в отчёте
+                if self._last_created:
+                    entry["return_id"] = self._last_created["id"]
+                    entry["return_name"] = self._last_created["name"]
+                details.setdefault(result, []).append(entry)
 
         # Обновляем last_run после успешного прогона
         if not self.dry_run:
@@ -656,39 +669,62 @@ class ReturnsMonitor:
 
 
 def _export_results(counts, details, path):
-    """Структурированный JSON для страницы /checks: стат-карточки + раскрываемые списки."""
+    """Структурированный JSON для страницы /checks.
+
+    Показываем только работу робота: что он завёл и с чем не справился. Списки
+    того, что делать с возвратами дальше, живут в проверке «Что разобрать из
+    возвратов» — здесь их дублировать незачем.
+
+    «Заказ не отгружался» в находки не идёт: товар со склада не списывался,
+    возвращать в учёте нечего, действий от человека не требуется.
+    """
     import json as _json
     from datetime import datetime as _dt
 
-    cr, re_, nd, er, sk = (counts.get(k, 0) for k in ("return_created", "return_exists", "no_demand", "error", "skipped"))
+    created = details.get('return_created') or []
+    errors = details.get('error') or []
+    no_order = details.get('no_order') or []
+
     stats = [
-        {"label": "Создано возвратов", "value": cr, "tone": "ok" if cr else "neutral", **({"cat": "created"} if cr else {})},
-        {"label": "Уже существуют", "value": re_, "tone": "neutral"},
-        {"label": "Возврат не нужен", "value": nd, "tone": "neutral", **({"cat": "no_demand"} if nd else {})},
-        {"label": "Ошибки", "value": er, "tone": "critical" if er else "neutral", **({"cat": "errors"} if er else {})},
-        {"label": "Не ВБ/Озон", "value": sk, "tone": "neutral"},
+        {"label": "Заведено документов", "value": len(created),
+         "tone": "ok" if created else "neutral", **({"cat": "created"} if created else {})},
+        {"label": "Уже были", "value": counts.get("return_exists", 0), "tone": "neutral"},
+        {"label": "Возврат не нужен", "value": counts.get("no_demand", 0), "tone": "neutral"},
+        {"label": "Заказ не найден", "value": len(no_order),
+         "tone": "warning" if no_order else "neutral", **({"cat": "no_order"} if no_order else {})},
+        {"label": "Ошибки", "value": counts.get("error", 0),
+         "tone": "critical" if counts.get("error") else "ok",
+         **({"cat": "errors"} if errors else {})},
     ]
 
-    def cat(key, title, sev, src):
-        items = [{"key": "", "ms_id": "", "object": f"Заказ №{d['order_name']}", "severity": sev,
-                  "detail": f"{d.get('agent', '')} · статус: {d.get('status_name', '')}"
-                            + (f" · заказ от {d['order_date']}" if d.get('order_date') else '')}
-                 for d in (details.get(src) or [])]
+    def cat(key, title, sev, src_items, detail):
+        if not src_items:
+            return None
         return {"key": key, "title": title, "severity": sev, "kind": None, "ms_type": None,
-                "count": len(items), "items": items} if items else None
+                "count": len(src_items),
+                "items": [{"key": "", "ms_id": d.get("return_id", ""),
+                           "ms_href": (MS_RETURN_URL + d["return_id"]) if d.get("return_id") else "",
+                           "object": d["object"], "severity": sev, "detail": detail(d)}
+                          for d in src_items]}
 
     categories = [c for c in [
-        cat("errors", "Ошибки создания", "critical", "error"),
-        # Заказ не отгружался — товар со склада не списывался, значит и возвращать
-        # его в учёте нечего. Физически он уехал и вернулся, остаток сходится.
-        cat("no_demand", "Возврат не нужен — заказ не отгружался", "ok", "no_demand"),
-        cat("created", "Созданные возвраты", "ok", "return_created"),
+        cat("errors", "Не смог завести документ", "critical",
+            [{**d, "object": f"Заказ №{d['order_name']}"} for d in errors],
+            lambda d: f"{d.get('agent', '')} · заказ от {d.get('order_date', '')}"),
+        # Чаще всего это ФБО: продажа прошла отчётом комиссионера, отдельного заказа
+        # под неё нет, и привязать возврат не к чему. Оформляют вручную, сборным.
+        cat("no_order", "Возвраты без заказа в МойСкладе — оформить вручную (обычно ФБО)", "important",
+            [{**d, "object": f"Отправление {d['order_name']}"} for d in no_order],
+            lambda d: f"{d.get('agent', '')} · {d.get('status_name', '')} · с {d.get('order_date', '')}"),
+        cat("created", "Заведены новые документы возврата", "ok",
+            [{**d, "object": f"Возврат №{d.get('return_name', '?')}"} for d in created],
+            lambda d: f"заказ №{d['order_name']} · {d.get('agent', '')} · {d.get('status_name', '')}"),
     ] if c]
 
     payload = {
         "generated_at": _dt.now().isoformat(timespec="seconds"), "params": {},
-        "summary": {"critical": counts.get("error", 0), "important": 0, "warnings": 0,
-                    "ok": counts.get("return_created", 0) + counts.get("no_demand", 0), "stats": stats},
+        "summary": {"critical": counts.get("error", 0), "important": len(no_order),
+                    "warnings": 0, "ok": len(created), "stats": stats},
         "categories": categories,
     }
     with open(path, "w", encoding="utf-8") as f:

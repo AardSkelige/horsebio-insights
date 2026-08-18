@@ -78,7 +78,6 @@ class CostHealthCheck(DocumentChecksMixin, PriceChecksMixin, ReportingMixin):
         self.inventory_ack_ids = self._load_ack('inventories_acknowledged.json')
         self.move_ack_ids      = self._load_ack('moves_acknowledged.json')
         self.supply_ack_ids    = self._load_ack('supplies_acknowledged.json')
-        self.salesreturn_ack_ids = self._load_ack('salesreturns_acknowledged.json')
         self.enter_zero_ack_ids  = self._load_ack('enter_zero_acknowledged.json')
         self.deviations_notes_map = self._load_deviations_notes()
 
@@ -100,7 +99,6 @@ class CostHealthCheck(DocumentChecksMixin, PriceChecksMixin, ReportingMixin):
             'supply_jumps': [],           # Скачки цен в приёмках (требуют внимания)
             'supply_jumps_explained': [], # Скачки с известной причиной (проверяются, но не критичны)
             'supply_jumps_ignored': 0,    # Устаревший счётчик (для обратной совместимости)
-            'suspect_sales_returns': [],  # Возвраты от покупателей с нулевой себестоимостью
             'enter_zero_prices': [],      # Оприходования с нулевой ценой позиций
             'enter_price_issues': [],     # Свежие оприходования с ценой, не совпадающей с приёмкой на тот момент
             'code_no_code': [],           # Товары без кода
@@ -552,12 +550,6 @@ def main():
         checker.check_product_codes()
     except Exception as e:
         print(f"❌ Ошибка при проверке кодов товаров: {e}\n")
-
-    # 10. Возвраты от покупателей с нулевой себестоимостью (всегда)
-    try:
-        checker.check_suspect_sales_returns()
-    except Exception as e:
-        print(f"❌ Ошибка при проверке возвратов: {e}\n")
 
     # 14. Оприходования с нулевой ценой позиций (всегда)
     try:

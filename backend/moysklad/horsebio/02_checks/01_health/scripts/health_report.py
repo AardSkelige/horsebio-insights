@@ -331,29 +331,6 @@ class ReportingMixin:
         else:
             print(f"\n✅ Приёмок с нарушениями не найдено (последние {self.doc_months} мес.)")
 
-        # Возвраты от покупателей с нулевой себестоимостью
-        sales_returns = self.stats['suspect_sales_returns']
-        if sales_returns:
-            print(f"\n↩️  ВОЗВРАТЫ С НУЛЕВОЙ СЕБЕСТОИМОСТЬЮ ({len(sales_returns)})  — последние {self.doc_months} мес.:")
-            print(f"   ↳ costPrice=0 в позиции → товар вернулся на склад по цене 0 → занижает FIFO-себестоимость готовой продукции")
-            print(f"   ↳ Исправить: задним числом поставить costPrice = текущей FIFO-себестоимости OR исправить через списание+оприходование")
-            print("-" * 70)
-            for item in sales_returns:
-                agent_str = f"  {item['agent'][:30]}" if item['agent'] else ''
-                desc_display = item['description'] or '(без описания)'
-                zero_count = len(item['zero_positions'])
-                total_pos = item['total_positions']
-                print(f"  🔴 №{item['doc_name']:<26}  {item['moment']}{agent_str}")
-                print(f"      📝 {desc_display[:100]}")
-                for p in item['zero_positions'][:3]:
-                    print(f"      📦 {p['name'][:50]:<50}  x{p['qty']:.0f}  цена_продажи={p['sale_price']:.2f}р  ⚠️ себест.=0.00р")
-                if zero_count > 3:
-                    print(f"      ... и ещё {zero_count - 3} поз. с нулевой себестоимостью")
-                print(f"      ⚠️ нулевая себестоимость в {zero_count} из {total_pos} позиций")
-                print()
-        else:
-            print(f"\n✅ Возвратов с нулевой себестоимостью не найдено (последние {self.doc_months} мес.)")
-
         # Скачки цен в приёмках
         if self.stats['supply_jumps']:
             print(f"\n📦 СКАЧКИ ЦЕН В ПРИЁМКАХ ({len(self.stats['supply_jumps'])}):")
@@ -415,11 +392,6 @@ class ReportingMixin:
             print(f"  ✅ Цены в инвентаризациях — всё в порядке")
         print(f"  🚚 Перемещений с нарушениями: {len(self.stats['suspect_moves'])}")
         print(f"  🚚 Приёмок с нарушениями: {len(self.stats['suspect_supplies'])}")
-        sr_cnt = len(self.stats['suspect_sales_returns'])
-        if sr_cnt:
-            print(f"  ↩️  Возвратов с нулевой себест.: {sr_cnt}  ← занижают FIFO-себестоимость ГП!")
-        else:
-            print(f"  ✅ Возвратов с нулевой себестоимостью не найдено")
         new_jumps = len(self.stats['supply_jumps'])
         explained = len(self.stats['supply_jumps_explained'])
         if new_jumps:
@@ -645,18 +617,6 @@ class ReportingMixin:
             for it in self.stats['suspect_supplies']
         ])
 
-        # 11. Возвраты с нулевой себестоимостью
-        add('suspect_sales_returns', 'Возвраты с нулевой себестоимостью', 'salesreturns', 'salesreturn', [
-            {
-                'key': it['doc_id'], 'ms_id': it['doc_id'],
-                'object': f"№{it['doc_name']}", 'severity': 'critical',
-                'detail': f"{it['moment']}"
-                          + (f" · {it['agent'][:30]}" if it.get('agent') else '')
-                          + f" · нулевая себест. в {len(it['zero_positions'])} из {it['total_positions']} поз.",
-            }
-            for it in self.stats['suspect_sales_returns']
-        ])
-
         # 12. Оприходования с нулевой ценой позиций
         add('enter_zero_prices', 'Оприходования с нулевой ценой', 'enter_zero', 'enter', [
             {
@@ -723,7 +683,6 @@ class ReportingMixin:
             ('inventories',       'Инвентаризации',               ['suspect_inventories', 'inventory_price_issues']),
             ('moves',             'Перемещения',                  ['suspect_moves']),
             ('supplies',          'Приёмки',                      ['suspect_supplies']),
-            ('salesreturns',      'Возвраты: нулевая себест.',    ['suspect_sales_returns']),
             ('supply_jumps',      'Скачки цен в приёмках',        ['supply_jumps']),
             ('codes',             'Коды товаров',                 ['code_no_code', 'code_duplicates', 'code_suspect']),
             ('stale_drafts',      'Незавершённые черновики',      ['stale_drafts']),

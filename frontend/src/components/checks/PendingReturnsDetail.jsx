@@ -281,13 +281,13 @@ export default function PendingReturnsDetail({ onBack }) {
                 <PackageOpen size={20} style={{ color: 'var(--muted)', flexShrink: 0, marginTop: 4 }} />
                 <div style={{ minWidth: 0, flex: 1 }}>
                     <div style={{ display: 'flex', alignItems: 'center', gap: 9, flexWrap: 'wrap', fontFamily: 'var(--serif)', fontSize: 24, fontWeight: 600, color: 'var(--ink)', lineHeight: 1.15 }}>
-                        Возвраты в пути
+                        Что разобрать из возвратов
                         <AccountBadge account="HorseBio" />
                         <InfoTip text={PENDING_RETURNS_HINT} width={320} />
                     </div>
                     <div style={{ fontSize: 12.5, color: 'var(--muted)', marginTop: 5, lineHeight: 1.5 }}>
-                        <div><b style={{ color: 'var(--body)', fontWeight: 600 }}>Что проверяем:</b> черновики возвратов не висят без товара дольше {warnDays} дней</div>
-                        <div><b style={{ color: 'var(--body)', fontWeight: 600 }}>Как:</b> робот создал черновик, когда маркетплейс объявил возврат; проводим, когда товар доехал</div>
+                        <div><b style={{ color: 'var(--body)', fontWeight: 600 }}>Что проверяем:</b> какие возвраты требуют действия и сколько в них денег</div>
+                        <div><b style={{ color: 'var(--body)', fontWeight: 600 }}>Как:</b> считаем возраст и сумму каждого незакрытого возврата, группируем по статусу</div>
                     </div>
                     {data?.finished_at && (
                         <div style={{ fontSize: 12, color: 'var(--muted-soft)', marginTop: 6 }}>
@@ -358,6 +358,10 @@ export default function PendingReturnsDetail({ onBack }) {
                                             {atPickup.length}
                                         </span>
                                     </div>
+                                    <SectNote>
+                                        Коробка доехала до пункта выдачи и ждёт. Срок хранения ограничен —
+                                        если не забрать, товар пропадёт. Это к тому, кто ездит за возвратами.
+                                    </SectNote>
                                     <ReturnsTable items={atPickup} warn />
                                 </div>
                             )}
@@ -370,6 +374,10 @@ export default function PendingReturnsDetail({ onBack }) {
                                             {atSite.length}
                                         </span>
                                     </div>
+                                    <SectNote>
+                                        Коробки уже на складе. Осталось разобрать и провести документ —
+                                        после этого возврат отсюда исчезнет, а товар встанет на остатки.
+                                    </SectNote>
                                     <ReturnsTable items={atSite} warn />
                                 </div>
                             )}
@@ -382,6 +390,10 @@ export default function PendingReturnsDetail({ onBack }) {
                                             {overdue.length}
                                         </span>
                                     </div>
+                                    <SectNote>
+                                        Товар едет к нам, но встал по дороге. Сам не поедет —
+                                        нужно писать в поддержку маркетплейса по номеру возврата.
+                                    </SectNote>
                                     <ReturnsTable items={overdue} warn />
                                 </div>
                             )}
@@ -406,6 +418,18 @@ export default function PendingReturnsDetail({ onBack }) {
         </div>
     );
 }
+
+/** Подпись под заголовком группы: чьё это дело и что именно сделать.
+ *  Без неё список читается как «просто данные» — непонятно, кому идти работать. */
+function SectNote({ children }) {
+    return (
+        <div style={{
+            padding: '8px 14px 10px', fontSize: 12.5, color: 'var(--muted)',
+            lineHeight: 1.5, borderBottom: '1px solid var(--hairline)',
+        }}>{children}</div>
+    );
+}
+SectNote.propTypes = { children: PropTypes.node };
 
 function kpi() {
     return { background: 'var(--surface-card)', border: '1px solid var(--hairline)', borderRadius: 12, padding: '12px 18px', minWidth: 160 };

@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-Возвраты в пути: сколько денег висит в непроведённых возвратах и как долго.
+Что разобрать из возвратов: какие требуют действия и сколько в них денег.
 
 Раньше это считалось внутри Health Check — вместе с проверками себестоимости, раз
 в сутки и без своей кнопки. Возвраты давно стали отдельной темой со своим роботом
@@ -166,12 +166,12 @@ def build_payload(items: list) -> dict:
 
 
 def main():
-    ap = argparse.ArgumentParser(description="Возвраты в пути: сколько денег висит и как долго")
+    ap = argparse.ArgumentParser(description="Какие возвраты требуют действия и сколько в них денег")
     ap.add_argument('--results-out', type=str, default=None,
                     help="Путь для структурированного JSON находок (для страницы /checks)")
     args = ap.parse_args()
 
-    print(f"{'=' * 64}\nВозвраты в пути: {datetime.now():%Y-%m-%d %H:%M:%S}\n{'=' * 64}")
+    print(f"{'=' * 64}\nЧто разобрать из возвратов: {datetime.now():%Y-%m-%d %H:%M:%S}\n{'=' * 64}")
     now = datetime.now()
     docs = fetch_pending()
     items = [x for x in (classify(d, now) for d in docs) if x]

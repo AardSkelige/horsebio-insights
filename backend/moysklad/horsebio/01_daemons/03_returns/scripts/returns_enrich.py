@@ -30,7 +30,8 @@ import requests as _requests
 
 sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), '..', '..', '..', '_shared'))
 from api_client import MOYSKLAD_TOKEN, BASE_URL  # noqa: E402
-from return_states import ensure_states, AT_PICKUP, AT_OUR_SITE, STUCK, GONE_TO_MP, DONE  # noqa: E402
+from return_states import (ensure_states, IN_TRANSIT, AT_PICKUP, AT_OUR_SITE,  # noqa: E402
+                           STUCK, GONE_TO_MP, DONE)
 
 MS_HEADERS = {
     'Authorization': f'Bearer {MOYSKLAD_TOKEN}',
@@ -218,53 +219,40 @@ def _print_summary(source, counts, deleted, errors, by_state):
 
 
 def _export_results(source, by_state, deleted, errors, path):
-    """Структурированный JSON для страницы /checks."""
-    pickup = by_state.get(AT_PICKUP, [])
-    at_site = by_state.get(AT_OUR_SITE, [])
-    stuck = by_state.get(STUCK, [])
-    gone = by_state.get(GONE_TO_MP, [])
+    """Структурированный JSON для страницы /checks.
+
+    Здесь намеренно нет перечисления документов. Задача этого робота служебная —
+    проставить статусы; что с возвратами делать людям, показывает проверка
+    «Что разобрать из возвратов», и дублировать её списками здесь значит плодить
+    два источника правды с разными цифрами. Показываем только работу робота
+    и то, с чем он не справился.
+    """
+    counted = {st: len(items) for st, items in by_state.items()}
+    total = sum(counted.values())
 
     stats = [
-        {"label": "Забрать в ПВЗ", "value": len(pickup), "tone": "warning" if pickup else "neutral",
-         **({"cat": "pickup"} if pickup else {})},
-        {"label": "Разобрать у нас", "value": len(at_site), "tone": "warning" if at_site else "neutral",
-         **({"cat": "at_site"} if at_site else {})},
-        {"label": "Зависли в пути", "value": len(stuck), "tone": "warning" if stuck else "neutral",
-         **({"cat": "stuck"} if stuck else {})},
-        {"label": "Едут к нам", "value": len(by_state.get('Едет к нам', [])), "tone": "neutral"},
-        {"label": "Ошибки", "value": len(errors), "tone": "critical" if errors else "neutral",
+        {"label": "Документов размечено", "value": total, "tone": "neutral"},
+        {"label": "Едут к нам", "value": counted.get(IN_TRANSIT, 0), "tone": "neutral"},
+        {"label": "Забрать в ПВЗ", "value": counted.get(AT_PICKUP, 0), "tone": "neutral"},
+        {"label": "У нас — разобрать", "value": counted.get(AT_OUR_SITE, 0), "tone": "neutral"},
+        {"label": "Завис в пути", "value": counted.get(STUCK, 0), "tone": "neutral"},
+        {"label": "Ошибки", "value": len(errors), "tone": "critical" if errors else "ok",
          **({"cat": "errors"} if errors else {})},
     ]
 
-    def cat(key, title, sev, items, detail):
-        if not items:
-            return None
-        return {"key": key, "title": title, "severity": sev, "kind": None, "ms_type": None,
-                "count": len(items),
-                "items": [{"key": "", "ms_id": i.get('id', ''), "object": f"Возврат {i['name']}",
-                           "severity": sev, "detail": detail(i)} for i in items]}
-
-    detail_of = lambda i: f"{i['detail']} · заказ №{i['order']}"
-    categories = [c for c in [
-        cat("errors", "Ошибки", "critical", errors, lambda i: i['msg']),
-        cat("pickup", "Лежат в пункте выдачи — забрать", "important", pickup, detail_of),
-        # Разобрать коробку и провести документ — обычная работа склада, а не сбой.
-        # В счётчик проблем не идёт, иначе карточка кричит на каждый штатный возврат.
-        cat("at_site", "Товар у нас — проверить и провести", "ok", at_site, detail_of),
-        cat("stuck", f"Зависли дольше {WARN_DAYS} дн — писать в поддержку", "important", stuck, detail_of),
-        cat("gone", "Ушли на склад маркетплейса — к нам не приедут", "ok", gone, detail_of),
-        cat("deleted", "Удалены — осели на складе маркетплейса", "ok", deleted, detail_of),
-    ] if c]
+    categories = []
+    if errors:
+        categories.append({
+            "key": "errors", "title": "Не смог проставить статус", "severity": "critical",
+            "kind": None, "ms_type": None, "count": len(errors),
+            "items": [{"key": "", "ms_id": "", "object": f"Возврат {e['name']}",
+                       "severity": "critical", "detail": e['msg']} for e in errors],
+        })
 
     payload = {
         "generated_at": datetime.now().isoformat(timespec="seconds"), "params": {},
-        # «Проблема» — только то, что требует нештатного действия: съездить за
-        # коробкой, пока не сгорела, или разбираться с маркетплейсом. Штатный
-        # разбор и осевшее у МП сюда не входят.
-        "summary": {"critical": len(errors),
-                    "important": len(pickup) + len(stuck),
-                    "warnings": 0,
-                    "ok": len(at_site) + len(gone) + len(deleted), "stats": stats},
+        "summary": {"critical": len(errors), "important": 0, "warnings": 0,
+                    "ok": total, "stats": stats},
         "categories": categories,
     }
     with open(path, "w", encoding="utf-8") as f:
