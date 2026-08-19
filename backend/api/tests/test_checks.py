@@ -1,9 +1,11 @@
 """
 Tests for /api/checks/ endpoints (дашборд проверок).
 """
+import os
+import tempfile
 from datetime import timedelta
 
-from django.test import TestCase, Client
+from django.test import TestCase, Client, SimpleTestCase, override_settings
 from django.urls import reverse
 from django.utils import timezone
 from django.contrib.auth.models import User
@@ -12,6 +14,7 @@ from api.models import CheckRunResult, HealthCheckException
 from api.services.health_checks import (
     EXPIRE_DAYS, cleanup_expired_exceptions, cleanup_resolved_deviations,
 )
+from api.views import scripts_monitor
 from api.views.scripts_monitor import HEALTH_CHECK_SCRIPT_ID
 from api.views.checks import _parse_progress
 
@@ -277,3 +280,42 @@ class ParseProgressTests(TestCase):
         p = _parse_progress(content)
         self.assertEqual(p['step'], {'n': None, 'total': None, 'title': 'Статус: Отменен'})
         self.assertIsNone(p['item'])
+
+
+class ScriptLogIsolationTests(SimpleTestCase):
+    """Логи скриптов, чей id — префикс другого id, не должны смешиваться.
+
+    horsebio_returns и horsebio_returns_ozon_enrich: по маске '{id}_*.log'
+    первый забирал запуски второго в свою историю и удалял собственные логи
+    как «старые», из-за чего история запусков была пуста.
+    """
+
+    def _touch(self, directory, name):
+        path = os.path.join(directory, name)
+        with open(path, 'w') as f:
+            f.write('log\n')
+        return path
+
+    def test_runs_of_prefix_named_script_are_not_mixed(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            self._touch(tmp, 'horsebio_returns_2026-08-19_14-20-46.log')
+            self._touch(tmp, 'horsebio_returns_ozon_enrich_2026-08-19_14-15-01.log')
+
+            with override_settings(SCRIPTS_LOGS_DIR=tmp):
+                runs = scripts_monitor._get_runs('horsebio_returns')
+
+            self.assertEqual([r['run_id'] for r in runs], ['2026-08-19_14-20-46'])
+
+    def test_cleanup_keeps_own_logs_and_spares_other_scripts(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            own = self._touch(tmp, 'horsebio_returns_2026-08-19_14-20-46.log')
+            other = self._touch(tmp, 'horsebio_returns_ozon_enrich_2026-08-19_14-15-01.log')
+            # Чужих логов заведомо больше лимита в 20 — раньше они вытесняли свой.
+            for i in range(25):
+                self._touch(tmp, f'horsebio_returns_wb_enrich_2026-08-{i + 1:02d}_09-30-00.log')
+
+            with override_settings(SCRIPTS_LOGS_DIR=tmp):
+                scripts_monitor._cleanup_old_logs('horsebio_returns')
+
+            self.assertTrue(os.path.exists(own))
+            self.assertTrue(os.path.exists(other))

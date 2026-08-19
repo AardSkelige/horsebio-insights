@@ -256,6 +256,12 @@ def _logs_dir():
     return getattr(settings, 'SCRIPTS_LOGS_DIR', '/app/scripts_logs')
 
 
+# Маска даты в имени лога: {script_id}_2026-08-19_14-20-46.log. Нужна именно
+# маска, а не '*': id одного скрипта бывает префиксом другого (horsebio_returns
+# и horsebio_returns_ozon_enrich), и по '*' они разбирают логи друг друга.
+_RUN_ID_GLOB = '????-??-??_??-??-??'
+
+
 def _pid_file(script_id):
     return os.path.join(_logs_dir(), f'{script_id}.pid')
 
@@ -321,7 +327,7 @@ def _get_runs(script_id):
     """Возвращает список запусков (сортировка: новые первыми).
     Каждый запуск содержит флаг has_changes — отличается ли содержимое от предыдущего.
     """
-    pattern = os.path.join(_logs_dir(), f'{script_id}_*.log')
+    pattern = os.path.join(_logs_dir(), f'{script_id}_{_RUN_ID_GLOB}.log')
     files = sorted(glob.glob(pattern), reverse=True)[:20]
     running_now = _is_running(script_id)
     runs = []
@@ -537,7 +543,7 @@ def _process_terminal_output(text):
 
 
 def _cleanup_old_logs(script_id):
-    pattern = os.path.join(_logs_dir(), f'{script_id}_*.log')
+    pattern = os.path.join(_logs_dir(), f'{script_id}_{_RUN_ID_GLOB}.log')
     files = sorted(glob.glob(pattern))
     for old in files[:-20]:
         try:
