@@ -4,7 +4,7 @@ Provides common pagination and request methods used by all mixins.
 """
 from typing import Any, Callable, Dict, List, Optional
 
-import requests
+from msapi import http as ms_http
 
 from ..logger import setup_logger
 
@@ -21,7 +21,7 @@ class PaginationMixin:
     Requires the class to have:
         - self.headers: dict with Authorization header
         - BASE_URL: class attribute with API base URL
-        - self.get(): method for making GET requests (optional, falls back to requests.get)
+        - self.get(): method for making GET requests (optional, falls back to ms_http)
 
     Example usage:
         class ShipmentsMixin(PaginationMixin):
@@ -75,16 +75,11 @@ class PaginationMixin:
             page_params['offset'] = offset
 
             try:
-                # Use self.get() if available (with retry logic), else use requests.get.
+                # Use self.get() if available, else the shared rate-limited client.
                 if hasattr(self, 'get'):
                     response = self.get(url, headers=self.headers, params=page_params)
                 else:
-                    response = requests.get(
-                        url,
-                        headers=self.headers,
-                        params=page_params,
-                        timeout=60,
-                    )
+                    response = ms_http.get(url, headers=self.headers, params=page_params)
 
                 # Keep this check even for clients whose get() normally performs it.
                 # It also makes the contract safe for alternative clients and tests.
@@ -143,7 +138,7 @@ class PaginationMixin:
             if hasattr(self, 'get'):
                 response = self.get(url, headers=self.headers, params=params)
             else:
-                response = requests.get(url, headers=self.headers, params=params, timeout=60)
+                response = ms_http.get(url, headers=self.headers, params=params)
 
             response.raise_for_status()
             data = response.json()

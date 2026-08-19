@@ -20,10 +20,11 @@ UUID статусов не хардкодим: ищем по имени, соз�
 import os
 import sys
 import argparse
-import requests as _requests
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', '..', '..', '_shared'))
 from api_client import MOYSKLAD_TOKEN, BASE_URL  # noqa: E402
+# Запросы к МойСклад идут через общий слой: ожидание лимита, 429, повторы.
+from msapi import http as ms_http  # noqa: E402
 
 MS_HEADERS = {
     'Authorization': f'Bearer {MOYSKLAD_TOKEN}',
@@ -61,7 +62,7 @@ STATE_DEFS = [
 
 def fetch_states() -> dict:
     """Имя статуса → его объект (включая meta). Пусто, если статусов нет."""
-    r = _requests.get(METADATA_URL, headers=MS_HEADERS, timeout=30)
+    r = ms_http.get(METADATA_URL, headers=MS_HEADERS, timeout=30)
     r.raise_for_status()
     return {s['name']: s for s in r.json().get('states', [])}
 
@@ -74,7 +75,7 @@ def ensure_states(create: bool = True) -> dict:
             continue
         if not create:
             continue
-        r = _requests.post(STATES_URL, headers=MS_HEADERS, timeout=30,
+        r = ms_http.post(STATES_URL, headers=MS_HEADERS, timeout=30,
                            json={'name': name, 'color': color, 'stateType': state_type})
         if r.status_code not in (200, 201):
             raise RuntimeError(f"не удалось создать статус «{name}»: {r.status_code} {r.text[:200]}")

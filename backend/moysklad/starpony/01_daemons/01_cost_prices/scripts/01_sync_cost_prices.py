@@ -18,12 +18,13 @@ import os
 import time
 import json
 import argparse
-import requests
 from datetime import datetime
 from pathlib import Path
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', '..', '..', '_shared'))
 from api_client import MOYSKLAD_TOKEN, BASE_URL
+# Запросы к МойСклад идут через общий слой: ожидание лимита, 429, повторы.
+from msapi import http as ms_http  # noqa: E402
 
 HEADERS = {
     "Authorization": f"Bearer {MOYSKLAD_TOKEN}",
@@ -63,7 +64,7 @@ def get_all_pages(endpoint: str, params: dict = None) -> list:
         p = (params or {}).copy()
         p["limit"] = 1000
         p["offset"] = offset
-        resp = requests.get(f"{BASE_URL}{endpoint}", headers=HEADERS, params=p, timeout=60)
+        resp = ms_http.get(f"{BASE_URL}{endpoint}", headers=HEADERS, params=p, timeout=60)
         resp.raise_for_status()
         rows = resp.json().get("rows", [])
         all_rows.extend(rows)
@@ -76,7 +77,7 @@ def get_all_pages(endpoint: str, params: dict = None) -> list:
 
 def get_cost_price_type() -> dict:
     """Найти тип цены 'Себестоимость' и вернуть его мету."""
-    types = requests.get(
+    types = ms_http.get(
         f"{BASE_URL}/context/companysettings/pricetype",
         headers=HEADERS, timeout=30
     ).json()
@@ -87,7 +88,7 @@ def get_cost_price_type() -> dict:
 
 
 def get_rub_currency_meta() -> dict:
-    resp = requests.get(f"{BASE_URL}/entity/currency", headers=HEADERS, timeout=30)
+    resp = ms_http.get(f"{BASE_URL}/entity/currency", headers=HEADERS, timeout=30)
     resp.raise_for_status()
     for c in resp.json().get("rows", []):
         if c.get("default"):
@@ -96,7 +97,7 @@ def get_rub_currency_meta() -> dict:
 
 
 def get_date_field_meta() -> dict | None:
-    resp = requests.get(
+    resp = ms_http.get(
         f"{BASE_URL}/entity/product/metadata/attributes",
         headers=HEADERS, timeout=30
     )
@@ -113,7 +114,7 @@ def get_all_products() -> dict:
     offset = 0
     while True:
         url = f"{BASE_URL}/entity/product?limit=1000&offset={offset}"
-        resp = requests.get(url, headers=HEADERS, timeout=60)
+        resp = ms_http.get(url, headers=HEADERS, timeout=60)
         resp.raise_for_status()
         rows = resp.json().get("rows", [])
         all_products.extend(rows)
@@ -160,7 +161,7 @@ def update_product_cost_price(
     if date_field_meta:
         payload["attributes"] = [{"meta": date_field_meta, "value": now_str}]
 
-    resp = requests.put(
+    resp = ms_http.put(
         f"{BASE_URL}/entity/product/{product_id}",
         headers=HEADERS, json=payload, timeout=30
     )

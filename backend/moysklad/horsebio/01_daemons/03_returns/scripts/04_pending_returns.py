@@ -32,11 +32,12 @@ import re
 import sys
 from datetime import datetime, timedelta
 
-import requests as _requests
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', '..', '..', '_shared'))
 from api_client import MOYSKLAD_TOKEN, BASE_URL  # noqa: E402
+# Запросы к МойСклад идут через общий слой: ожидание лимита, 429, повторы.
+from msapi import http as ms_http  # noqa: E402
 from return_states import AT_PICKUP, AT_OUR_SITE, STUCK, GONE_TO_MP, DONE  # noqa: E402
 
 MS_HEADERS = {
@@ -60,7 +61,7 @@ def fetch_pending() -> list:
     date_from = (datetime.now() - timedelta(days=MONTHS_BACK * 30)).strftime('%Y-%m-%d %H:%M:%S')
     docs, offset = [], 0
     while True:
-        r = _requests.get(f'{BASE_URL}/entity/salesreturn', headers=MS_HEADERS, params={
+        r = ms_http.get(f'{BASE_URL}/entity/salesreturn', headers=MS_HEADERS, params={
             'filter': f'moment>={date_from};applicable=false',
             'order': 'moment,asc',
             'expand': 'agent,state',

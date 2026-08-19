@@ -19,12 +19,13 @@ import os
 import time
 import json
 import argparse
-import requests
 from datetime import datetime, timedelta
 from pathlib import Path
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', '..', '..', '_shared'))
 from api_client import MOYSKLAD_TOKEN, BASE_URL
+# Запросы к МойСклад идут через общий слой: ожидание лимита, 429, повторы.
+from msapi import http as ms_http  # noqa: E402
 
 HEADERS = {
     "Authorization": f"Bearer {MOYSKLAD_TOKEN}",
@@ -102,7 +103,7 @@ def save_state(state: dict):
 # === API ===
 
 def get_rub_currency_meta() -> dict:
-    resp = requests.get(f"{BASE_URL}/entity/currency", headers=HEADERS, timeout=30)
+    resp = ms_http.get(f"{BASE_URL}/entity/currency", headers=HEADERS, timeout=30)
     resp.raise_for_status()
     for c in resp.json().get("rows", []):
         if c.get("default"):
@@ -118,7 +119,7 @@ def get_all_pages(endpoint: str, params: dict = None) -> list[dict]:
         p = (params or {}).copy()
         p["limit"] = limit
         p["offset"] = offset
-        resp = requests.get(f"{BASE_URL}{endpoint}", headers=HEADERS, params=p, timeout=60)
+        resp = ms_http.get(f"{BASE_URL}{endpoint}", headers=HEADERS, params=p, timeout=60)
         resp.raise_for_status()
         rows = resp.json().get("rows", [])
         all_rows.extend(rows)
@@ -131,7 +132,7 @@ def get_all_pages(endpoint: str, params: dict = None) -> list[dict]:
 
 def get_custom_field_meta(field_name: str) -> dict | None:
     """Вернуть meta доп. поля по имени (нужно для обновления через API)."""
-    resp = requests.get(f"{BASE_URL}/entity/product/metadata/attributes", headers=HEADERS, timeout=30)
+    resp = ms_http.get(f"{BASE_URL}/entity/product/metadata/attributes", headers=HEADERS, timeout=30)
     resp.raise_for_status()
     for attr in resp.json().get("rows", []):
         if attr.get("name") == field_name:
@@ -190,7 +191,7 @@ def get_last_op_for_product(product_id: str) -> dict | None:
     """
     moment_from = (datetime.now() - timedelta(days=90)).strftime("%Y-%m-%d 00:00:00")
     try:
-        resp = requests.get(
+        resp = ms_http.get(
             f"{BASE_URL}/report/turnover/byoperations",
             headers=HEADERS,
             params={
@@ -257,7 +258,7 @@ def update_product_buy_price(product_id: str, price_kopecks: int,
     if attr_meta:
         payload["attributes"] = [{"meta": attr_meta, "value": now_ms}]
 
-    resp = requests.put(
+    resp = ms_http.put(
         f"{BASE_URL}/entity/product/{product_id}",
         headers=HEADERS, json=payload, timeout=30
     )

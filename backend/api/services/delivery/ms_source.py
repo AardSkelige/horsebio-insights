@@ -2,8 +2,8 @@
 
 Отдельный тонкий слой (а не общий ProductionHelper) — нужны ровно две вещи:
 позиции заказа покупателя и вес+габариты товара. МойСклад троттлит серии
-запросов (HTTP 429 отдаётся как JSON без данных), поэтому GET обязательно с
-обработкой 429/errors — иначе поля читаются как пустые (см. историю замеров).
+запросов, поэтому запросы идут через общий слой msapi.http (ожидание лимита,
+429, повторы), а тело с errors обрабатывается здесь — см. _get.
 """
 
 import os
@@ -13,6 +13,8 @@ from pathlib import Path
 
 import requests
 from dotenv import load_dotenv
+
+from msapi import http as ms_http
 
 load_dotenv(Path(__file__).resolve().parents[3] / ".env")  # backend/.env
 
@@ -33,22 +35,24 @@ class MoyskladError(Exception):
 
 
 def _get(url: str, params: dict | None = None) -> dict:
-    """GET с ретраем на сеть и на троттлинг (429 / тело с errors)."""
+    """GET к МойСклад. Лимит запросов, 429 и обрывы связи отрабатывает ms_http.
+
+    Здесь остаётся только то, чего общий слой не знает: МойСклад умеет ответить
+    200 с телом {"errors": [...]} — для калькулятора это тот же отказ, и такой
+    ответ надо повторить, иначе поля веса и габаритов читаются как пустые.
+    """
     last = None
-    for attempt in range(6):
+    for attempt in range(3):
         try:
-            r = requests.get(url, headers=_HEADERS, params=params, timeout=60)
-            if r.status_code == 429:
-                time.sleep(1.5 * (attempt + 1)); continue
-            data = r.json()
-            if isinstance(data, dict) and data.get("errors"):
-                last = data["errors"]
-                time.sleep(1.5 * (attempt + 1)); continue
-            return data
+            data = ms_http.get(url, headers=_HEADERS, params=params).json()
         except requests.RequestException as e:
-            last = str(e)
+            raise MoyskladError(f"МойСклад недоступен: {e}") from e
+        if isinstance(data, dict) and data.get("errors"):
+            last = data["errors"]
             time.sleep(1.5 * (attempt + 1))
-    raise MoyskladError(f"МойСклад недоступен: {last}")
+            continue
+        return data
+    raise MoyskladError(f"МойСклад вернул ошибку: {last}")
 
 
 def find_order(number_or_id: str) -> dict | None:

@@ -426,7 +426,7 @@ class FBOTests(BaseViewTestCase):
     """Tests for FBO analysis endpoints."""
 
     @patch('api.views.fbo.MoySkladAPIClient')
-    @patch('api.views.fbo.requests.get')
+    @patch('api.views.fbo.ms_http.get')
     def test_fbo_analysis_endpoint(self, mock_get, mock_client):
         """Test GET /api/analysis/fbo/ endpoint."""
         # Mock MoySklad API response
@@ -445,7 +445,7 @@ class FBOTests(BaseViewTestCase):
         # Should return 200 or handle external API error
         self.assertIn(response.status_code, [200, 500, 503])
 
-    @patch('api.views.fbo.requests.get')
+    @patch('api.views.fbo.ms_http.get')
     @patch('api.views.fbo._build_fbo_analysis_data')
     def test_fbo_export_endpoint(self, mock_analysis, mock_get):
         """Test GET /api/analysis/fbo/export/ endpoint."""

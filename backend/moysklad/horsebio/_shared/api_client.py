@@ -15,15 +15,22 @@
 
 import json
 import os
-import requests
-import concurrent.futures
+import sys
 from pathlib import Path
 from typing import Dict, List, Optional, Any, Tuple
 from datetime import datetime
 from dataclasses import dataclass
 from dotenv import load_dotenv
 
-load_dotenv(Path(__file__).resolve().parents[3] / '.env')
+_BACKEND_DIR = Path(__file__).resolve().parents[3]
+load_dotenv(_BACKEND_DIR / '.env')
+
+# backend/ в пути — отсюда берётся msapi, общий на скрипты и Django.
+# Скриптам, которые импортируют этот модуль, отдельно добавлять путь не нужно.
+if str(_BACKEND_DIR) not in sys.path:
+    sys.path.insert(0, str(_BACKEND_DIR))
+
+from msapi import http as ms_http  # noqa: E402
 
 # Конфигурация
 MOYSKLAD_TOKEN = os.getenv('MOYSKLAD_TOKEN')
@@ -75,28 +82,14 @@ class ProductionHelper:
     # === Базовые методы API ===
 
     def _get(self, endpoint: str, params: Optional[Dict] = None) -> Dict:
-        """GET запрос к API. При таймауте автоматически повторяет запрос."""
-        import time
-        url = f"{BASE_URL}{endpoint}"
-        while True:
-            with concurrent.futures.ThreadPoolExecutor(max_workers=1) as executor:
-                future = executor.submit(
-                    requests.get, url, headers=self.headers, params=params, timeout=10
-                )
-                try:
-                    response = future.result(timeout=10)
-                    break
-                except (concurrent.futures.TimeoutError,
-                        requests.exceptions.ConnectionError,
-                        requests.exceptions.Timeout):
-                    time.sleep(0.5)
+        """GET запрос к API. Ожидание лимита и повторы — в ms_http."""
+        response = ms_http.get(f"{BASE_URL}{endpoint}", headers=self.headers, params=params)
         response.raise_for_status()
         return response.json()
 
     def _post(self, endpoint: str, data: Dict) -> Dict:
         """POST запрос к API"""
-        url = f"{BASE_URL}{endpoint}"
-        response = requests.post(url, headers=self.headers, json=data, timeout=10)
+        response = ms_http.post(f"{BASE_URL}{endpoint}", headers=self.headers, json=data)
         if not response.ok:
             print(f"Ошибка API: {response.status_code}")
             print(f"Ответ: {response.text}")
@@ -105,8 +98,7 @@ class ProductionHelper:
 
     def _delete(self, endpoint: str) -> None:
         """DELETE запрос к API"""
-        url = f"{BASE_URL}{endpoint}"
-        response = requests.delete(url, headers=self.headers, timeout=10)
+        response = ms_http.delete(f"{BASE_URL}{endpoint}", headers=self.headers)
         if not response.ok:
             print(f"Ошибка API: {response.status_code}")
             print(f"Ответ: {response.text}")
@@ -114,8 +106,7 @@ class ProductionHelper:
 
     def _put(self, endpoint: str, data: Dict) -> Dict:
         """PUT запрос к API (обновление)"""
-        url = f"{BASE_URL}{endpoint}"
-        response = requests.put(url, headers=self.headers, json=data, timeout=10)
+        response = ms_http.put(f"{BASE_URL}{endpoint}", headers=self.headers, json=data)
         if not response.ok:
             print(f"Ошибка API: {response.status_code}")
             print(f"Ответ: {response.text}")

@@ -3,6 +3,8 @@ from rest_framework.decorators import api_view
 from datetime import datetime, timedelta
 import logging
 import requests
+
+from msapi import http as ms_http
 from django.utils import timezone
 from sync.moysklad import MoySkladAPIClient
 from core.models import ShipmentItem
@@ -47,7 +49,7 @@ def get_stock_info(client, assortments):
             "stockMode": "all"
         }
 
-        response = requests.get(url, headers=client.headers, params=params, timeout=30)
+        response = ms_http.get(url, headers=client.headers, params=params, timeout=30)
         response.raise_for_status()
         data = response.json()
 
@@ -65,7 +67,7 @@ def get_stock_info(client, assortments):
 def get_fbo_state_href(client):
     """Href статуса «FBO» из метаданных заказов покупателей"""
     url = f"{client.BASE_URL}/entity/customerorder/metadata"
-    response = requests.get(url, headers=client.headers, timeout=30)
+    response = ms_http.get(url, headers=client.headers, timeout=30)
     response.raise_for_status()
     for state in response.json().get('states', []):
         if state.get('name') == 'FBO':
@@ -88,7 +90,7 @@ def _build_fbo_analysis_data():
        )
 
        # Общее число заказов за период — лёгкий запрос без expand, только meta.size
-       response = requests.get(url, headers=client.headers,
+       response = ms_http.get(url, headers=client.headers,
                                params={"filter": moment_filter, "limit": 1},
                                timeout=30)
        response.raise_for_status()
@@ -115,7 +117,7 @@ def _build_fbo_analysis_data():
                "offset": offset,
                "expand": "state,agent,positions,positions.assortment,organization,store"
            }
-           response = requests.get(url, headers=client.headers, params=params, timeout=30)
+           response = ms_http.get(url, headers=client.headers, params=params, timeout=30)
            response.raise_for_status()
            rows = response.json().get('rows', [])
 

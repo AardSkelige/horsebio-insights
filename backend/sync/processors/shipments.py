@@ -280,7 +280,12 @@ class ShipmentProcessor:
                         ""
                     )
 
-                batch_size = 5
+                # Потолок МойСклад — 5 одновременных запросов на пользователя, но
+                # упираемся мы не в него, а в лимит единиц за 3 секунды: замер на
+                # батче из 5 дал 15,3 запроса за 3 с, что с 01.09.2026 (вес 3)
+                # означает 46 единиц при лимите 45. Три параллельных запроса дают
+                # запас и оставляют место интерфейсу, который ходит тем же токеном.
+                batch_size = 3
                 batches = [shipments_to_update[j:j + batch_size] for j in range(0, len(shipments_to_update), batch_size)]
 
                 for batch_idx, batch in enumerate(batches, 1):

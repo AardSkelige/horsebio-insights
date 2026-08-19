@@ -2,8 +2,9 @@
 Cash flow business logic services.
 Extracted from views/cash_flow.py for separation of concerns.
 """
-import requests
 from concurrent.futures import ThreadPoolExecutor
+
+from msapi import http as ms_http
 from django.conf import settings
 from openpyxl import Workbook
 from openpyxl.styles import Font, PatternFill, Border, Side
@@ -39,7 +40,7 @@ def _fetch_operation_pages(operation, filter_from, filter_to, headers):
         url = f"{BASE_URL}/entity/{operation}?filter=moment>={filter_from};moment<={filter_to}&limit={limit}&offset={offset}"
 
         try:
-            response = requests.get(url, headers=headers, timeout=TIMEOUT)
+            response = ms_http.get(url, headers=headers, timeout=TIMEOUT)
             response.raise_for_status()
             data = response.json()
         except Exception:
@@ -78,9 +79,11 @@ def get_operations_data(date_from, date_to):
     filter_from = date_from.replace('T', ' ').replace('.000', '')
     filter_to = date_to.replace('T', ' ').replace('.000', '')
 
-    # Типы операций независимы — грузим параллельно.
-    # МойСклад допускает до 5 одновременных запросов, держим запас.
-    with ThreadPoolExecutor(max_workers=4) as pool:
+    # Типы операций независимы — грузим параллельно. Потолок МойСклад — 5
+    # одновременных запросов на пользователя, и синхронизация данных может занимать
+    # часть из них, поэтому здесь держим 2: отчёт всё равно упирается в лимит
+    # запросов за 3 секунды, а не в число потоков.
+    with ThreadPoolExecutor(max_workers=2) as pool:
         results = pool.map(
             lambda op: (op, _fetch_operation_pages(op, filter_from, filter_to, headers)),
             operations,
@@ -98,7 +101,7 @@ def get_expense_items():
     expense_items = {}
 
     try:
-        response = requests.get(url, headers=headers, timeout=TIMEOUT)
+        response = ms_http.get(url, headers=headers, timeout=TIMEOUT)
         if response.status_code == 200:
             data = response.json()
             items = data.get('rows', [])
@@ -180,7 +183,7 @@ def get_sales_channels():
     url = BASE_URL + '/entity/saleschannel'
 
     try:
-        response = requests.get(url, headers=headers, timeout=TIMEOUT)
+        response = ms_http.get(url, headers=headers, timeout=TIMEOUT)
         if response.status_code == 200:
             data = response.json()
             channels = data.get('rows', [])
@@ -294,7 +297,7 @@ def get_counterparties_tags():
 
     while True:
         url = f"{BASE_URL}/entity/counterparty?limit={limit}&offset={offset}"
-        response = requests.get(url, headers=headers, timeout=TIMEOUT)
+        response = ms_http.get(url, headers=headers, timeout=TIMEOUT)
         response.raise_for_status()
         rows = response.json().get('rows', [])
 
@@ -505,7 +508,7 @@ def get_earliest_operation_date():
         url = f"{BASE_URL}/entity/{operation}?limit=1&order=moment,asc"
 
         try:
-            response = requests.get(url, headers=headers, timeout=TIMEOUT)
+            response = ms_http.get(url, headers=headers, timeout=TIMEOUT)
             if response.status_code == 200:
                 data = response.json()
                 rows = data.get('rows', [])

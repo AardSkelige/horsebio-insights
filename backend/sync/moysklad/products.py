@@ -3,6 +3,8 @@ MoySklad API methods for working with products and materials.
 """
 import requests
 
+from msapi import http as ms_http
+
 from .base_client import PaginationMixin
 from ..logger import setup_logger
 
@@ -27,12 +29,12 @@ class ProductsMixin(PaginationMixin):
             # Try to get as regular product
             url = f"{self.BASE_URL}/entity/product/{product_id}"
             params = {'expand': 'uom'}
-            response = requests.get(url, headers=self.headers, params=params, timeout=60)
+            response = ms_http.get(url, headers=self.headers, params=params)
 
             # If not found, try as variant
             if response.status_code == 404:
                 url = f"{self.BASE_URL}/entity/variant/{product_id}"
-                variant_response = requests.get(url, headers=self.headers, params=params, timeout=60)
+                variant_response = ms_http.get(url, headers=self.headers, params=params)
 
                 if variant_response.status_code == 404:
                     return {}
@@ -43,9 +45,7 @@ class ProductsMixin(PaginationMixin):
                 # Get parent product info
                 if 'product' in product_data:
                     product_url = product_data['product']['meta']['href']
-                    product_response = requests.get(
-                        product_url, headers=self.headers, params=params, timeout=60
-                    )
+                    product_response = ms_http.get(product_url, headers=self.headers, params=params)
                     product_response.raise_for_status()
                     parent_product = product_response.json()
 

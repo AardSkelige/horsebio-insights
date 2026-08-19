@@ -26,10 +26,11 @@ import time
 from collections import defaultdict
 from datetime import datetime
 
-import requests as _requests
 
 sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), '..', '..', '..', '_shared'))
 from api_client import MOYSKLAD_TOKEN, BASE_URL  # noqa: E402
+# Запросы к МойСклад идут через общий слой: ожидание лимита, 429, повторы.
+from msapi import http as ms_http  # noqa: E402
 from return_states import (ensure_states, IN_TRANSIT, AT_PICKUP, AT_OUR_SITE,  # noqa: E402
                            STUCK, GONE_TO_MP, DONE)
 
@@ -48,7 +49,7 @@ def fetch_drafts(agent_names) -> list:
     """Непроведённые возвраты нужных агентов с отгрузкой, заказом и статусом."""
     docs, offset = [], 0
     while True:
-        r = _requests.get(f'{BASE_URL}/entity/salesreturn', headers=MS_HEADERS, params={
+        r = ms_http.get(f'{BASE_URL}/entity/salesreturn', headers=MS_HEADERS, params={
             'filter': 'applicable=false',
             'expand': 'demand.customerOrder,agent,state',
             'limit': 100, 'offset': offset,
@@ -85,14 +86,14 @@ def delete_dead_draft(doc, order, tail, order_mark, dry_run) -> str | None:
     note = build_order_note(order.get('description') or '', tail, order_mark)
     if order.get('id') and note != (order.get('description') or ''):
         try:
-            r = _requests.put(f"{BASE_URL}/entity/customerorder/{order['id']}",
+            r = ms_http.put(f"{BASE_URL}/entity/customerorder/{order['id']}",
                               headers=MS_HEADERS, json={'description': note}, timeout=30)
             if r.status_code != 200:
                 print(f"    WARN пометка заказа {r.status_code}: {r.text[:120]}")
         except Exception as e:
             print(f"    WARN пометка заказа: {e}")
     try:
-        r = _requests.delete(f"{BASE_URL}/entity/salesreturn/{doc['id']}",
+        r = ms_http.delete(f"{BASE_URL}/entity/salesreturn/{doc['id']}",
                              headers=MS_HEADERS, timeout=30)
         if r.status_code not in (200, 204):
             return f"удаление {r.status_code}: {r.text[:100]}"
@@ -181,7 +182,7 @@ def run(source, dry_run: bool = False, results_out: str | None = None, days_back
             counts['updated'] += 1
             continue
         try:
-            resp = _requests.put(f"{BASE_URL}/entity/salesreturn/{d['id']}",
+            resp = ms_http.put(f"{BASE_URL}/entity/salesreturn/{d['id']}",
                                  headers=MS_HEADERS, json=payload, timeout=30)
             if resp.status_code == 200:
                 counts['updated'] += 1

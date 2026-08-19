@@ -11,7 +11,7 @@ from api.views.fbo import get_stock_info
 
 
 class CashFlowPaginationRegressionTests(SimpleTestCase):
-    @patch('api.services.cash_flow.requests.get')
+    @patch('api.services.cash_flow.ms_http.get')
     def test_page_error_is_raised_instead_of_returning_partial_operations(self, mock_get):
         first_page = MagicMock()
         first_page.json.return_value = {'rows': [{'id': str(i)} for i in range(1000)]}
@@ -55,7 +55,7 @@ class CashFlowEndpointRegressionTests(TestCase):
 
 
 class FBOStockRegressionTests(SimpleTestCase):
-    @patch('api.views.fbo.requests.get')
+    @patch('api.views.fbo.ms_http.get')
     def test_batch_error_is_raised_instead_of_turning_all_stock_into_zero(self, mock_get):
         first_batch = MagicMock()
         first_batch.json.return_value = {

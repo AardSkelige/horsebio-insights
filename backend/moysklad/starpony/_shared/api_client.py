@@ -8,13 +8,20 @@
 """
 
 import os
+import sys
 import time
-import requests
 from pathlib import Path
 from typing import Dict, List, Optional, Any
 from dotenv import load_dotenv
 
-load_dotenv(Path(__file__).resolve().parents[3] / '.env')
+_BACKEND_DIR = Path(__file__).resolve().parents[3]
+load_dotenv(_BACKEND_DIR / '.env')
+
+# backend/ в пути — отсюда берётся msapi, общий на скрипты и Django.
+if str(_BACKEND_DIR) not in sys.path:
+    sys.path.insert(0, str(_BACKEND_DIR))
+
+from msapi import http as ms_http  # noqa: E402
 
 MOYSKLAD_TOKEN = os.getenv('STARPONY_MOYSKLAD_TOKEN')
 if not MOYSKLAD_TOKEN:
@@ -40,22 +47,19 @@ class MoySkladClient:
         }
 
     def _get(self, endpoint: str, params: Optional[Dict] = None) -> Dict:
-        url = f"{BASE_URL}{endpoint}"
-        resp = requests.get(url, headers=self.headers, params=params, timeout=30)
+        resp = ms_http.get(f"{BASE_URL}{endpoint}", headers=self.headers, params=params)
         resp.raise_for_status()
         return resp.json()
 
     def _post(self, endpoint: str, data: Any) -> Any:
-        url = f"{BASE_URL}{endpoint}"
-        resp = requests.post(url, headers=self.headers, json=data, timeout=30)
+        resp = ms_http.post(f"{BASE_URL}{endpoint}", headers=self.headers, json=data)
         if not resp.ok:
             print(f"  Ошибка {resp.status_code}: {resp.text[:300]}")
         resp.raise_for_status()
         return resp.json()
 
     def _put(self, endpoint: str, data: Dict) -> Dict:
-        url = f"{BASE_URL}{endpoint}"
-        resp = requests.put(url, headers=self.headers, json=data, timeout=30)
+        resp = ms_http.put(f"{BASE_URL}{endpoint}", headers=self.headers, json=data)
         if not resp.ok:
             print(f"  Ошибка {resp.status_code}: {resp.text[:300]}")
         resp.raise_for_status()

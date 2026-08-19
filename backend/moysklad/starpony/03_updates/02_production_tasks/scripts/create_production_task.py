@@ -17,12 +17,18 @@
 
 import os
 import sys
-import requests
 from pathlib import Path
 from collections import defaultdict
 from dotenv import load_dotenv
 
-load_dotenv(Path(__file__).resolve().parents[5] / '.env')
+_BACKEND_DIR = Path(__file__).resolve().parents[5]
+load_dotenv(_BACKEND_DIR / '.env')
+
+# backend/ в пути — отсюда берётся msapi (ожидание лимита, 429, повторы).
+if str(_BACKEND_DIR) not in sys.path:
+    sys.path.insert(0, str(_BACKEND_DIR))
+
+from msapi import http as ms_http  # noqa: E402
 
 TOKEN = os.getenv('STARPONY_MOYSKLAD_TOKEN')
 if not TOKEN:
@@ -61,7 +67,7 @@ def build_plan():
     plan = {}
     offset = 0
     while True:
-        r = requests.get(f'{BASE}/entity/processingplan', headers=H,
+        r = ms_http.get(f'{BASE}/entity/processingplan', headers=H,
                          params={'limit': 100, 'offset': offset,
                                  'expand': 'products.assortment'}, timeout=TIMEOUT)
         rows = r.json().get('rows', [])
@@ -82,7 +88,7 @@ def build_stock():
     store_href = f'{BASE}/entity/store/{STORE_MAT}'
     offset = 0
     while True:
-        r = requests.get(f'{BASE}/report/stock/all', headers=H,
+        r = ms_http.get(f'{BASE}/report/stock/all', headers=H,
                          params={'filter': f'store={store_href}',
                                  'limit': 1000, 'offset': offset}, timeout=TIMEOUT)
         rows = r.json().get('rows', [])
@@ -97,7 +103,7 @@ def build_stock():
 
 def get_all_open_orders():
     """Вернуть все открытые заказы [{name, id, agent_name}]."""
-    r = requests.get(f'{BASE}/entity/customerorder', headers=H,
+    r = ms_http.get(f'{BASE}/entity/customerorder', headers=H,
                      params={'limit': 100, 'expand': 'state,agent', 'order': 'moment,asc'}, timeout=TIMEOUT)
     result = []
     for o in r.json().get('rows', []):
@@ -112,7 +118,7 @@ def get_all_open_orders():
 
 def find_order(name):
     """Найти заказ по номеру."""
-    r = requests.get(f'{BASE}/entity/customerorder', headers=H,
+    r = ms_http.get(f'{BASE}/entity/customerorder', headers=H,
                      params={'filter': f'name={name}', 'limit': 1, 'expand': 'agent,state'}, timeout=TIMEOUT)
     rows = r.json().get('rows', [])
     if not rows:
@@ -123,11 +129,11 @@ def find_order(name):
 
 def has_production_task(order_id):
     """Проверить есть ли уже ПЗ у заказа. Возвращает dict {id, name, state} или None."""
-    r = requests.get(f'{BASE}/entity/customerorder/{order_id}', headers=H, timeout=TIMEOUT)
+    r = ms_http.get(f'{BASE}/entity/customerorder/{order_id}', headers=H, timeout=TIMEOUT)
     tasks = r.json().get('productionTasks', [])
     if not tasks:
         return None
-    rt = requests.get(tasks[0]['meta']['href'], headers=H,
+    rt = ms_http.get(tasks[0]['meta']['href'], headers=H,
                       params={'expand': 'state,customerOrders'}, timeout=TIMEOUT)
     d = rt.json()
     return {
@@ -141,7 +147,7 @@ def has_production_task(order_id):
 
 def get_positions(order_id):
     """Получить позиции заказа: [(code, name, qty)]."""
-    r = requests.get(f'{BASE}/entity/customerorder/{order_id}/positions',
+    r = ms_http.get(f'{BASE}/entity/customerorder/{order_id}/positions',
                      headers=H, params={'expand': 'assortment', 'limit': 100}, timeout=TIMEOUT)
     return [
         (p['assortment'].get('code', ''), p['assortment'].get('name', ''), int(p['quantity']))
@@ -151,7 +157,7 @@ def get_positions(order_id):
 
 def get_existing_task_rows(task_id):
     """Вернуть текущие строки ПЗ: {plan_id: {row_id, volume}}."""
-    r = requests.get(f'{BASE}/entity/productiontask/{task_id}/productionrows',
+    r = ms_http.get(f'{BASE}/entity/productiontask/{task_id}/productionrows',
                      headers=H, params={'expand': 'processingPlan', 'limit': 100}, timeout=TIMEOUT)
     result = {}
     for row in r.json().get('rows', []):
@@ -166,12 +172,12 @@ def get_existing_task_rows(task_id):
 def get_task_materials(task_id):
     """Вернуть {material_id: {code, name, qty}} для одного ПЗ."""
     materials = defaultdict(lambda: {'code': '', 'name': '', 'qty': 0.0})
-    rows_r = requests.get(f'{BASE}/entity/productiontask/{task_id}/productionrows',
+    rows_r = ms_http.get(f'{BASE}/entity/productiontask/{task_id}/productionrows',
                           headers=H, params={'expand': 'processingPlan', 'limit': 100}, timeout=TIMEOUT)
     for row in rows_r.json().get('rows', []):
         plan_id = row['processingPlan']['id']
         volume = row['productionVolume']
-        mats_r = requests.get(f'{BASE}/entity/processingplan/{plan_id}/materials',
+        mats_r = ms_http.get(f'{BASE}/entity/processingplan/{plan_id}/materials',
                                headers=H, params={'expand': 'assortment', 'limit': 100}, timeout=TIMEOUT)
         for mat in mats_r.json().get('rows', []):
             a = mat.get('assortment', {})
@@ -248,7 +254,7 @@ def audit_all_tasks(plan):
     print('🔎 Аудит: сверка заказов с производственными заданиями')
     print('═' * 70)
 
-    r = requests.get(f'{BASE}/entity/customerorder', headers=H,
+    r = ms_http.get(f'{BASE}/entity/customerorder', headers=H,
                      params={'limit': 100, 'expand': 'state,agent', 'order': 'moment,asc'}, timeout=TIMEOUT)
     all_orders = r.json().get('rows', [])
 
@@ -256,7 +262,7 @@ def audit_all_tasks(plan):
     closed_issues = []
 
     for o in all_orders:
-        r2 = requests.get(f'{BASE}/entity/customerorder/{o["id"]}', headers=H, timeout=TIMEOUT)
+        r2 = ms_http.get(f'{BASE}/entity/customerorder/{o["id"]}', headers=H, timeout=TIMEOUT)
         tasks = r2.json().get('productionTasks', [])
         if not tasks:
             continue
@@ -272,14 +278,14 @@ def audit_all_tasks(plan):
         total_pz = defaultdict(float)  # plan_id → суммарный объём
         for t in tasks:
             tid = href_to_id(t['meta']['href'])
-            rt = requests.get(f'{BASE}/entity/productiontask/{tid}/productionrows',
+            rt = ms_http.get(f'{BASE}/entity/productiontask/{tid}/productionrows',
                               headers=H, params={'expand': 'processingPlan', 'limit': 100}, timeout=TIMEOUT)
             for row in rt.json().get('rows', []):
                 pid = row['processingPlan']['id']
                 total_pz[pid] += row['productionVolume']
 
         # Ожидаемые объёмы из позиций заказа
-        rp = requests.get(f'{BASE}/entity/customerorder/{o["id"]}/positions',
+        rp = ms_http.get(f'{BASE}/entity/customerorder/{o["id"]}/positions',
                           headers=H, params={'expand': 'assortment', 'limit': 100}, timeout=TIMEOUT)
         expected = {}
         skipped = []
@@ -418,7 +424,7 @@ def update_existing_task(task, new_orders, plan, dry_run=False):
         if plan_id in existing_rows:
             row_id = existing_rows[plan_id]['row_id']
             new_vol = existing_rows[plan_id]['volume'] + add_qty
-            r = requests.put(
+            r = ms_http.put(
                 f'{BASE}/entity/productiontask/{task_id}/productionrows/{row_id}',
                 headers=H,
                 json={'productionVolume': new_vol},
@@ -434,7 +440,7 @@ def update_existing_task(task, new_orders, plan, dry_run=False):
             })
 
     if new_rows_to_post:
-        r = requests.post(
+        r = ms_http.post(
             f'{BASE}/entity/productiontask/{task_id}/productionrows',
             headers=H,
             json=new_rows_to_post,
@@ -465,7 +471,7 @@ def update_existing_task(task, new_orders, plan, dry_run=False):
     else:
         new_desc = existing_desc + f', {new_additions}.'
 
-    r = requests.put(
+    r = ms_http.put(
         f'{BASE}/entity/productiontask/{task_id}',
         headers=H,
         json={
@@ -568,7 +574,7 @@ def create_combined_task(orders, plan, dry_run=False, force_new=False):
         'productionRows': rows
     }
 
-    r = requests.post(f'{BASE}/entity/productiontask', headers=H, json=payload, timeout=TIMEOUT)
+    r = ms_http.post(f'{BASE}/entity/productiontask', headers=H, json=payload, timeout=TIMEOUT)
     if r.ok:
         d = r.json()
         print(f'\n✅ ПЗ {d["name"]} создано | {len(without_task)} заказов | {len(rows)} техкарт')

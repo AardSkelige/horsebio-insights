@@ -31,11 +31,12 @@ import time
 from datetime import datetime, timedelta
 from pathlib import Path
 
-import requests as _requests
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', '..', '..', '_shared'))
 from api_client import MOYSKLAD_TOKEN, BASE_URL  # noqa: E402
+# Запросы к МойСклад идут через общий слой: ожидание лимита, 429, повторы.
+from msapi import http as ms_http  # noqa: E402
 
 MS_HEADERS = {
     'Authorization': f'Bearer {MOYSKLAD_TOKEN}',
@@ -65,7 +66,7 @@ def fetch_posted() -> list:
     date_from = (datetime.now() - timedelta(days=MONTHS_BACK * 30)).strftime('%Y-%m-%d %H:%M:%S')
     docs, offset = [], 0
     while True:
-        r = _requests.get(f'{BASE_URL}/entity/salesreturn', headers=MS_HEADERS, params={
+        r = ms_http.get(f'{BASE_URL}/entity/salesreturn', headers=MS_HEADERS, params={
             'filter': f'moment>={date_from};applicable=true',
             'order': 'moment,desc', 'expand': 'agent',
             'limit': 100, 'offset': offset,
@@ -81,7 +82,7 @@ def fetch_posted() -> list:
 
 def zero_cost_positions(doc_id: str) -> tuple:
     """Позиции с нулевой себестоимостью и общее число позиций."""
-    r = _requests.get(f'{BASE_URL}/entity/salesreturn/{doc_id}/positions', headers=MS_HEADERS,
+    r = ms_http.get(f'{BASE_URL}/entity/salesreturn/{doc_id}/positions', headers=MS_HEADERS,
                       params={'limit': 100, 'expand': 'assortment'}, timeout=60)
     r.raise_for_status()
     rows = r.json().get('rows', [])

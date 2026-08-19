@@ -21,13 +21,14 @@ import time
 import argparse
 import sys
 import os
-import requests as _requests
 from datetime import datetime
 from pathlib import Path
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', '..', '..', '_shared'))
 from api_client import ProductionHelper, MOYSKLAD_TOKEN, BASE_URL
+# Запросы к МойСклад идут через общий слой: ожидание лимита, 429, повторы.
+from msapi import http as ms_http  # noqa: E402
 import ozon_returns as ozr
 import wb_returns as wbr
 
@@ -106,7 +107,7 @@ class ReturnsMonitor:
                 ("limit", "100"),
                 ("offset", str(offset)),
             ]
-            response = _requests.get(
+            response = ms_http.get(
                 f"{BASE_URL}/entity/customerorder",
                 headers=self.helper.headers,
                 params=params,
@@ -226,7 +227,7 @@ class ReturnsMonitor:
         }
 
         try:
-            resp = _requests.post(
+            resp = ms_http.post(
                 f"{BASE_URL}/wizard/salesreturn",
                 headers=self.helper.headers,
                 params={"action": "evaluate_cost"},
@@ -472,7 +473,7 @@ class ReturnsMonitor:
         выкачивать их целиком на каждый прогон незачем.
         """
         try:
-            r = _requests.get(f"{BASE_URL}/entity/customerorder",
+            r = ms_http.get(f"{BASE_URL}/entity/customerorder",
                               headers=self.helper.headers,
                               params={"filter": source.order_filter(key),
                                       "expand": "demands", "limit": 10},

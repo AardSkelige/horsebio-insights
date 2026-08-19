@@ -47,7 +47,7 @@ class MoySkladClientFailureTests(SimpleTestCase):
         with self.assertRaises(requests.JSONDecodeError):
             client.single_request('/product/1')
 
-    @patch('sync.moysklad.products.requests.get')
+    @patch('sync.moysklad.products.ms_http.get')
     def test_product_details_propagates_non_404_error(self, get):
         client = ProductsMixin()
         client.BASE_URL = 'https://example.test'
@@ -57,7 +57,7 @@ class MoySkladClientFailureTests(SimpleTestCase):
         with self.assertRaises(requests.HTTPError):
             client.get_product_details('product-id')
 
-    @patch('sync.moysklad.products.requests.get')
+    @patch('sync.moysklad.products.ms_http.get')
     def test_product_details_returns_empty_only_when_product_and_variant_are_absent(self, get):
         client = ProductsMixin()
         client.BASE_URL = 'https://example.test'

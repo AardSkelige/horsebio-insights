@@ -18,12 +18,13 @@ import sys
 import os
 import json
 import argparse
-import requests
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', '..', '..', '_shared'))
 from api_client import MOYSKLAD_TOKEN, BASE_URL
+# Запросы к МойСклад идут через общий слой: ожидание лимита, 429, повторы.
+from msapi import http as ms_http  # noqa: E402
 
 HEADERS = {
     "Authorization": f"Bearer {MOYSKLAD_TOKEN}",
@@ -70,7 +71,7 @@ def get_all_pages(endpoint: str, params: dict = None) -> list:
         p = (params or {}).copy()
         p["limit"] = 1000
         p["offset"] = offset
-        resp = requests.get(f"{BASE_URL}{endpoint}", headers=HEADERS, params=p, timeout=60)
+        resp = ms_http.get(f"{BASE_URL}{endpoint}", headers=HEADERS, params=p, timeout=60)
         resp.raise_for_status()
         batch = resp.json().get("rows", [])
         rows.extend(batch)
