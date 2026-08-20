@@ -24,6 +24,7 @@ const ABCAnalysis = lazy(() => import('./components/abc/ABCAnalysis').then(modul
 const SeasonalAnalysis = lazy(() => import('./components/seasonality/SeasonalAnalysis').then(module => ({ default: module.SeasonalAnalysis })));
 const CounterpartyGroupsAnalysis = lazy(() => import('./components/counterparty-groups/CounterpartyGroupsAnalysis'));
 const FBOAnalysis = lazy(() => import('./components/fbo-analysis/FBOAnalysis'));
+const FboStock = lazy(() => import('./components/fbo-stock/FboStock'));
 const OzonAnalytics = lazy(() => import('./components/ozon-analytics/OzonAnalytics'));
 const CashFlowReport = lazy(() => import('./components/cash-flow/CashFlowReport'));
 const CashFlowReportV2 = lazy(() => import('./components/cash-flow/CashFlowReportV2'));
@@ -178,6 +179,16 @@ function AppRoutes() {
             <LayoutWrapper>
               <LazyPage>
                 <FBOAnalysis />
+              </LazyPage>
+            </LayoutWrapper>
+          </ProtectedRoute>
+        } />
+
+        <Route path="/analysis/fbo-stock" element={
+          <ProtectedRoute>
+            <LayoutWrapper>
+              <LazyPage>
+                <FboStock />
               </LazyPage>
             </LayoutWrapper>
           </ProtectedRoute>

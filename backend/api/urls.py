@@ -1,6 +1,7 @@
 from django.urls import path
 from . import views, auth
 from .views import products, fbo, production  # импорт через views
+from .views import fbo_stock as fbo_stock_views
 from .views.abc_analysis import abc_analysis, abc_product_details, export_abc_analysis  # прямой импорт
 from .views.cash_flow import cash_flow_report, cash_flow_export  # импорт модуля отчета ДДС
 from .views import scripts_monitor, checks
@@ -73,6 +74,10 @@ urlpatterns = [
 
     path('analysis/fbo/', fbo.get_fbo_analysis, name='fbo_analysis'),
     path('analysis/fbo/export/', fbo.export_fbo_excel, name='fbo_export'),
+
+    # Остатки для FBO: Остаток − Резерв, ожидание отдельной колонкой
+    path('analysis/fbo-stock/', fbo_stock_views.fbo_stock, name='fbo_stock'),
+    path('analysis/fbo-stock/export/', fbo_stock_views.fbo_stock_export, name='fbo_stock_export'),
 
     # Отчет движения денежных средств
     path('analysis/cash-flow/', cash_flow_report, name='cash_flow_report'),

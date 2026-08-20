@@ -24,6 +24,14 @@ export const analysisApi = {
             api.get('/analysis/fbo/export/', { responseType: 'blob' }),
     },
 
+    fboStock: {
+        get: ({ refresh = false, signal } = {}) =>
+            api.get('/analysis/fbo-stock/', { params: refresh ? { refresh: 1 } : undefined, signal }),
+
+        export: () =>
+            api.get('/analysis/fbo-stock/export/', { responseType: 'blob' }),
+    },
+
     purchase: {
         getMaterial: (materialId, signal) =>
             api.get(`/analysis/purchase/material/${materialId}/`, { signal }),

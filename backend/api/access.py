@@ -31,6 +31,7 @@ PAGES = [
     {'key': 'abc',                      'label': 'ABC Анализ',      'group': 'Аналитика',       'route': '/analysis/abc',             'api_prefixes': ['/api/analysis/abc/']},
     {'key': 'seasonal',                 'label': 'Сезонность',      'group': 'Аналитика',       'route': '/analysis/seasonal',        'api_prefixes': ['/api/analysis/seasonal/']},
     {'key': 'fbo',                      'label': 'FBO Заказы',      'group': 'Аналитика',       'route': '/analysis/fbo',             'api_prefixes': ['/api/analysis/fbo/']},
+    {'key': 'fbo-stock',                'label': 'Остатки для FBO', 'group': 'Аналитика',       'route': '/analysis/fbo-stock',       'api_prefixes': ['/api/analysis/fbo-stock/']},
     {'key': 'counterparty-groups',      'label': 'Группы клиентов', 'group': 'Аналитика',       'route': '/analysis/counterparty-groups', 'api_prefixes': ['/api/counterparty-groups/']},
     {'key': 'purchases',                'label': 'Помощник закупок','group': 'Аналитика',       'route': '/purchases/analysis',       'api_prefixes': ['/api/analysis/purchase/']},
     {'key': 'ozon-fbo-converter',       'label': 'FBO Конвертер',   'group': 'Аналитика',       'route': '/ozon/fbo-converter',       'api_prefixes': ['/api/ozon/fbo-converter/']},

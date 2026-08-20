@@ -1,6 +1,6 @@
 import {
     Home, Package, Users, Layers, Archive, Truck,
-    BarChart2, TrendingUp, PackageCheck, PieChart, ShoppingCart, ShoppingBag,
+    BarChart2, TrendingUp, PackageCheck, Boxes, PieChart, ShoppingCart, ShoppingBag,
     DollarSign, Factory, FileSpreadsheet, ClipboardList, Activity, Clock, ShieldCheck, Mail, KeyRound,
 } from 'lucide-react';
 
@@ -53,6 +53,7 @@ const NAV_GROUPS = [
             { path: '/analysis/abc',                 label: 'ABC Анализ',       icon: BarChart2, description: 'Категоризация по продажам', pageKey: 'abc' },
             { path: '/analysis/seasonal',            label: 'Сезонность',       icon: TrendingUp, description: 'Паттерны продаж по времени', pageKey: 'seasonal' },
             { path: '/analysis/fbo',                 label: 'FBO Заказы',       icon: PackageCheck, description: 'Планирование FBO заказов', pageKey: 'fbo' },
+            { path: '/analysis/fbo-stock',           label: 'Остатки для FBO',  icon: Boxes, description: 'Сколько можно увезти на маркетплейс', pageKey: 'fbo-stock' },
             { path: '/analysis/counterparty-groups', label: 'Группы клиентов',  icon: PieChart, description: 'Сегментация клиентов', pageKey: 'counterparty-groups' },
             { path: '/purchases/analysis',           label: 'Помощник закупок', icon: ShoppingCart, description: 'Рекомендации по закупкам', pageKey: 'purchases' },
             { path: '/ozon/fbo-converter',           label: 'FBO Конвертер',    icon: FileSpreadsheet, description: 'Конвертация прогноза в шаблон Ozon', pageKey: 'ozon-fbo-converter' },

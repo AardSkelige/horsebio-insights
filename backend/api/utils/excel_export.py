@@ -8,6 +8,7 @@ from typing import Any, Callable, Dict, List, Optional, Union
 from django.http import HttpResponse
 from openpyxl import Workbook
 from openpyxl.styles import Alignment, Border, Font, PatternFill, Side
+from openpyxl.utils import get_column_letter
 from openpyxl.worksheet.worksheet import Worksheet
 
 
@@ -150,9 +151,11 @@ class ExcelReportBuilder:
         Returns:
             Self for chaining
         """
+        # Букву колонки берём по её номеру, а не из ячейки первой строки: после
+        # add_title_row первая строка объединена, и там лежит MergedCell без
+        # column_letter — обращение к ячейке роняло экспорт с заголовком.
         for col, width in enumerate(widths, 1):
-            col_letter = self.worksheet.cell(row=1, column=col).column_letter
-            self.worksheet.column_dimensions[col_letter].width = width
+            self.worksheet.column_dimensions[get_column_letter(col)].width = width
 
         return self
 
