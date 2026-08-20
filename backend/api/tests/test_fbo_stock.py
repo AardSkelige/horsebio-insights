@@ -14,7 +14,7 @@ from openpyxl import load_workbook
 
 from api.access import page_keys_for_path
 from api.models import UserPageAccess
-from api.views.fbo_stock import _build_data
+from api.views.fbo_stock import _build_data, _minimum_balances
 
 STORE_HREF = 'https://api.moysklad.ru/api/remap/1.2/entity/store/store-1'
 FOLDER_HREF = 'https://api.moysklad.ru/api/remap/1.2/entity/productfolder/folder-1'
@@ -49,8 +49,10 @@ PRODUCT_ROWS = [
     {'id': 'biotin', 'pathName': 'Товары/ExterPro', 'minimumBalance': 133.0},
     {'id': 'gel', 'pathName': 'Товары/ArtroPro', 'minimumBalance': 29.0},
     {'id': 'idle', 'pathName': 'Товары/ArtroPro', 'minimumBalance': 0.0},
-    # Товар из другой ветки: pathName~Товары ловит и «Товары маркетплейсов»
-    {'id': 'foreign', 'pathName': 'Товары маркетплейсов/Магазин на Ozon', 'minimumBalance': 500.0},
+    # Чужие ветки: фильтр pathName~Товары на стороне МойСклад ищет вхождение
+    # подстроки и приносит ещё и эти две группы вместе с их минимумами
+    {'id': 'foreign-marketplace', 'pathName': 'Товары маркетплейсов/Магазин на Ozon', 'minimumBalance': 500.0},
+    {'id': 'foreign-outdoor', 'pathName': 'Товары на выезд', 'minimumBalance': 20.0},
 ]
 
 
@@ -102,10 +104,25 @@ class FboStockCalculationTests(SimpleTestCase):
         self.assertFalse(items['99-00XX0000']['below_minimum'])   # минимум не задан
 
     @patch('api.views.fbo_stock.ms_http.get', side_effect=fake_ms_get)
-    def test_minimum_balance_ignores_other_folder_branches(self, _mock_get):
-        """pathName~Товары ловит и «Товары маркетплейсов» — чужие минимумы не подмешиваем."""
-        items = {item['article']: item for item in _build_data()['items']}
-        self.assertEqual(items['99-00XX0000']['minimum_balance'], 0.0)
+    def test_minimum_balances_ignore_other_folder_branches(self, _mock_get):
+        """Минимумы берём только из группы «Товары», не из соседних веток."""
+        minimums = _minimum_balances()
+
+        self.assertEqual(minimums['probiotic'], 267.0)
+        # «Товары маркетплейсов» и «Товары на выезд» начинаются с «Товары»,
+        # но это другие группы со своими минимумами
+        self.assertNotIn('foreign-marketplace', minimums)
+        self.assertNotIn('foreign-outdoor', minimums)
+
+    @patch('api.views.fbo_stock.ms_http.get', side_effect=fake_ms_get)
+    def test_stock_report_is_grouped_by_product(self, mock_get):
+        """Без groupBy отчёт группирует по модификациям, и минимум товара не находится."""
+        _build_data()
+
+        report_calls = [call for call in mock_get.call_args_list if '/report/stock/all' in call.args[0]]
+        self.assertTrue(report_calls)
+        for call in report_calls:
+            self.assertEqual(call.kwargs['params']['groupBy'], 'product')
 
     @patch('api.views.fbo_stock.ms_http.get', side_effect=fake_ms_get)
     def test_positions_without_movement_are_marked_empty(self, _mock_get):

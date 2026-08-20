@@ -1,6 +1,6 @@
 import PropTypes from 'prop-types';
 import { ChevronDown, ChevronUp, ChevronsUpDown } from 'lucide-react';
-import { SkeletonRows } from '../ui/Skeleton';
+import { Skeleton, SkeletonRows } from '../ui/Skeleton';
 import Tooltip from '../ui/Tooltip';
 
 // Колонки названы так, как о них думает человек, который едет на склад, а не
@@ -141,8 +141,29 @@ function MobileCards({ items }) {
 
 MobileCards.propTypes = { items: PropTypes.array.isRequired };
 
+function MobileSkeleton() {
+    return (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+            {[...Array(6)].map((_, i) => (
+                <div key={i} style={{
+                    background: 'var(--canvas)', border: '1px solid var(--hairline)',
+                    borderRadius: 10, padding: '12px 14px', display: 'flex', flexDirection: 'column', gap: 8,
+                }}>
+                    <Skeleton width="35%" height={10} />
+                    <Skeleton width="80%" height={13} />
+                    <Skeleton width="45%" height={18} />
+                </div>
+            ))}
+        </div>
+    );
+}
+
 export default function FboStockTable({ items, loading, sort, onSortChange, isMobile }) {
-    if (isMobile && !loading) return <MobileCards items={items} />;
+    if (isMobile) {
+        return loading
+            ? <MobileSkeleton />
+            : <MobileCards items={items} />;
+    }
 
     return (
         <div style={{

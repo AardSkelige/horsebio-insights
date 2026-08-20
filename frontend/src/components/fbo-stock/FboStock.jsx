@@ -75,8 +75,10 @@ export default function FboStock() {
             link.click();
             document.body.removeChild(link);
             window.URL.revokeObjectURL(url);
-        } catch (err) {
-            setError(err.message || 'Не удалось выгрузить Excel');
+        } catch {
+            // Ответ запрошен блобом, поэтому текст ошибки бэкенда в err.message не
+            // доезжает — там осталась бы английская строка axios про статус-код
+            setError('Не удалось выгрузить Excel. Обновите данные и попробуйте ещё раз');
         } finally {
             setExporting(false);
         }
