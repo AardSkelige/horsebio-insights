@@ -3,6 +3,7 @@ import { Download, RefreshCw, Search, X } from 'lucide-react';
 import { FadeRise } from '../ui/motion';
 import { analysisApi } from '../../api/analysisApi';
 import FboStockTable from './FboStockTable';
+import { matchesQuery, parseQuery, searchIndex } from './search';
 
 const controlStyle = {
     fontFamily: 'var(--sans)', fontSize: 13, color: 'var(--ink)',
@@ -84,21 +85,25 @@ export default function FboStock() {
         }
     };
 
+    // Индекс строится один раз на выдачу, а не на каждое нажатие клавиши
+    const indexed = useMemo(
+        () => (data?.items || []).map((item) => ({ item, haystack: searchIndex(item) })),
+        [data],
+    );
+
     const items = useMemo(() => {
-        const all = data?.items || [];
-        const query = search.trim().toLowerCase();
-        const filtered = all.filter((item) => {
-            if (!showEmpty && item.is_empty) return false;
-            if (!query) return true;
-            return item.name.toLowerCase().includes(query)
-                || item.article.toLowerCase().includes(query)
-                || item.code.toLowerCase().includes(query);
-        });
+        const parts = parseQuery(search);
+        const filtered = indexed
+            .filter(({ item, haystack }) => {
+                if (!showEmpty && item.is_empty) return false;
+                return matchesQuery(haystack, parts);
+            })
+            .map(({ item }) => item);
         return [...filtered].sort((a, b) => {
             const result = compare(a, b, sort.key);
             return sort.dir === 'asc' ? result : -result;
         });
-    }, [data, search, showEmpty, sort]);
+    }, [indexed, search, showEmpty, sort]);
 
     const handleSortChange = (key) => {
         setSort((prev) => (prev.key === key
@@ -169,7 +174,7 @@ export default function FboStock() {
                     <Search size={13} style={{ position: 'absolute', left: 10, top: '50%', transform: 'translateY(-50%)', color: 'var(--muted)', pointerEvents: 'none' }} />
                     <input
                         style={{ ...controlStyle, paddingLeft: 30, width: '100%', boxSizing: 'border-box' }}
-                        placeholder="Поиск по артикулу или названию"
+                        placeholder="Поиск: хондрофит 500, псил 150, 11-41"
                         value={search}
                         onChange={(e) => setSearch(e.target.value)}
                     />

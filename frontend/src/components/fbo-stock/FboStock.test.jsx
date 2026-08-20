@@ -75,9 +75,20 @@ describe('Остатки для FBO', () => {
         renderPage();
         await screen.findByText('06-03GP0800');
 
-        await user.type(screen.getByPlaceholderText(/Поиск по артикулу/), '08-02');
+        await user.type(screen.getByPlaceholderText(/^Поиск/), '08-02');
         expect(screen.getByText('08-02EP0800')).toBeInTheDocument();
         expect(screen.queryByText('06-03GP0800')).not.toBeInTheDocument();
+    });
+
+    it('ищет по нескольким частям, как в МойСклад', async () => {
+        const user = userEvent.setup();
+        renderPage();
+        await screen.findByText('06-03GP0800');
+
+        // Оба товара по 800 г — отсекает вторая часть запроса
+        await user.type(screen.getByPlaceholderText(/^Поиск/), 'проб 800');
+        expect(screen.getByText('06-03GP0800')).toBeInTheDocument();
+        expect(screen.queryByText('08-02EP0800')).not.toBeInTheDocument();
     });
 
     it('сортирует по клику на заголовок колонки', async () => {
