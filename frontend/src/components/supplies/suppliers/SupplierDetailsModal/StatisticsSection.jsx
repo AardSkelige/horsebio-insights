@@ -1,15 +1,15 @@
 import PropTypes from 'prop-types';
-import StatCard from '../../../ui/StatCard';
+import { num } from '../../../../utils/formatters';
+import { StatCard, StatGrid } from '../../../ui';
 
-const fmt = (n) => (n ?? 0).toLocaleString('ru-RU');
 
 const StatisticsSection = ({ statistics }) => (
-    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(300px, 1fr))', gap: 12 }}>
-        <StatCard size={24} title="Общая сумма"      value={`${fmt(statistics.total_sum)} ₽`} />
-        <StatCard size={24} title="Позиций"          value={fmt(statistics.positions_count)} />
-        <StatCard size={24} title="Уникальных материалов" value={fmt(statistics.unique_materials)} />
-        <StatCard size={24} title="Средняя сумма"    value={`${fmt(statistics.avg_supply_sum)} ₽`} />
-    </div>
+    <StatGrid>
+        <StatCard title="Общая сумма"      value={`${num(statistics.total_sum)} ₽`} />
+        <StatCard title="Позиций"          value={num(statistics.positions_count)} />
+        <StatCard title="Уникальных материалов" value={num(statistics.unique_materials)} />
+        <StatCard title="Средняя сумма"    value={`${num(statistics.avg_supply_sum)} ₽`} />
+    </StatGrid>
 );
 
 StatisticsSection.propTypes = {

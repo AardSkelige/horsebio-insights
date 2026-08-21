@@ -26,9 +26,131 @@
   --primary:        #cc785c;
   --primary-active: #a9583e;
 
-  --success: #5db872;
-  --warning: #d4a017;
-  --error:   #c64545;
+  /* Семантика статусов.
+     base — заливки, индикаторы, полосы графиков;
+     ink  — текст: base слишком светлый на кремовом фоне и не проходит по контрасту,
+            поэтому раньше затемнённые оттенки хардкодились по компонентам. */
+  --success:     #5db872;
+  --success-ink: #3a7c4a;
+  --warning:     #d4a017;
+  --warning-ink: #7a6010;
+  --error:       #c64545;
+  --error-ink:   #a03a3a;
+  --info:        #5c8acc;
+  --info-ink:    #3a68a0;
+
+  /* Тональная плашка статуса (бейдж, подсвеченная строка). Считается от base,
+     поэтому в тёмной теме не переопределяется — color-mix пересчитает сам. */
+  --success-bg:     color-mix(in srgb, var(--success) 12%, transparent);
+  --success-border: color-mix(in srgb, var(--success) 30%, transparent);
+  --warning-bg:     color-mix(in srgb, var(--warning) 12%, transparent);
+  --warning-border: color-mix(in srgb, var(--warning) 30%, transparent);
+  --error-bg:       color-mix(in srgb, var(--error) 12%, transparent);
+  --error-border:   color-mix(in srgb, var(--error) 30%, transparent);
+  --info-bg:        color-mix(in srgb, var(--info) 12%, transparent);
+  --info-border:    color-mix(in srgb, var(--info) 30%, transparent);
+  --accent-bg:      color-mix(in srgb, var(--primary) 12%, transparent);
+  --accent-border:  color-mix(in srgb, var(--primary) 30%, transparent);
+  --accent-wash:    color-mix(in srgb, var(--primary) 5%, transparent);
+
+  /* Категориальная палитра: различает равноправные категории — типы проверок,
+     сезоны, серии на диаграмме. В отличие от статусов, цвет здесь не значит
+     «хорошо» или «плохо», только «другое».
+
+     Первые четыре — псевдонимы уже существующих цветов, чтобы палитра была
+     однородной и не появилось второго синего рядом с --info. Дальше идут
+     оттенки, которых в семантике нет. */
+  --cat-coral:  var(--primary);
+  --cat-blue:   var(--info);
+  --cat-green:  var(--success);
+  --cat-amber:  var(--warning);
+  --cat-violet: #8a5ccc;
+  --cat-teal:   #3fa3a3;
+  --cat-pink:   #cc6f9c;
+  --cat-orange: #c47d2f;
+  --cat-clay:   #9a8c7a;
+
+  /* Текстовые варианты: на кремовом фоне базовый оттенок слишком светлый */
+  --cat-coral-ink:  var(--primary-active);
+  --cat-blue-ink:   var(--info-ink);
+  --cat-green-ink:  var(--success-ink);
+  --cat-amber-ink:  var(--warning-ink);
+  --cat-violet-ink: #6a3a9e;
+  --cat-teal-ink:   #2a7878;
+  --cat-pink-ink:   #a04a72;
+  --cat-orange-ink: #8a5a13;
+  --cat-clay-ink:   #6b5f50;
+
+  --cat-violet-bg:     color-mix(in srgb, var(--cat-violet) 12%, transparent);
+  --cat-violet-border: color-mix(in srgb, var(--cat-violet) 30%, transparent);
+  --cat-teal-bg:       color-mix(in srgb, var(--cat-teal) 12%, transparent);
+  --cat-teal-border:   color-mix(in srgb, var(--cat-teal) 30%, transparent);
+  --cat-pink-bg:       color-mix(in srgb, var(--cat-pink) 12%, transparent);
+  --cat-pink-border:   color-mix(in srgb, var(--cat-pink) 30%, transparent);
+  --cat-orange-bg:     color-mix(in srgb, var(--cat-orange) 12%, transparent);
+  --cat-orange-border: color-mix(in srgb, var(--cat-orange) 30%, transparent);
+  --cat-clay-bg:       color-mix(in srgb, var(--cat-clay) 12%, transparent);
+  --cat-clay-border:   color-mix(in srgb, var(--cat-clay) 30%, transparent);
+
+  /* Палитра диаграмм — та же категориальная, в фиксированном порядке.
+     Первый цвет равен акценту темы, поэтому смена --primary видна и в графиках. */
+  --chart-1: var(--cat-coral);
+  --chart-2: var(--cat-blue);
+  --chart-3: var(--cat-green);
+  --chart-4: var(--cat-amber);
+  --chart-5: var(--cat-violet);
+  --chart-6: var(--cat-pink);
+  --chart-7: var(--cat-teal);
+  --chart-8: var(--cat-clay);
+
+  /* Подсветка поверх тёмных поверхностей — сайдбар, меню пользователя.
+     Задаётся от цвета текста на тёмном, а не белым в лоб. */
+  --on-dark-wash:   color-mix(in srgb, var(--on-dark) 6%, transparent);
+  --on-dark-hover:  color-mix(in srgb, var(--on-dark) 8%, transparent);
+  --on-dark-hairline: color-mix(in srgb, var(--on-dark) 10%, transparent);
+
+  /* Тени. В системе их мало: глубина идёт от контраста поверхностей. */
+  /* Тень — всегда затемнение, поэтому считается от чёрного, а не от --ink:
+     в тёмной теме --ink светлый, и тень превращалась в белое свечение вокруг
+     подсказок и меню. Плотность в тёмной теме выше — там тень слабее видна. */
+  --shadow-tint: 0, 0, 0;
+  --shadow-hairline: 0 1px 2px rgba(var(--shadow-tint), 0.06);
+  --shadow-card:     0 2px 8px rgba(var(--shadow-tint), 0.08);
+  --shadow-soft:     0 4px 16px rgba(var(--shadow-tint), 0.10);
+  --shadow-raised:   0 8px 24px rgba(var(--shadow-tint), 0.12);
+  --shadow-float:    0 10px 32px rgba(var(--shadow-tint), 0.14);
+  --shadow-menu:     0 8px 40px rgba(var(--shadow-tint), 0.18);
+  --shadow-on-dark:  0 2px 8px rgba(0, 0, 0, 0.3);
+
+  /* Затемнение под модальным окном и выдвижной панелью */
+  --scrim:        rgba(var(--shadow-tint), 0.45);
+  --scrim-soft:   rgba(var(--shadow-tint), 0.25);
+
+  /* Шкалы. Дубликат `src/theme/tokens.js` — там те же значения для JS.
+     Держим оба списка синхронными: CSS-переменные для ui.css, экспорт для Recharts
+     и прочих мест, где размер требуется числом. */
+  --size-xs:      11px;
+  --size-sm:      12px;
+  --size-md:      13px;
+  --size-lg:      16px;
+  --size-xl:      22px;
+  --size-display: 32px;
+
+  --radius-sm:   6px;
+  --radius-md:   8px;
+  --radius-lg:   12px;
+  --radius-pill: 999px;
+
+  --space-1: 4px;
+  --space-2: 8px;
+  --space-3: 12px;
+  --space-4: 16px;
+  --space-5: 24px;
+  --space-6: 32px;
+
+  --control-pad-y:  7px;
+  --control-pad-x:  12px;
+  --control-height: 34px;
 
   --serif: 'Cormorant Garamond', 'Tiempos Headline', Georgia, serif;
   --sans:  'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
@@ -56,6 +178,29 @@
 
   --primary:        #cc785c;
   --primary-active: #a9583e;
+
+  /* На тёмном фоне текст статуса должен светлеть, а не темнеть */
+  --success-ink: #7fcf92;
+  --warning-ink: #e0b84a;
+  --error-ink:   #e08585;
+  --info-ink:    #8fb4e0;
+
+  /* В тёмной теме тень на тёмном фоне почти не читается — усиливаем */
+  --shadow-hairline: 0 1px 2px rgba(0, 0, 0, 0.35);
+  --shadow-card:     0 2px 8px rgba(0, 0, 0, 0.4);
+  --shadow-soft:     0 4px 16px rgba(0, 0, 0, 0.45);
+  --shadow-raised:   0 8px 24px rgba(0, 0, 0, 0.5);
+  --shadow-float:    0 10px 32px rgba(0, 0, 0, 0.55);
+  --shadow-menu:     0 8px 40px rgba(0, 0, 0, 0.6);
+  --scrim:           rgba(0, 0, 0, 0.6);
+  --scrim-soft:      rgba(0, 0, 0, 0.4);
+
+  /* То же правило для категорий */
+  --cat-violet-ink: #b49ae0;
+  --cat-teal-ink:   #79c7c7;
+  --cat-pink-ink:   #e2a0bd;
+  --cat-orange-ink: #dfa96a;
+  --cat-clay-ink:   #bdb0a0;
 }
 
 /* ── Native date inputs follow app theme (fixes invisible calendar icon) ── */
@@ -88,22 +233,14 @@
     -webkit-mask: url('/horsebio-insights-logo.svg') center / contain no-repeat;
     width: var(--logo-mark-width, 24px);
   }
-
-  .btn {
-    @apply px-4 py-2 rounded-lg font-medium transition-colors;
-  }
-
-  .card {
-    border-radius: 12px;
-    padding: 24px;
-    background-color: var(--surface-card);
-  }
 }
 
 /* Тактильный отклик нажатия — все кнопки приложения.
-   Исключения: .no-tap-scale и любые кнопки на всю ширину (инлайн width: 100%) —
-   на широких кнопках-заголовках сжатие выглядит как сдвиг текста, а не как нажатие */
-button:active:not(:disabled):not(.no-tap-scale):not([style*="width: 100%"]) {
+   Сжимать имеет смысл то, что выглядит как кнопка. Строка-аккордеон, сегмент
+   переключателя, ячейка списка — это поверхность, а не кнопка: сжатие там
+   читается как рывок текста. Текстовые кнопки («Обновить», «Детали») тоже
+   не сжимаем — у них нет фона, дёргается сам текст. */
+button:active:not(:disabled):not(.no-tap-scale):not([style*="width: 100%"]):not(.ui-disclosure__head):not(.ui-segmented__item):not(.ui-multiselect__control):not(.ui-icon-btn):not(.ui-btn--block):not(.ui-btn--link):not(.ui-btn--quiet):not(.ui-pagination__page) {
   transform: scale(0.97);
 }
 
@@ -179,7 +316,7 @@ button:active:not(:disabled):not(.no-tap-scale):not([style*="width: 100%"]) {
     animation: none;
   }
 
-  button:active:not(:disabled):not(.no-tap-scale):not([style*="width: 100%"]) {
+  button:active {
     transform: none;
   }
 }

@@ -77,7 +77,7 @@ describe('HomePage', () => {
         renderPage();
 
         expect((await screen.findAllByRole('link', { name: /Проверки/ }))[0]).toHaveAttribute('href', '/checks');
-        expect(screen.getByRole('link', { name: /Аналитика системы/ })).toHaveAttribute('href', '/system/analytics');
+        expect(screen.getByRole('link', { name: /Активность/ })).toHaveAttribute('href', '/system/analytics');
         expect(screen.getAllByRole('link')).toHaveLength(27);
     });
 

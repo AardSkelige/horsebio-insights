@@ -26,7 +26,6 @@ export default function CellsInfoPanel({ cellsLog, selectedMonth, isMobile }) {
         <div style={{
             border: '1px solid var(--hairline)',
             borderRadius: 12,
-            marginBottom: 24,
             overflow: 'hidden',
             background: 'var(--surface-card)',
         }}>

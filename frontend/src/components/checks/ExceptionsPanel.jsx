@@ -1,10 +1,16 @@
 import { useState, useEffect, useCallback } from 'react';
 import PropTypes from 'prop-types';
 import { Search, Trash2, Loader2, Pencil, Check, X, ExternalLink, ChevronRight } from 'lucide-react';
+import { Badge, IconButton } from '../ui';
 import { checksApi, KIND_MS_TYPE, KIND_BADGE, msLink } from './checksShared';
 
-const STATUS_COLOR = {
-    'норма': '#5db872', 'исправлено': '#5c8acc', 'ошибка': '#c64545', 'ошибка-некритично': '#c47d2f',
+// Тон плашки берётся из семантики статуса: заливка, рамка и текст приходят
+// готовой тройкой токенов, поэтому читаются в обеих темах
+const STATUS_TONE = {
+    'норма': 'success',
+    'исправлено': 'info',
+    'ошибка': 'error',
+    'ошибка-некритично': 'warning',
 };
 
 // Типы, чьи исключения привязаны к документу (а не к товару)
@@ -16,10 +22,7 @@ const SCAN_WINDOW_DAYS = 90;
 const STALE_VERDICT_DAYS = 180;
 
 function StatusBadge({ status }) {
-    const c = STATUS_COLOR[status] || 'var(--muted)';
-    return (
-        <span style={{ fontSize: 11, fontWeight: 600, color: c, background: `${c}1a`, padding: '2px 9px', borderRadius: 6, whiteSpace: 'nowrap' }}>{status}</span>
-    );
+    return <Badge tone={STATUS_TONE[status] || 'neutral'}>{status}</Badge>;
 }
 StatusBadge.propTypes = { status: PropTypes.string };
 
@@ -100,7 +103,7 @@ function ExceptionRow({ exc, first, onSaved, onRemove }) {
                     <span style={{ fontSize: 14, fontWeight: 600, color: 'var(--ink)' }}>{label}</span>
                     {status && <StatusBadge status={status} />}
                     {jumpScope && (
-                        <span style={chip(exc.extra?.supply_doc ? 'var(--muted)' : '#b08a1f')}
+                        <span style={chip(exc.extra?.supply_doc ? 'var(--muted)' : 'var(--warning-ink)')}
                             title={exc.extra?.supply_doc
                                 ? 'Заглушен только этот скачок: новая приёмка с новым скачком снова попадёт в отчёт'
                                 : 'Товар исключён из проверки скачков полностью — цены по нему всегда пляшут'}>
@@ -118,7 +121,7 @@ function ExceptionRow({ exc, first, onSaved, onRemove }) {
                         </span>
                     )}
                     {stale && (
-                        <span style={chip('#b08a1f')}
+                        <span style={chip('var(--warning-ink)')}
                             title={`Разбор старше ${STALE_VERDICT_DAYS} дней и автоматически не протухает — стоит перепроверить, актуально ли ещё объяснение`}>
                             давно не смотрели
                         </span>
@@ -135,8 +138,10 @@ function ExceptionRow({ exc, first, onSaved, onRemove }) {
                     <div style={{ display: 'flex', alignItems: 'flex-start', gap: 6, marginTop: 7 }}>
                         <textarea autoFocus value={value} onChange={(e) => setValue(e.target.value)} rows={2}
                             style={{ flex: 1, fontSize: 12.5, padding: '7px 9px', borderRadius: 8, resize: 'vertical', border: '1px solid var(--primary)', background: 'var(--canvas)', color: 'var(--body)', fontFamily: 'inherit' }} />
-                        <button onClick={save} disabled={saving} style={iconBtn('var(--success)')}>{saving ? <Loader2 size={14} className="animate-spin" /> : <Check size={14} />}</button>
-                        <button onClick={() => { setEditing(false); setValue(exc.reason || ''); }} style={iconBtn('var(--muted)')}><X size={14} /></button>
+                        <IconButton icon={saving ? Loader2 : Check} label="Сохранить причину"
+                            size={14} disabled={saving} onClick={save} />
+                        <IconButton icon={X} label="Отменить правку" size={14}
+                            onClick={() => { setEditing(false); setValue(exc.reason || ''); }} />
                     </div>
                 ) : (
                     <div style={{ fontSize: 12.5, color: exc.reason ? 'var(--body)' : 'var(--muted-soft)', marginTop: 4, lineHeight: 1.5 }}>
@@ -147,8 +152,9 @@ function ExceptionRow({ exc, first, onSaved, onRemove }) {
 
             {!editing && (
                 <div style={{ display: 'flex', gap: 6, flexShrink: 0 }}>
-                    <button onClick={() => setEditing(true)} style={iconBtn('var(--muted)')} title="Изменить причину"><Pencil size={14} /></button>
-                    <button onClick={() => onRemove(exc.id)} style={iconBtn('var(--error)')} title="Убрать исключение"><Trash2 size={14} /></button>
+                    <IconButton icon={Pencil} label="Изменить причину" size={14} onClick={() => setEditing(true)} />
+                    <IconButton icon={Trash2} label="Убрать исключение" size={14} tone="danger"
+                        onClick={() => onRemove(exc.id)} />
                 </div>
             )}
         </div>
@@ -241,11 +247,4 @@ export default function ExceptionsPanel() {
             )}
         </div>
     );
-}
-
-function iconBtn(color) {
-    return {
-        display: 'inline-flex', alignItems: 'center', justifyContent: 'center', width: 30, height: 30,
-        borderRadius: 8, background: 'var(--surface-soft)', border: 'none', color, cursor: 'pointer', flexShrink: 0,
-    };
 }

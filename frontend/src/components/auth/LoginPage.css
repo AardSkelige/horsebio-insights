@@ -193,7 +193,7 @@
 
 .login-flow-path {
   fill: none;
-  stroke: rgba(204, 120, 92, 0.24);
+  stroke: var(--accent-border);
   stroke-linecap: round;
   stroke-width: 1.2;
 }
@@ -356,15 +356,15 @@
 
 .login-fields input:focus {
   border-color: var(--primary);
-  box-shadow: 0 0 0 3px rgba(204, 120, 92, 0.15);
+  box-shadow: 0 0 0 3px var(--accent-bg);
 }
 
 .login-error {
   align-items: flex-start;
-  background: rgba(198, 69, 69, 0.08);
-  border: 1px solid rgba(198, 69, 69, 0.22);
+  background: var(--error-bg);
+  border: 1px solid var(--error-border);
   border-radius: 8px;
-  color: #c64545;
+  color: var(--error);
   display: flex;
   font-size: 13px;
   gap: 8px;
@@ -383,7 +383,7 @@
   background: var(--primary);
   border: 1px solid var(--primary);
   border-radius: 8px;
-  color: #fff;
+  color: var(--on-primary);
   cursor: pointer;
   display: inline-flex;
   font-family: var(--sans);

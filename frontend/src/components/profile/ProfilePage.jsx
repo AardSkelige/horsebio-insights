@@ -1,9 +1,12 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
+import { duration, formatDateTime } from '../../utils/formatters';
+import { useIsMobile } from '../../hooks/useIsMobile';
 import { Link } from 'react-router-dom';
 import { CalendarClock, Database, DoorClosed, DoorOpen, LogOut, Monitor, Smartphone, ShieldCheck, Mail, ExternalLink, Activity } from 'lucide-react';
 import { setAuthStatus } from '../../utils/authSession';
 import { useAuthStatus } from '../../hooks/useAuthStatus';
 import { authApi } from '../../api/authApi';
+import { Page, SectionLabel } from '../ui';
 import { checksApi } from '../checks/checksShared';
 
 const card = {
@@ -16,14 +19,6 @@ const sectionLabel = {
     fontSize: 11, fontWeight: 500,
     letterSpacing: '0.1em', textTransform: 'uppercase',
     color: 'var(--muted)', whiteSpace: 'nowrap',
-};
-
-const formatDateTime = (value) => {
-    if (!value) return '—';
-    return new Intl.DateTimeFormat('ru-RU', {
-        day: '2-digit', month: '2-digit', year: 'numeric',
-        hour: '2-digit', minute: '2-digit',
-    }).format(new Date(value));
 };
 
 const browserLabel = (ua) => {
@@ -59,14 +54,6 @@ const relativeTime = (isoStr) => {
     return `${Math.floor(diff / 86400)} дн назад`;
 };
 
-const formatMinutes = (minutes) => {
-    if (!minutes) return '0';
-    if (minutes < 60) return `${minutes} мин`;
-    const h = Math.floor(minutes / 60);
-    const m = minutes % 60;
-    return m > 0 ? `${h} ч ${m} м` : `${h} ч`;
-};
-
 const ProfilePage = () => {
     const auth = useAuthStatus();
     const [activity, setActivity] = useState([]);
@@ -74,13 +61,7 @@ const ProfilePage = () => {
     const [sessions, setSessions] = useState([]);
     const [starponyScripts, setStarponyScripts] = useState([]);
     const [revokingId, setRevokingId] = useState(null);
-    const [isMobile, setIsMobile] = useState(() => window.innerWidth < 768);
-
-    useEffect(() => {
-        const handler = () => setIsMobile(window.innerWidth < 768);
-        window.addEventListener('resize', handler);
-        return () => window.removeEventListener('resize', handler);
-    }, []);
+    const isMobile = useIsMobile();
 
     useEffect(() => {
         const ctrl = new AbortController();
@@ -148,13 +129,8 @@ const ProfilePage = () => {
     const maxVisits = topPages[0]?.visits || 1;
 
     return (
-        <div style={{ color: 'var(--ink)', maxWidth: 1180, margin: '0 auto' }}>
-
-            {/* Header */}
-            <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 18 }}>
-                <span style={sectionLabel}>Личный кабинет</span>
-                <div style={{ flex: 1, height: 1, backgroundColor: 'var(--hairline)' }} />
-            </div>
+        <Page>
+            <SectionLabel>Личный кабинет</SectionLabel>
 
             {/* Hero */}
             <section style={{
@@ -163,7 +139,7 @@ const ProfilePage = () => {
                 display: 'flex',
                 flexDirection: isMobile ? 'column' : 'row',
                 justifyContent: 'space-between', alignItems: isMobile ? 'flex-start' : 'center',
-                gap: 16, marginBottom: 12,
+                gap: 16,
             }}>
                 <div style={{ display: 'flex', gap: 16, alignItems: 'center', minWidth: 0 }}>
                     <div style={{
@@ -188,7 +164,7 @@ const ProfilePage = () => {
                             <span style={{
                                 display: 'inline-flex', alignItems: 'center', gap: 6,
                                 borderRadius: 999, padding: '5px 10px',
-                                backgroundColor: 'rgba(255,255,255,0.08)',
+                                backgroundColor: 'var(--on-dark-hover)',
                                 color: 'var(--on-dark-soft)', fontSize: 12,
                             }}>
                                 <ShieldCheck size={14} />
@@ -198,7 +174,7 @@ const ProfilePage = () => {
                                 <span style={{
                                     display: 'inline-flex', alignItems: 'center', gap: 6,
                                     borderRadius: 999, padding: '5px 10px',
-                                    backgroundColor: 'rgba(255,255,255,0.08)',
+                                    backgroundColor: 'var(--on-dark-hover)',
                                     color: 'var(--on-dark-soft)', fontSize: 12,
                                 }}>
                                     <Mail size={12} />
@@ -215,7 +191,7 @@ const ProfilePage = () => {
                         padding: isMobile ? '12px 16px' : '14px 24px',
                         textAlign: 'center',
                         backgroundColor: 'var(--surface-dark-elevated)',
-                        border: '1px solid rgba(255,255,255,0.10)',
+                        border: '1px solid var(--on-dark-hairline)',
                         borderRadius: 12,
                         minWidth: isMobile ? 0 : 160,
                         alignSelf: isMobile ? 'stretch' : 'auto',
@@ -323,8 +299,8 @@ const ProfilePage = () => {
                                             <span style={{
                                                 fontSize: 11, fontWeight: 500, flexShrink: 0,
                                                 borderRadius: 4, padding: '2px 8px',
-                                                color: ok ? 'var(--success)' : problems > 0 ? '#d08b2c' : 'var(--muted)',
-                                                background: ok ? 'rgba(52,199,89,0.12)' : problems > 0 ? 'rgba(208,139,44,0.12)' : 'transparent',
+                                                color: ok ? 'var(--success)' : problems > 0 ? 'var(--cat-orange-ink)' : 'var(--muted)',
+                                                background: ok ? 'var(--success-bg)' : problems > 0 ? 'var(--cat-orange-bg)' : 'transparent',
                                             }}>
                                                 {ok ? 'OK' : problems > 0 ? `${problems} ${problemLabel}` : '—'}
                                             </span>
@@ -348,7 +324,7 @@ const ProfilePage = () => {
                             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16 }}>
                                 {[
                                     ['Сессий', String(usage.sessions_this_month ?? '—')],
-                                    ['Времени', formatMinutes(usage.total_minutes_this_month)],
+                                    ['Времени', duration(usage.total_minutes_this_month)],
                                 ].map(([l, v]) => (
                                     <div key={l} style={{ borderTop: '1px solid var(--hairline)', paddingTop: 12 }}>
                                         <div style={{
@@ -398,7 +374,7 @@ const ProfilePage = () => {
                                                         <span style={{
                                                             fontSize: 10, fontWeight: 500,
                                                             color: 'var(--success)',
-                                                            background: 'rgba(52,199,89,0.12)',
+                                                            background: 'var(--success-bg)',
                                                             borderRadius: 4, padding: '1px 6px',
                                                         }}>
                                                             это устройство
@@ -529,7 +505,7 @@ const ProfilePage = () => {
                     </section>
                 </div>
             </div>
-        </div>
+        </Page>
     );
 };
 

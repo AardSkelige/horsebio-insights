@@ -1,9 +1,8 @@
-import { RefreshCw } from 'lucide-react';
 import CounterpartyFilterPanel from './CounterpartyFilterPanel';
 import CounterpartyTable from './CounterpartyTable';
 import CounterpartyStatistics from './CounterpartyStatistics';
 import CounterpartyDetailsModal from './CounterpartyDetailsModal';
-import SectionLabel from '../../ui/SectionLabel';
+import { Page, PageHeader, StatGrid } from '../../ui';
 import { FadeRise } from '../../ui/motion';
 import { counterpartiesApi } from '../../../api/counterpartiesApi';
 import { useAnalysisTable } from '../../../hooks/useAnalysisTable';
@@ -24,39 +23,23 @@ const CounterpartyAnalysis = () => {
     });
 
     return (
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 32, color: 'var(--ink)' }}>
-            <div style={{ borderBottom: '1px solid var(--hairline)', paddingBottom: 16, display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between' }}>
-                <div>
-                    <h1 style={{ fontFamily: 'var(--serif)', fontSize: 32, fontWeight: 400, letterSpacing: '-0.025em', lineHeight: 1.1, color: 'var(--ink)', margin: 0, marginBottom: 4 }}>
-                        Покупатели
-                    </h1>
-                    <p style={{ fontFamily: 'var(--sans)', fontSize: 13, color: 'var(--muted)', margin: 0 }}>
-                        Анализ продаж по контрагентам
-                    </p>
-                </div>
-                <button
-                    onClick={refresh}
-                    disabled={loading}
-                    style={{ display: 'inline-flex', alignItems: 'center', gap: 6, padding: '6px 14px', borderRadius: 8, border: 'none', background: 'var(--surface-card)', color: 'var(--ink)', fontFamily: 'var(--sans)', fontSize: 13, fontWeight: 500, cursor: loading ? 'not-allowed' : 'pointer', opacity: loading ? 0.6 : 1 }}
-                >
-                    <RefreshCw size={13} className={loading ? 'animate-spin' : ''} />
-                    Обновить
-                </button>
-            </div>
+        <Page>
+            <PageHeader
+                title="Покупатели"
+                subtitle="Анализ продаж по контрагентам"
+                onRefresh={refresh}
+                refreshing={loading}
+            />
 
-            {stats && (
-                <FadeRise>
-                    <section>
-                        <SectionLabel>Статистика</SectionLabel>
-                        <CounterpartyStatistics stats={stats} />
-                    </section>
-                </FadeRise>
-            )}
+            <FadeRise>
+                {stats ? <CounterpartyStatistics stats={stats} /> : <StatGrid loading count={5} />}
+            </FadeRise>
 
             <FadeRise delay={0.05}>
-            <section>
-                <SectionLabel>Контрагенты</SectionLabel>
                 <CounterpartyFilterPanel filters={filters} onChange={handleFiltersChange} />
+            </FadeRise>
+
+            <FadeRise delay={0.1}>
                 <CounterpartyTable
                     counterparties={counterparties}
                     loading={loading}
@@ -67,7 +50,6 @@ const CounterpartyAnalysis = () => {
                     onPageChange={handlePageChange}
                     onCounterpartyClick={handleItemClick}
                 />
-            </section>
             </FadeRise>
 
             {selectedCounterparty && (
@@ -78,7 +60,7 @@ const CounterpartyAnalysis = () => {
                     dateRange={{ startDate: filters.startDate, endDate: filters.endDate }}
                 />
             )}
-        </div>
+        </Page>
     );
 };
 

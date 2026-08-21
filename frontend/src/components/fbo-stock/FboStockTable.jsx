@@ -1,6 +1,7 @@
 import PropTypes from 'prop-types';
+import { num, pluralWith } from '../../utils/formatters';
+import { Skeleton, SkeletonRows } from '../ui';
 import { ChevronDown, ChevronUp, ChevronsUpDown } from 'lucide-react';
-import { Skeleton, SkeletonRows } from '../ui/Skeleton';
 import Tooltip from '../ui/Tooltip';
 
 // Колонки названы так, как о них думает человек, который едет на склад, а не
@@ -56,16 +57,6 @@ const bodyCell = {
 const numCell = { ...bodyCell, textAlign: 'right', fontVariantNumeric: 'tabular-nums lining-nums' };
 
 const fmt = (value) => (value === 0 ? '—' : new Intl.NumberFormat('ru-RU').format(value));
-const fmtTotal = (value) => new Intl.NumberFormat('ru-RU').format(value);
-
-const plural = (count) => {
-    const tail = count % 100;
-    if (tail > 10 && tail < 20) return 'позиций';
-    const last = count % 10;
-    if (last === 1) return 'позиция';
-    if (last >= 2 && last <= 4) return 'позиции';
-    return 'позиций';
-};
 
 function SortIcon({ active, order }) {
     if (!active) return <ChevronsUpDown size={11} style={{ color: 'var(--muted-soft)', marginLeft: 3, flexShrink: 0 }} />;
@@ -83,7 +74,7 @@ function QuantityValue({ item }) {
             fontSize: 14,
             color: item.quantity < 0 ? 'var(--error)' : 'var(--ink)',
         }}>
-            {item.quantity < 0 ? `−${fmtTotal(Math.abs(item.quantity))}` : fmt(item.quantity)}
+            {item.quantity < 0 ? `−${num(Math.abs(item.quantity))}` : fmt(item.quantity)}
         </span>
     );
 }
@@ -110,7 +101,7 @@ function MobileCards({ items }) {
                                 Можно взять
                             </div>
                             <div style={{ fontSize: 11, fontFamily: 'var(--mono)', color: 'var(--muted-soft)', margin: '1px 0 2px' }}>
-                                {fmtTotal(item.stock)} − {fmtTotal(item.reserve)}
+                                {num(item.stock)} − {num(item.reserve)}
                             </div>
                             <QuantityValue item={item} />
                         </div>
@@ -128,7 +119,7 @@ function MobileCards({ items }) {
                                     Минимум
                                 </div>
                                 <div style={{ fontSize: 14, marginTop: 15, color: 'var(--warning)', fontVariantNumeric: 'tabular-nums' }}>
-                                    {fmtTotal(item.minimum_balance)}
+                                    {num(item.minimum_balance)}
                                 </div>
                             </div>
                         )}
@@ -208,7 +199,7 @@ export default function FboStockTable({ items, loading, sort, onSortChange, isMo
                             <td style={{ ...numCell, color: 'var(--muted-soft)' }}>{fmt(item.in_transit)}</td>
                             <td style={{ ...numCell, color: item.below_minimum ? 'var(--warning)' : 'var(--muted-soft)' }}>
                                 {item.below_minimum
-                                    ? <Tooltip content={MINIMUM_HINT}>{fmtTotal(item.minimum_balance)}</Tooltip>
+                                    ? <Tooltip content={MINIMUM_HINT}>{num(item.minimum_balance)}</Tooltip>
                                     : fmt(item.minimum_balance)}
                             </td>
                         </tr>
@@ -226,7 +217,7 @@ export default function FboStockTable({ items, loading, sort, onSortChange, isMo
                                     background: 'var(--surface-soft)', color: 'var(--muted)', fontSize: 12.5,
                                 }}
                             >
-                                {items.length} {plural(items.length)}
+                                {pluralWith(items.length, 'позиция', 'позиции', 'позиций')}
                             </td>
                         </tr>
                     </tfoot>

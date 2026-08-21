@@ -1,17 +1,13 @@
 import { useState, useEffect } from 'react';
+import { CloseButton, Disclosure, Metric, MetricGrid, SectionLabel, StatCard, StatGrid } from '../../ui';
 import PropTypes from 'prop-types';
-import { X, ChevronRight, Loader2 } from 'lucide-react';
+import { Loader2 } from 'lucide-react';
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
-import { formatDateTime } from '../../../utils/formatters';
+import { formatDateTime, money, moneyPrecise, num } from '../../../utils/formatters';
 import { CHART_ANIMATION } from '../../../utils/chartAnimation';
-import SectionLabel from '../../ui/SectionLabel';
-import StatCard from '../../ui/StatCard';
 import { ModalShell } from '../../ui/motion';
 import { productsApi } from '../../../api/productsApi';
 
-const fmt = (n) => (n ?? 0).toLocaleString('ru-RU');
-const fmtRub = (v) => (v ?? 0).toLocaleString('ru-RU', { style: 'currency', currency: 'RUB', minimumFractionDigits: 0, maximumFractionDigits: 0 });
-const fmtRub2 = (v) => (v ?? 0).toLocaleString('ru-RU', { style: 'currency', currency: 'RUB', minimumFractionDigits: 2, maximumFractionDigits: 2 });
 
 const ChartTooltip = ({ active, payload, label }) => {
     if (!active || !payload?.length) return null;
@@ -20,7 +16,7 @@ const ChartTooltip = ({ active, payload, label }) => {
             <div style={{ color: 'var(--muted)', marginBottom: 4 }}>{label}</div>
             {payload.map((entry, i) => (
                 <div key={i} style={{ color: entry.color }}>
-                    {entry.name}: {entry.name === 'Количество' ? `${fmt(entry.value)} шт.` : fmtRub(entry.value)}
+                    {entry.name}: {entry.name === 'Количество' ? `${num(entry.value)} шт.` : money(entry.value)}
                 </div>
             ))}
         </div>
@@ -28,39 +24,18 @@ const ChartTooltip = ({ active, payload, label }) => {
 };
 ChartTooltip.propTypes = { active: PropTypes.bool, payload: PropTypes.array, label: PropTypes.string };
 
-const ShipmentRow = ({ shipment }) => {
-    const [open, setOpen] = useState(false);
-    return (
-        <div style={{ borderBottom: '1px solid var(--hairline-soft)' }}>
-            <button onClick={() => setOpen(o => !o)}
-                style={{ width: '100%', display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '10px 0', background: 'none', border: 'none', cursor: 'pointer', textAlign: 'left' }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                    <ChevronRight size={13} style={{ color: 'var(--muted)', transform: open ? 'rotate(90deg)' : 'none', transition: 'transform 150ms', flexShrink: 0 }} />
-                    <span style={{ fontFamily: 'var(--sans)', fontSize: 13, color: 'var(--ink)' }}>{formatDateTime(shipment.date)}</span>
-                </div>
-                <span style={{ fontFamily: 'var(--sans)', fontSize: 13, color: 'var(--primary)', fontWeight: 500 }}>{fmtRub(shipment.total)}</span>
-            </button>
-            {open && (
-                <div style={{ paddingBottom: 10 }}>
-                    <div style={{ background: 'var(--surface-soft)', borderRadius: 8, padding: '10px 14px', display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 8 }}>
-                        <div>
-                            <div style={{ fontFamily: 'var(--sans)', fontSize: 10, color: 'var(--muted)', marginBottom: 2 }}>Номер</div>
-                            <div style={{ fontFamily: 'var(--sans)', fontSize: 12, color: 'var(--ink)' }}>№{shipment.number}</div>
-                        </div>
-                        <div>
-                            <div style={{ fontFamily: 'var(--sans)', fontSize: 10, color: 'var(--muted)', marginBottom: 2 }}>Количество</div>
-                            <div style={{ fontFamily: 'var(--sans)', fontSize: 12, color: 'var(--ink)' }}>{fmt(shipment.quantity)} шт.</div>
-                        </div>
-                        <div>
-                            <div style={{ fontFamily: 'var(--sans)', fontSize: 10, color: 'var(--muted)', marginBottom: 2 }}>Цена/шт.</div>
-                            <div style={{ fontFamily: 'var(--sans)', fontSize: 12, color: 'var(--ink)' }}>{fmtRub2(shipment.price)}</div>
-                        </div>
-                    </div>
-                </div>
-            )}
-        </div>
-    );
-};
+const ShipmentRow = ({ shipment }) => (
+    <Disclosure
+        summary={formatDateTime(shipment.date)}
+        aside={money(shipment.total)}
+    >
+        <MetricGrid style={{ background: 'var(--surface-soft)', borderRadius: 8, padding: '10px 14px' }}>
+            <Metric label="Номер" value={`№${shipment.number}`} />
+            <Metric label="Количество" value={`${num(shipment.quantity)} шт.`} />
+            <Metric label="Цена/шт." value={moneyPrecise(shipment.price)} />
+        </MetricGrid>
+    </Disclosure>
+);
 ShipmentRow.propTypes = {
     shipment: PropTypes.shape({ number: PropTypes.string, date: PropTypes.string, quantity: PropTypes.number, price: PropTypes.number, total: PropTypes.number }).isRequired,
 };
@@ -107,9 +82,7 @@ const ProductDetailsModal = ({ product, visible, onClose, dateRange }) => {
                         <h2 style={{ fontFamily: 'var(--serif)', fontSize: 22, fontWeight: 400, letterSpacing: '-0.02em', color: 'var(--ink)', margin: 0, lineHeight: 1.2 }}>{product?.name}</h2>
                         {product?.subgroup && <span style={{ fontFamily: 'var(--sans)', fontSize: 12, color: 'var(--muted)' }}>{product.subgroup}</span>}
                     </div>
-                    <button onClick={onClose} style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--muted)', padding: 4, flexShrink: 0 }}>
-                        <X size={18} />
-                    </button>
+                    <CloseButton onClick={onClose} />
                 </div>
 
                 {/* Body */}
@@ -126,13 +99,12 @@ const ProductDetailsModal = ({ product, visible, onClose, dateRange }) => {
                         <div style={{ display: 'flex', flexDirection: 'column', gap: 24 }}>
                             {/* Stats */}
                             <div>
-                                <SectionLabel>Статистика</SectionLabel>
-                                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(130px, 1fr))', gap: 12 }}>
-                                    <StatCard size={24} title="Отгрузок" value={fmt(details.statistics.total_shipments)} />
-                                    <StatCard size={24} title="Продано" value={`${fmt(details.statistics.total_quantity)} шт.`} />
-                                    <StatCard size={24} title="Среднее в отгрузке" value={`${fmt(details.statistics.average_quantity)} шт.`} />
-                                    <StatCard size={24} title="Выручка" value={fmtRub(details.statistics.total_revenue)} />
-                                </div>
+                                <StatGrid>
+                                    <StatCard title="Отгрузок" value={num(details.statistics.total_shipments)} />
+                                    <StatCard title="Продано" value={`${num(details.statistics.total_quantity)} шт.`} />
+                                    <StatCard title="Среднее в отгрузке" value={`${num(details.statistics.average_quantity)} шт.`} />
+                                    <StatCard title="Выручка" value={money(details.statistics.total_revenue)} />
+                                </StatGrid>
                             </div>
 
                             {/* Chart */}
@@ -144,11 +116,11 @@ const ProductDetailsModal = ({ product, visible, onClose, dateRange }) => {
                                             <LineChart data={chartData} margin={{ top: 4, right: 48, left: 0, bottom: 0 }}>
                                                 <CartesianGrid strokeDasharray="3 3" stroke="var(--hairline)" />
                                                 <XAxis dataKey="month" tick={{ fontFamily: 'var(--sans)', fontSize: 11, fill: 'var(--muted)' }} />
-                                                <YAxis yAxisId="qty" tick={{ fontFamily: 'var(--sans)', fontSize: 11, fill: 'var(--muted)' }} tickFormatter={fmt} width={50} />
+                                                <YAxis yAxisId="qty" tick={{ fontFamily: 'var(--sans)', fontSize: 11, fill: 'var(--muted)' }} tickFormatter={num} width={50} />
                                                 <YAxis yAxisId="rev" orientation="right" tick={{ fontFamily: 'var(--sans)', fontSize: 11, fill: 'var(--muted)' }} tickFormatter={v => `${(v / 1000).toFixed(0)}k`} width={44} />
                                                 <Tooltip content={<ChartTooltip />} />
                                                 <Line {...CHART_ANIMATION} yAxisId="qty" type="monotone" dataKey="quantity" name="Количество" stroke="var(--primary)" strokeWidth={2} dot={{ r: 3, fill: 'var(--primary)' }} activeDot={{ r: 5 }} />
-                                                <Line {...CHART_ANIMATION} yAxisId="rev" type="monotone" dataKey="revenue" name="Выручка" stroke="#5a8a6a" strokeWidth={2} dot={{ r: 3, fill: '#5a8a6a' }} activeDot={{ r: 5 }} />
+                                                <Line {...CHART_ANIMATION} yAxisId="rev" type="monotone" dataKey="revenue" name="Выручка" stroke="var(--success-ink)" strokeWidth={2} dot={{ r: 3, fill: 'var(--success-ink)' }} activeDot={{ r: 5 }} />
                                             </LineChart>
                                         </ResponsiveContainer>
                                     </div>
@@ -164,7 +136,7 @@ const ProductDetailsModal = ({ product, visible, onClose, dateRange }) => {
                                         {details.materials?.map((m, i) => (
                                             <div key={i} style={{ background: 'var(--surface-card)', borderRadius: 10, padding: '10px 14px', border: '1px solid var(--hairline)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                                                 <span style={{ fontFamily: 'var(--sans)', fontSize: 13, color: 'var(--ink)' }}>{m.name}</span>
-                                                <span style={{ fontFamily: 'var(--sans)', fontSize: 12, color: 'var(--muted)', whiteSpace: 'nowrap', marginLeft: 12 }}>{fmt(m.quantity)} {m.unit}</span>
+                                                <span style={{ fontFamily: 'var(--sans)', fontSize: 12, color: 'var(--muted)', whiteSpace: 'nowrap', marginLeft: 12 }}>{num(m.quantity)} {m.unit}</span>
                                             </div>
                                         ))}
                                         {!details.materials?.length && <span style={{ fontFamily: 'var(--sans)', fontSize: 12, color: 'var(--muted)' }}>Нет данных</span>}

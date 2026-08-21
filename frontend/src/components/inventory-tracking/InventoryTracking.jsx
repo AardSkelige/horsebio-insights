@@ -1,7 +1,9 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
+import { useIsMobile } from '../../hooks/useIsMobile';
 import PropTypes from 'prop-types';
 import { m as motion } from 'motion/react';
-import { RefreshCw, Upload } from 'lucide-react';
+import { Upload } from 'lucide-react';
+import { Button, Page, PageHeader } from '../ui';
 import { FadeRise } from '../ui/motion';
 import InventoryStatsCards from './InventoryStatsCards';
 import { inventoryApi } from '../../api/inventoryApi';
@@ -35,7 +37,7 @@ function MonthPicker({ selected, history, onSelect, isMobile }) {
     );
 
     return (
-        <div style={{ display: 'flex', gap: 8, marginBottom: 24, flexWrap: 'wrap', alignItems: 'center' }}>
+        <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center' }}>
             <span style={{
                 fontFamily: 'var(--sans)',
                 fontSize: 12,
@@ -87,7 +89,7 @@ function MonthPicker({ selected, history, onSelect, isMobile }) {
                         <span style={{ position: 'relative' }}>{label}</span>
                         {row && !active && (
                             <span style={{
-                                color: row.pct >= 80 ? 'var(--success)' : row.pct >= 50 ? '#f59e0b' : 'var(--error)',
+                                color: row.pct >= 80 ? 'var(--success)' : row.pct >= 50 ? 'var(--warning)' : 'var(--error)',
                                 fontSize: 11,
                                 fontWeight: 500,
                             }}>
@@ -121,18 +123,12 @@ export default function InventoryTracking() {
     // Таблицы позиций свёрнуты по умолчанию — страница иначе слишком длинная
     const [openTables, setOpenTables] = useState({ inventoried: false, 'not-inventoried': false });
     const [history, setHistory] = useState([]);
-    const [isMobile, setIsMobile] = useState(() => window.innerWidth < 768);
+    const isMobile = useIsMobile();
     const abortRef = useRef(null);
     const fileInputRef = useRef(null);
     const uploadResultTimerRef = useRef(null);
     const inventoriedRef = useRef(null);
     const notInventoriedRef = useRef(null);
-
-    useEffect(() => {
-        const handler = () => setIsMobile(window.innerWidth < 768);
-        window.addEventListener('resize', handler);
-        return () => window.removeEventListener('resize', handler);
-    }, []);
 
     const fetchHistory = useCallback(async () => {
         try {
@@ -281,113 +277,42 @@ export default function InventoryTracking() {
         : 'Обновить';
 
     return (
-        <div style={{ maxWidth: 1200, margin: '0 auto', padding: '0 0 48px' }}>
-            {/* ── Header ── */}
-            <div style={{
-                display: 'flex',
-                alignItems: 'flex-start',
-                justifyContent: 'space-between',
-                gap: 12,
-                flexWrap: 'wrap',
-                padding: '0 0 16px',
-                borderBottom: '1px solid var(--hairline)',
-                marginBottom: 24,
-            }}>
-                <div>
-                    <h1 style={{
-                        fontFamily: 'var(--serif)',
-                        fontSize: isMobile ? 24 : 32,
-                        fontWeight: 400,
-                        letterSpacing: '-0.025em',
-                        color: 'var(--ink)',
-                        margin: 0,
-                    }}>
-                        Инвентаризация
-                    </h1>
-                    <p style={{
-                        fontFamily: 'var(--sans)',
-                        fontSize: 13,
-                        color: 'var(--muted)',
-                        margin: '6px 0 0',
-                    }}>
-                        {periodLabel}
-                        {data?.run_at && !isMobile && (
-                            <span style={{ marginLeft: 16, color: 'var(--muted-soft)' }}>
-                                · обновлено {new Date(data.run_at).toLocaleString('ru-RU', {
-                                    day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit',
-                                })}
-                            </span>
-                        )}
-                    </p>
-                </div>
-
-                <div style={{ display: 'flex', gap: 8, alignItems: 'center', marginTop: 4, flexShrink: 0 }}>
-                    <input
-                        ref={fileInputRef}
-                        type="file"
-                        accept=".xls"
-                        multiple
-                        style={{ display: 'none' }}
-                        onChange={handleUploadCells}
-                    />
-                    <button
-                        onClick={() => fileInputRef.current?.click()}
-                        disabled={!!uploading || refreshing || loading}
-                        title="Печать → «Инвентаризация с ячейками» — выберите один или несколько .xls файлов"
-                        style={{
-                            display: 'flex',
-                            alignItems: 'center',
-                            gap: 6,
-                            background: 'var(--canvas)',
-                            color: uploading ? 'var(--muted)' : 'var(--ink)',
-                            border: '1px solid var(--hairline)',
-                            borderRadius: 8,
-                            padding: '9px 16px',
-                            fontFamily: 'var(--sans)',
-                            fontSize: 14,
-                            fontWeight: 500,
-                            cursor: uploading || refreshing || loading ? 'not-allowed' : 'pointer',
-                            opacity: uploading || refreshing || loading ? 0.65 : 1,
-                            transition: 'opacity 0.15s',
-                            whiteSpace: 'nowrap',
-                        }}
-                    >
-                        <Upload
-                            size={14}
-                            style={{ animation: uploading ? 'inventory-spin 1s linear infinite' : 'none' }}
+        <Page style={{ paddingBottom: 48 }}>
+            <PageHeader
+                title="Инвентаризация"
+                subtitle={periodLabel}
+                updatedAt={data?.run_at && !isMobile
+                    ? new Date(data.run_at).toLocaleString('ru-RU', {
+                        day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit',
+                    })
+                    : undefined}
+                onRefresh={handleRefresh}
+                refreshing={refreshing}
+                refreshLabel={btnLabel}
+                actions={
+                    <>
+                        <input
+                            ref={fileInputRef}
+                            type="file"
+                            accept=".xls"
+                            multiple
+                            style={{ display: 'none' }}
+                            onChange={handleUploadCells}
                         />
-                        {uploading ? `Файл ${uploading}...` : 'С ячейками'}
-                    </button>
+                        <Button
+                            variant="secondary"
+                            icon={Upload}
+                            loading={Boolean(uploading)}
+                            disabled={refreshing || loading}
+                            onClick={() => fileInputRef.current?.click()}
+                            title="Печать → «Инвентаризация с ячейками» — выберите один или несколько .xls файлов"
+                        >
+                            {uploading ? `Файл ${uploading}...` : 'С ячейками'}
+                        </Button>
 
-                    <button
-                        onClick={handleRefresh}
-                        disabled={refreshing || loading}
-                        style={{
-                            display: 'flex',
-                            alignItems: 'center',
-                            gap: 6,
-                            background: refreshing ? 'var(--primary-active)' : 'var(--primary)',
-                            color: 'var(--on-primary)',
-                            border: 'none',
-                            borderRadius: 8,
-                            padding: '9px 18px',
-                            fontFamily: 'var(--sans)',
-                            fontSize: 14,
-                            fontWeight: 500,
-                            cursor: refreshing || loading ? 'not-allowed' : 'pointer',
-                            opacity: refreshing || loading ? 0.75 : 1,
-                            transition: 'opacity 0.15s, background 0.15s',
-                            whiteSpace: 'nowrap',
-                        }}
-                    >
-                        <RefreshCw
-                            size={14}
-                            style={{ animation: refreshing ? 'inventory-spin 1s linear infinite' : 'none' }}
-                        />
-                        {btnLabel}
-                    </button>
-                </div>
-            </div>
+                    </>
+                }
+            />
 
             {/* ── Month picker ── */}
             <MonthPicker
@@ -407,8 +332,8 @@ export default function InventoryTracking() {
             {/* ── Upload result banner ── */}
             {uploadResult && (
                 <FadeRise style={{
-                    background: uploadResult.ok ? 'rgba(93,184,114,0.1)' : 'rgba(198,69,69,0.08)',
-                    border: `1px solid ${uploadResult.ok ? 'rgba(93,184,114,0.3)' : 'rgba(198,69,69,0.2)'}`,
+                    background: uploadResult.ok ? 'var(--success-bg)' : 'var(--error-bg)',
+                    border: `1px solid ${uploadResult.ok ? 'var(--success-border)' : 'var(--error-border)'}`,
                     borderRadius: 8,
                     padding: '10px 16px',
                     fontFamily: 'var(--sans)',
@@ -435,7 +360,6 @@ export default function InventoryTracking() {
                     borderRadius: 12,
                     padding: '32px 24px',
                     textAlign: 'center',
-                    marginBottom: 24,
                 }}>
                     <p style={{ fontFamily: 'var(--sans)', fontSize: 15, color: 'var(--body)', margin: '0 0 8px' }}>
                         Данные ещё не загружены
@@ -447,14 +371,13 @@ export default function InventoryTracking() {
             )}
             {error && data && (
                 <div style={{
-                    background: 'rgba(198,69,69,0.08)',
-                    border: '1px solid rgba(198,69,69,0.2)',
+                    background: 'var(--error-bg)',
+                    border: '1px solid var(--error-border)',
                     borderRadius: 8,
                     padding: '12px 16px',
                     fontFamily: 'var(--sans)',
                     fontSize: 13,
                     color: 'var(--error)',
-                    marginBottom: 24,
                 }}>
                     {error}
                 </div>
@@ -477,7 +400,7 @@ export default function InventoryTracking() {
             )}
 
             {/* ── Folder filter ── */}
-            <div style={{ display: 'flex', gap: 8, marginBottom: 28, flexWrap: 'wrap' }}>
+            <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
                 {FOLDERS.map(folder => {
                     const active = activeFolder === folder;
                     return (
@@ -546,13 +469,6 @@ export default function InventoryTracking() {
                     />
                 </FadeRise>
             )}
-
-            <style>{`
-                @keyframes inventory-spin {
-                    from { transform: rotate(0deg); }
-                    to   { transform: rotate(360deg); }
-                }
-            `}</style>
-        </div>
+        </Page>
     );
 }

@@ -20,8 +20,8 @@ const menuItemStyle = (hov, danger = false) => ({
     display: 'flex', alignItems: 'center', gap: 10,
     width: '100%', padding: '10px 16px',
     border: 'none',
-    backgroundColor: hov ? 'rgba(255,255,255,0.06)' : 'transparent',
-    color: danger && hov ? '#e57373' : 'var(--on-dark-soft)',
+    backgroundColor: hov ? 'var(--on-dark-wash)' : 'transparent',
+    color: danger && hov ? 'var(--error)' : 'var(--on-dark-soft)',
     cursor: 'pointer',
     transition: 'background 120ms ease, color 120ms ease',
     textAlign: 'left',
@@ -88,7 +88,7 @@ const UserMenu = ({ expanded, theme, onToggleTheme, onLogout, onProfile }) => {
                         gap: expanded ? 10 : 0,
                         padding: '7px 10px',
                         borderRadius: 8, border: 'none',
-                        backgroundColor: hov || open ? 'rgba(255,255,255,0.06)' : 'transparent',
+                        backgroundColor: hov || open ? 'var(--on-dark-wash)' : 'transparent',
                         cursor: 'pointer',
                         transition: 'background 150ms ease',
                         overflow: 'hidden', whiteSpace: 'nowrap',
@@ -127,7 +127,7 @@ const UserMenu = ({ expanded, theme, onToggleTheme, onLogout, onProfile }) => {
                             display: 'flex', alignItems: 'center', justifyContent: 'center',
                             width: 30, height: 30, flexShrink: 0,
                             borderRadius: 8, border: 'none',
-                            backgroundColor: themeHov ? 'rgba(255,255,255,0.06)' : 'transparent',
+                            backgroundColor: themeHov ? 'var(--on-dark-wash)' : 'transparent',
                             color: 'var(--on-dark-soft)',
                             cursor: 'pointer',
                             transition: 'background 150ms ease',
@@ -148,13 +148,13 @@ const UserMenu = ({ expanded, theme, onToggleTheme, onLogout, onProfile }) => {
                         position: 'fixed',
                         bottom: menuPos.bottom, left: menuPos.left, minWidth: menuPos.width,
                         backgroundColor: 'var(--surface-dark-elevated)',
-                        borderRadius: 12, border: '1px solid rgba(255,255,255,0.08)',
-                        boxShadow: '0 8px 32px rgba(0,0,0,0.4)',
+                        borderRadius: 12, border: '1px solid var(--on-dark-hover)',
+                        boxShadow: '0 8px 32px var(--shadow-menu)',
                         zIndex: 200, overflow: 'hidden',
                         animation: 'user-menu-in 150ms ease forwards',
                     }}
                 >
-                    <div style={{ padding: '14px 16px 12px', borderBottom: '1px solid rgba(255,255,255,0.07)' }}>
+                    <div style={{ padding: '14px 16px 12px', borderBottom: '1px solid var(--on-dark-wash)' }}>
                         <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
                             <div style={{ ...avatarBase, width: 36, height: 36, fontSize: '13px' }}>{initials}</div>
                             <div>
@@ -191,7 +191,7 @@ const UserMenu = ({ expanded, theme, onToggleTheme, onLogout, onProfile }) => {
                         </span>
                     </button>
 
-                    <div style={{ height: 1, margin: '2px 0', backgroundColor: 'rgba(255,255,255,0.07)' }} />
+                    <div style={{ height: 1, margin: '2px 0', backgroundColor: 'var(--on-dark-wash)' }} />
 
                     <button
                         onMouseEnter={() => setHovItem('logout')} onMouseLeave={() => setHovItem(null)}

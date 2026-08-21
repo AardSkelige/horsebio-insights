@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
 import { useNavigate, useParams, useLocation } from 'react-router-dom';
-import { Loader2, ShieldCheck } from 'lucide-react';
+import { ErrorState, Page, PageHeader, SectionLabel, Skeleton } from '../ui';
 import { checksApi, PENDING_RETURNS_ID } from './checksShared';
 import ScriptCard from './ScriptCard';
 import CheckDetail from './CheckDetail';
@@ -67,39 +67,24 @@ export default function ChecksPage() {
     });
 
     return (
-        <div style={{ maxWidth: 1100, margin: '0 auto' }}>
-            <header style={{ marginBottom: 28 }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-                    <ShieldCheck size={26} style={{ color: 'var(--primary)' }} />
-                    <h1 style={{ fontFamily: 'var(--serif)', fontSize: 30, fontWeight: 600, color: 'var(--ink)', margin: 0 }}>
-                        Проверки
-                    </h1>
-                </div>
-                <p style={{ color: 'var(--muted)', marginTop: 6, fontSize: 14 }}>
-                    Результаты автоматических проверок МойСклад, исключения и история запусков
-                </p>
-            </header>
+        <Page>
+            <PageHeader
+                title="Проверки"
+                subtitle="Результаты автоматических проверок МойСклад, исключения и история запусков"
+            />
 
-            {error && (
-                <div style={{ color: 'var(--error)', background: 'var(--error-bg, rgba(198,69,69,0.08))', padding: 12, borderRadius: 10, marginBottom: 16 }}>
-                    {error}
-                </div>
-            )}
+            {error && <ErrorState hint={error} onRetry={load} />}
 
+            {/* Первая загрузка: карточки-заглушки на месте будущего списка */}
             {scripts === null && !error && (
-                <div style={{ display: 'flex', alignItems: 'center', gap: 8, color: 'var(--muted)', padding: 40, justifyContent: 'center' }}>
-                    <Loader2 size={18} className="animate-spin" /> Загрузка…
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                    {[0, 1, 2, 3].map((i) => <Skeleton key={i} height={58} />)}
                 </div>
             )}
 
             {topics.map((t) => (
-                <section key={t.topic || 'other'} style={{ marginBottom: 24 }}>
-                    {t.topic && (
-                        <h2 style={{
-                            fontSize: 12, fontWeight: 700, letterSpacing: 0.6, textTransform: 'uppercase',
-                            color: 'var(--muted)', marginBottom: 10,
-                        }}>{t.topic}</h2>
-                    )}
+                <section key={t.topic || 'other'}>
+                    {t.topic && <SectionLabel>{t.topic}</SectionLabel>}
                     <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
                         {t.items.map((s) => (
                             <ScriptCard key={s.id} script={s} onOpen={(id) => navigate(`/checks/${id}`)} />
@@ -107,6 +92,6 @@ export default function ChecksPage() {
                     </div>
                 </section>
             ))}
-        </div>
+        </Page>
     );
 }

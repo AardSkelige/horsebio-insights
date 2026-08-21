@@ -4,10 +4,10 @@ import { ChevronUp, ChevronDown, ChevronsUpDown } from 'lucide-react';
 import { formatNumber, formatCurrency } from '../../utils/formatters';
 
 const COLORS = {
-    large:      { bg: 'rgba(204,120,92,0.1)', color: '#a0583e', border: 'rgba(204,120,92,0.3)' },
-    medium:     { bg: 'rgba(92,138,204,0.1)', color: '#3a68a0', border: 'rgba(92,138,204,0.3)' },
-    small:      { bg: 'rgba(92,172,106,0.1)', color: '#3a7c4a', border: 'rgba(92,172,106,0.3)' },
-    rare_large: { bg: 'rgba(140,138,132,0.1)', color: '#5a5852', border: 'rgba(140,138,132,0.3)' },
+    large:      { bg: 'var(--accent-bg)', color: 'var(--primary-active)', border: 'var(--accent-border)' },
+    medium:     { bg: 'var(--info-bg)', color: 'var(--info-ink)', border: 'var(--info-border)' },
+    small:      { bg: 'var(--success-bg)', color: 'var(--success-ink)', border: 'var(--success-border)' },
+    rare_large: { bg: 'var(--cat-clay-bg)', color: 'var(--cat-clay-ink)', border: 'var(--cat-clay-border)' },
 };
 
 const CATEGORY_NAMES = {
@@ -27,17 +27,7 @@ const SortIcon = ({ dir }) => {
 
 SortIcon.propTypes = { dir: PropTypes.string };
 
-const thStyle = (active) => ({
-    fontFamily: 'var(--sans)', fontSize: '11px', fontWeight: 600,
-    letterSpacing: '0.06em', textTransform: 'uppercase', color: active ? 'var(--primary)' : 'var(--muted)',
-    padding: '10px 12px', textAlign: 'left', borderBottom: '1px solid var(--hairline)',
-    whiteSpace: 'nowrap', cursor: 'pointer', userSelect: 'none',
-});
 
-const tdStyle = {
-    fontFamily: 'var(--sans)', fontSize: '13px', color: 'var(--body)',
-    padding: '11px 12px', borderBottom: '1px solid var(--hairline-soft)', verticalAlign: 'middle',
-};
 
 export const CounterpartyGroupsTable = ({ data }) => {
     const [sortKey, setSortKey] = useState('avg_monthly');
@@ -70,7 +60,7 @@ export const CounterpartyGroupsTable = ({ data }) => {
 
     // eslint-disable-next-line react/prop-types
     const SortTh = ({ label, col }) => (
-        <th style={thStyle(sortKey === col)} onClick={() => handleSort(col)}>
+        <th className={`is-sortable${sortKey === col ? ' is-sorted' : ''}`} onClick={() => handleSort(col)}>
             <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
                 {label} <SortIcon dir={sortKey === col ? sortDir : null} />
             </div>
@@ -104,11 +94,11 @@ export const CounterpartyGroupsTable = ({ data }) => {
 
             {/* Table */}
             <div style={{ overflowX: 'auto' }}>
-                <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+                <table className="ui-table">
                     <thead>
                         <tr>
                             <SortTh label="Наименование" col="name" />
-                            <th style={thStyle(false)}>Группа</th>
+                            <th>Группа</th>
                             <SortTh label="Объём продаж" col="avg_monthly" />
                             <SortTh label="Активность" col="frequency" />
                             <SortTh label="Месяцев" col="total_months" />
@@ -120,22 +110,22 @@ export const CounterpartyGroupsTable = ({ data }) => {
                             const c = COLORS[r.category];
                             return (
                                 <tr key={r.key}>
-                                    <td style={{ ...tdStyle, fontWeight: 500, color: 'var(--ink)' }}>{r.name}</td>
-                                    <td style={tdStyle}>
+                                    <td style={{ fontWeight: 500, color: 'var(--ink)' }}>{r.name}</td>
+                                    <td>
                                         <span style={{ display: 'inline-block', padding: '2px 8px', borderRadius: '20px', fontSize: '11px', fontWeight: 600, fontFamily: 'var(--sans)', backgroundColor: c.bg, color: c.color, border: `1px solid ${c.border}` }}>
                                             {CATEGORY_NAMES[r.category]}
                                         </span>
                                     </td>
-                                    <td style={tdStyle}>{formatCurrency(r.avg_monthly)}</td>
-                                    <td style={tdStyle}>{(r.frequency * 100).toFixed(1)}%</td>
-                                    <td style={tdStyle}>{formatNumber(r.total_months)}</td>
-                                    <td style={tdStyle}>{formatCurrency(r.total_sum)}</td>
+                                    <td>{formatCurrency(r.avg_monthly)}</td>
+                                    <td>{(r.frequency * 100).toFixed(1)}%</td>
+                                    <td>{formatNumber(r.total_months)}</td>
+                                    <td>{formatCurrency(r.total_sum)}</td>
                                 </tr>
                             );
                         })}
                         {paginated.length === 0 && (
                             <tr>
-                                <td colSpan={6} style={{ ...tdStyle, textAlign: 'center', color: 'var(--muted)', padding: '32px' }}>
+                                <td colSpan={6} style={{ textAlign: 'center', color: 'var(--muted)', padding: '32px' }}>
                                     Нет данных
                                 </td>
                             </tr>
@@ -168,7 +158,7 @@ export const CounterpartyGroupsTable = ({ data }) => {
                             .map((p, i) => p === '…' ? (
                                 <span key={`ellipsis-${i}`} style={{ fontFamily: 'var(--sans)', fontSize: '12px', padding: '4px 6px', color: 'var(--muted)' }}>…</span>
                             ) : (
-                                <button key={p} onClick={() => setPage(p)} style={{ fontFamily: 'var(--sans)', fontSize: '12px', padding: '4px 10px', borderRadius: '6px', border: `1px solid ${p === page ? 'var(--primary)' : 'var(--hairline)'}`, backgroundColor: p === page ? 'var(--primary)' : 'var(--canvas)', color: p === page ? '#fff' : 'var(--body)', cursor: 'pointer' }}>
+                                <button key={p} onClick={() => setPage(p)} style={{ fontFamily: 'var(--sans)', fontSize: '12px', padding: '4px 10px', borderRadius: '6px', border: `1px solid ${p === page ? 'var(--primary)' : 'var(--hairline)'}`, backgroundColor: p === page ? 'var(--primary)' : 'var(--canvas)', color: p === page ? 'var(--on-primary)' : 'var(--body)', cursor: 'pointer' }}>
                                     {p}
                                 </button>
                             ))

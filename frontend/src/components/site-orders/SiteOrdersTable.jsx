@@ -1,6 +1,6 @@
 import PropTypes from 'prop-types';
+import { SkeletonRows } from '../ui';
 import { Globe, Package, Trash2, Loader2 } from 'lucide-react';
-import { SkeletonRows } from '../ui/Skeleton';
 import { siteOrdersApi } from '../../api/siteOrdersApi';
 import { useConfirmDelete } from '../../hooks/useConfirmDelete';
 import './SiteOrdersTable.css';

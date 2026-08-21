@@ -106,7 +106,7 @@ const FloatingLoadingCard = () => {
                         borderRadius: '999px',
                         background: 'var(--canvas)',
                         color: 'var(--primary)',
-                        boxShadow: '0 8px 24px rgba(20,20,19,0.12)',
+                        boxShadow: 'var(--shadow-raised)',
                         cursor: 'pointer',
                     }}
                     title="Показать статус загрузки"
@@ -170,7 +170,7 @@ const FloatingLoadingCard = () => {
                     border: `1px solid ${toneBorder(tone)}`,
                     borderRadius: '12px',
                     background: 'var(--canvas)',
-                    boxShadow: '0 10px 32px rgba(20,20,19,0.14)',
+                    boxShadow: 'var(--shadow-float)',
                     overflow: 'hidden',
                 }}>
                 {/* Header */}

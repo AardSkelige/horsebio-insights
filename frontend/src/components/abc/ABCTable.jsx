@@ -4,9 +4,9 @@ import { ChevronUp, ChevronDown, ChevronsUpDown } from 'lucide-react';
 import { formatNumber, formatCurrency } from '../../utils/formatters';
 
 const COLORS = {
-    A: { color: '#a0583e', bg: 'rgba(204,120,92,0.1)',  border: 'rgba(204,120,92,0.3)'  },
-    B: { color: '#3a68a0', bg: 'rgba(92,138,204,0.1)',  border: 'rgba(92,138,204,0.3)'  },
-    C: { color: '#7a6010', bg: 'rgba(204,156,58,0.1)',  border: 'rgba(204,156,58,0.3)'  },
+    A: { color: 'var(--primary-active)', bg: 'var(--accent-bg)',  border: 'var(--accent-border)'  },
+    B: { color: 'var(--info-ink)', bg: 'var(--info-bg)',  border: 'var(--info-border)'  },
+    C: { color: 'var(--warning-ink)', bg: 'var(--warning-bg)',  border: 'var(--warning-border)'  },
 };
 
 const PAGE_SIZE = 10;
@@ -150,7 +150,7 @@ export const ABCTable = ({ data }) => {
                             .reduce((acc, p, i, arr) => { if (i > 0 && arr[i - 1] !== p - 1) acc.push('…'); acc.push(p); return acc; }, [])
                             .map((p, i) => p === '…'
                                 ? <span key={`e${i}`} style={{ fontFamily: 'var(--sans)', fontSize: '12px', padding: '4px 6px', color: 'var(--muted)' }}>…</span>
-                                : <button key={p} onClick={() => setPage(p)} style={{ fontFamily: 'var(--sans)', fontSize: '12px', padding: '4px 10px', borderRadius: '6px', border: `1px solid ${p === page ? 'var(--primary)' : 'var(--hairline)'}`, backgroundColor: p === page ? 'var(--primary)' : 'var(--canvas)', color: p === page ? '#fff' : 'var(--body)', cursor: 'pointer' }}>{p}</button>
+                                : <button key={p} onClick={() => setPage(p)} style={{ fontFamily: 'var(--sans)', fontSize: '12px', padding: '4px 10px', borderRadius: '6px', border: `1px solid ${p === page ? 'var(--primary)' : 'var(--hairline)'}`, backgroundColor: p === page ? 'var(--primary)' : 'var(--canvas)', color: p === page ? 'var(--on-primary)' : 'var(--body)', cursor: 'pointer' }}>{p}</button>
                             )
                         }
                         <button onClick={() => setPage(p => Math.min(totalPages, p + 1))} disabled={page === totalPages} style={{ fontFamily: 'var(--sans)', fontSize: '12px', padding: '4px 10px', borderRadius: '6px', border: '1px solid var(--hairline)', backgroundColor: 'var(--canvas)', color: 'var(--body)', cursor: page === totalPages ? 'not-allowed' : 'pointer', opacity: page === totalPages ? 0.4 : 1 }}>→</button>

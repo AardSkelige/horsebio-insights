@@ -1,38 +1,15 @@
 import { useState, useRef, useEffect } from 'react';
 import PropTypes from 'prop-types';
-import { Download, FileSpreadsheet, Megaphone, ShoppingCart, PercentCircle, X, Loader2 } from 'lucide-react';
+import { Download, FileSpreadsheet, Megaphone, ShoppingCart, PercentCircle, X } from 'lucide-react';
+import { Button, IconButton, Input, Notice as UiNotice } from '../../ui';
 import { generateReport, exportAdvertisingData, exportSalesData } from '../api/ozonApi';
 
-const btn = (primary, disabled = false) => ({
-    display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: '6px',
-    width: '100%', height: '40px', borderRadius: '8px', border: 'none',
-    fontFamily: 'var(--sans)', fontSize: '13px', fontWeight: 500,
-    cursor: disabled ? 'not-allowed' : 'pointer', opacity: disabled ? 0.5 : 1,
-    backgroundColor: primary ? 'var(--primary)' : 'var(--surface-card)',
-    color: primary ? '#fff' : 'var(--ink)',
-    transition: 'background-color 150ms ease',
-});
-
-const dateInputStyle = {
-    flex: 1, height: '36px', padding: '0 10px',
-    fontFamily: 'var(--sans)', fontSize: '13px', color: 'var(--ink)',
-    backgroundColor: 'var(--canvas)', border: '1px solid var(--hairline)',
-    borderRadius: '8px', outline: 'none', transition: 'border-color 150ms',
-};
 
 const noticeShape = PropTypes.shape({ type: PropTypes.string.isRequired, text: PropTypes.string.isRequired });
 
-const Notice = ({ notice }) => {
-    if (!notice) return null;
-    const colors = { error: '#c64545', success: '#059669', warning: '#d4a017' };
-    const bgs = { error: 'rgba(198,69,69,0.08)', success: 'rgba(5,150,105,0.08)', warning: 'rgba(212,160,23,0.08)' };
-    return (
-        <div style={{ display: 'flex', alignItems: 'center', gap: '8px', padding: '9px 12px', borderRadius: '8px', border: `1px solid ${colors[notice.type]}40`, backgroundColor: bgs[notice.type], fontFamily: 'var(--sans)', fontSize: '12px', color: colors[notice.type] }}>
-            {notice.type === 'loading' ? <Loader2 style={{ width: 13, height: 13 }} className="animate-spin" /> : null}
-            {notice.text}
-        </div>
-    );
-};
+const Notice = ({ notice }) => notice
+    ? <UiNotice tone={notice.type}>{notice.text}</UiNotice>
+    : null;
 
 Notice.propTypes = { notice: noticeShape };
 
@@ -50,9 +27,7 @@ const UploadZone = ({ file, onFile, onClear, accept, label }) => {
         <div style={{ display: 'flex', alignItems: 'center', gap: '8px', padding: '10px 12px', border: '1px solid var(--hairline)', borderRadius: '8px', backgroundColor: 'var(--surface-card)' }}>
             <FileSpreadsheet style={{ width: 14, height: 14, color: 'var(--primary)', flexShrink: 0 }} />
             <span style={{ fontFamily: 'var(--sans)', fontSize: '12px', color: 'var(--ink)', flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{file.name}</span>
-            <button onClick={onClear} style={{ background: 'none', border: 'none', cursor: 'pointer', padding: '2px', color: 'var(--muted)', display: 'flex', flexShrink: 0 }}>
-                <X style={{ width: 12, height: 12 }} />
-            </button>
+            <IconButton icon={X} label="Убрать файл" size={12} onClick={onClear} />
         </div>
     );
 
@@ -64,7 +39,7 @@ const UploadZone = ({ file, onFile, onClear, accept, label }) => {
                 onDragOver={e => { e.preventDefault(); setDragOver(true); }}
                 onDragLeave={() => setDragOver(false)}
                 onDrop={handleDrop}
-                style={{ border: `1px dashed ${dragOver ? 'var(--primary)' : 'var(--hairline)'}`, borderRadius: '8px', padding: '18px 12px', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '6px', cursor: 'pointer', backgroundColor: dragOver ? 'rgba(204,120,92,0.04)' : 'transparent', transition: 'border-color 150ms, background-color 150ms', userSelect: 'none' }}
+                style={{ border: `1px dashed ${dragOver ? 'var(--primary)' : 'var(--hairline)'}`, borderRadius: '8px', padding: '18px 12px', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '6px', cursor: 'pointer', backgroundColor: dragOver ? 'var(--accent-wash)' : 'transparent', transition: 'border-color 150ms, background-color 150ms', userSelect: 'none' }}
             >
                 <FileSpreadsheet style={{ width: 20, height: 20, color: dragOver ? 'var(--primary)' : 'var(--muted)' }} />
                 <span style={{ fontFamily: 'var(--sans)', fontSize: '12px', fontWeight: 500, color: 'var(--ink)' }}>{label}</span>
@@ -139,16 +114,12 @@ const ReportSection = () => {
                     </div>
                 </div>
                 <div style={{ display: 'flex', gap: '8px' }}>
-                    <input type="date" value={adsStart} onChange={e => setAdsStart(e.target.value)} style={dateInputStyle}
-                        onFocus={e => e.target.style.borderColor = 'var(--primary)'}
-                        onBlur={e => e.target.style.borderColor = 'var(--hairline)'} />
-                    <input type="date" value={adsEnd} onChange={e => setAdsEnd(e.target.value)} style={dateInputStyle}
-                        onFocus={e => e.target.style.borderColor = 'var(--primary)'}
-                        onBlur={e => e.target.style.borderColor = 'var(--hairline)'} />
+                    <Input type="date" value={adsStart} onChange={e => setAdsStart(e.target.value)} style={{ flex: 1, height: 36 }} />
+                    <Input type="date" value={adsEnd} onChange={e => setAdsEnd(e.target.value)} style={{ flex: 1, height: 36 }} />
                 </div>
-                <button onClick={handleExportAds} disabled={!adsStart || !adsEnd} style={btn(true, !adsStart || !adsEnd)}>
-                    <Download size={14} /> Скачать Excel
-                </button>
+                <Button variant="primary" icon={Download} disabled={!adsStart || !adsEnd} onClick={handleExportAds}>
+                    Скачать Excel
+                </Button>
                 {notices.ads && <Notice notice={notices.ads} />}
             </section>
 
@@ -161,16 +132,12 @@ const ReportSection = () => {
                     </div>
                 </div>
                 <div style={{ display: 'flex', gap: '8px' }}>
-                    <input type="date" value={salesStart} onChange={e => setSalesStart(e.target.value)} style={dateInputStyle}
-                        onFocus={e => e.target.style.borderColor = 'var(--primary)'}
-                        onBlur={e => e.target.style.borderColor = 'var(--hairline)'} />
-                    <input type="date" value={salesEnd} onChange={e => setSalesEnd(e.target.value)} style={dateInputStyle}
-                        onFocus={e => e.target.style.borderColor = 'var(--primary)'}
-                        onBlur={e => e.target.style.borderColor = 'var(--hairline)'} />
+                    <Input type="date" value={salesStart} onChange={e => setSalesStart(e.target.value)} style={{ flex: 1, height: 36 }} />
+                    <Input type="date" value={salesEnd} onChange={e => setSalesEnd(e.target.value)} style={{ flex: 1, height: 36 }} />
                 </div>
-                <button onClick={handleExportSales} disabled={!salesStart || !salesEnd} style={btn(true, !salesStart || !salesEnd)}>
-                    <Download size={14} /> Скачать Excel
-                </button>
+                <Button variant="primary" icon={Download} disabled={!salesStart || !salesEnd} onClick={handleExportSales}>
+                    Скачать Excel
+                </Button>
                 {notices.sales && <Notice notice={notices.sales} />}
             </section>
 
@@ -199,9 +166,15 @@ const ReportSection = () => {
                     </div>
                 </div>
 
-                <button onClick={handleGenerateReport} disabled={loading || !adsFile || !productsFile} style={{ ...btn(true, loading || !adsFile || !productsFile), height: '42px' }}>
-                    {loading ? <><Loader2 style={{ width: 14, height: 14 }} className="animate-spin" />Генерация...</> : 'Сгенерировать отчёт ДРР'}
-                </button>
+                <Button
+                    variant="primary"
+                    loading={loading}
+                    disabled={!adsFile || !productsFile}
+                    onClick={handleGenerateReport}
+                    style={{ height: 42 }}
+                >
+                    {loading ? 'Генерация...' : 'Сгенерировать отчёт ДРР'}
+                </Button>
                 {notices.drr && <Notice notice={notices.drr} />}
             </section>
         </div>

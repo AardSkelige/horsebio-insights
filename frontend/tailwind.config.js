@@ -6,11 +6,13 @@ export default {
   ],
   theme: {
     extend: {
+      // Единственный источник цвета — CSS-переменные в index.css.
+      // Здесь только проброс, чтобы утилиты Tailwind следовали теме,
+      // а не хранили вторую копию палитры.
       colors: {
         'primary': {
-          DEFAULT: '#cc785c',
-          'active': '#a9583e',
-          'disabled': '#e6dfd8',
+          DEFAULT: 'var(--primary)',
+          'active': 'var(--primary-active)',
         }
       }
     },

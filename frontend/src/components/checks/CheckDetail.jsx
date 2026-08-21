@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import PropTypes from 'prop-types';
-import { m } from 'motion/react';
 import { ArrowLeft, Play, Square, Loader2, Activity } from 'lucide-react';
+import { Button, Segmented } from '../ui';
 import { checksApi, relTime, fmtDuration, plural, SEV } from './checksShared';
 import { SCRIPT_META, AccountBadge } from './ScriptCard';
 import HealthResults from './HealthResults';
@@ -82,9 +82,9 @@ export default function CheckDetail({ scriptId, initial, onBack, backLabel = 'В
 
     return (
         <div style={{ maxWidth: 1100, margin: '0 auto' }}>
-            <button onClick={onBack} style={{ display: 'inline-flex', alignItems: 'center', gap: 6, background: 'none', border: 'none', color: 'var(--muted)', fontSize: 13, fontWeight: 600, cursor: 'pointer', marginBottom: 16, padding: 0 }}>
-                <ArrowLeft size={16} /> {backLabel}
-            </button>
+            <Button variant="quiet" icon={ArrowLeft} onClick={onBack} style={{ marginBottom: 16 }}>
+                {backLabel}
+            </Button>
 
             {/* Шапка — та же строка, что на главной странице проверок */}
             <div className="check-detail__header">
@@ -109,18 +109,24 @@ export default function CheckDetail({ scriptId, initial, onBack, backLabel = 'В
                     </div>
                 </div>
                 {running ? (
-                    <button className="check-detail__run-btn" onClick={handleStop} disabled={busy} style={btnStyle('var(--error)')}>{busy ? <Loader2 size={15} className="animate-spin" /> : <Square size={15} />} Остановить</button>
+                    <Button variant="danger" icon={Square} loading={busy} onClick={handleStop}>Остановить</Button>
                 ) : (
-                    <button className="check-detail__run-btn" onClick={handleRun} disabled={busy} style={btnStyle('var(--primary)')}>{busy ? <Loader2 size={15} className="animate-spin" /> : <Play size={15} />} Запустить</button>
+                    <Button variant="primary" icon={Play} loading={busy} onClick={handleRun}>Запустить</Button>
                 )}
             </div>
 
             {/* Переключатель только у health: Проверка / Исключения */}
             {isHealth && (
-                <div style={{ display: 'inline-flex', gap: 4, padding: 4, background: 'var(--surface-soft)', borderRadius: 10, marginBottom: 18 }}>
-                    <Seg active={tab === 'check'} onClick={() => setTab('check')}>Проверка</Seg>
-                    <Seg active={tab === 'exceptions'} onClick={() => setTab('exceptions')}>Исключения</Seg>
-                </div>
+                <Segmented
+                    layoutId="check-detail-tab"
+                    value={tab}
+                    onChange={setTab}
+                    options={[
+                        { value: 'check', label: 'Проверка' },
+                        { value: 'exceptions', label: 'Исключения' },
+                    ]}
+                    className="check-detail__tabs"
+                />
             )}
 
             {isHealth && tab === 'exceptions' ? <ExceptionsPanel /> : main}
@@ -157,30 +163,7 @@ function RunSummary({ running, latest }) {
 }
 RunSummary.propTypes = { running: PropTypes.bool, latest: PropTypes.object };
 
-function Seg({ active, onClick, children }) {
-    return (
-        <button onClick={onClick} style={{
-            position: 'relative',
-            padding: '6px 16px', fontSize: 13, fontWeight: 600, cursor: 'pointer', borderRadius: 7, border: 'none',
-            background: 'transparent', color: active ? 'var(--ink)' : 'var(--muted)',
-            transition: 'color 150ms ease',
-        }}>
-            {active && (
-                <m.span
-                    layoutId="checks-seg-pill"
-                    transition={{ type: 'spring', stiffness: 500, damping: 40 }}
-                    style={{ position: 'absolute', inset: 0, borderRadius: 7, background: 'var(--canvas)', boxShadow: '0 1px 2px rgba(0,0,0,0.06)' }}
-                />
-            )}
-            <span style={{ position: 'relative' }}>{children}</span>
-        </button>
-    );
-}
-Seg.propTypes = { active: PropTypes.bool, onClick: PropTypes.func, children: PropTypes.node };
 
-function btnStyle(color) {
-    return { display: 'inline-flex', alignItems: 'center', gap: 7, padding: '9px 18px', borderRadius: 10, background: color, color: '#fff', border: 'none', fontSize: 14, fontWeight: 600, cursor: 'pointer', flexShrink: 0 };
-}
 
 CheckDetail.propTypes = {
     scriptId: PropTypes.string.isRequired,

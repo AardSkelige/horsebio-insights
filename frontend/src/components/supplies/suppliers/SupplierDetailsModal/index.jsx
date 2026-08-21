@@ -1,86 +1,28 @@
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect } from 'react';
+import { num } from '../../../../utils/formatters';
+import { CloseButton, MultiSelect, SectionLabel } from '../../../ui';
 import PropTypes from 'prop-types';
-import { X, ChevronRight, Loader2, Check, Search, ChevronDown } from 'lucide-react';
+import { ChevronRight, Loader2 } from 'lucide-react';
 import StatisticsSection from './StatisticsSection';
 import MaterialsSection from './MaterialsSection';
 import PriceChart from './PriceChart';
-import SectionLabel from '../../../ui/SectionLabel';
 import { ModalShell } from '../../../ui/motion';
 import { suppliesApi } from '../../../../api/suppliesApi';
 
-const fmt = (n) => (n ?? 0).toLocaleString('ru-RU');
 
-/* Мульти-селект для материалов на графике */
-const MaterialMultiSelect = ({ options, value, onChange }) => {
-    const [open, setOpen] = useState(false);
-    const [search, setSearch] = useState('');
-    const ref = useRef(null);
+/* Материалы на графике: значения числовые, поэтому приводим их к строкам
+   для примитива и обратно — наружу компонент отдаёт те же числа */
+const MaterialMultiSelect = ({ options, value, onChange }) => (
+    <MultiSelect
+        block
+        placeholder="Выберите материалы для графика"
+        formatSelected={(n) => `Выбрано материалов: ${n}`}
+        options={options.map((o) => ({ value: String(o.value), label: o.label, hint: o.code }))}
+        value={value.map(String)}
+        onChange={(next) => onChange(next.map(Number))}
+    />
+);
 
-    useEffect(() => {
-        const handler = (e) => { if (ref.current && !ref.current.contains(e.target)) setOpen(false); };
-        document.addEventListener('mousedown', handler);
-        return () => document.removeEventListener('mousedown', handler);
-    }, []);
-
-    const filtered = options.filter(o =>
-        o.label.toLowerCase().includes(search.toLowerCase()) ||
-        (o.code || '').toLowerCase().includes(search.toLowerCase())
-    );
-    const toggle = (id) => {
-        const next = value.includes(id) ? value.filter(v => v !== id) : [...value, id];
-        onChange(next);
-    };
-
-    return (
-        <div ref={ref} style={{ position: 'relative', marginBottom: 12 }}>
-            <button type="button" onClick={() => setOpen(o => !o)}
-                style={{ fontFamily: 'var(--sans)', fontSize: 13, color: 'var(--ink)', background: 'var(--canvas)', border: '1px solid var(--hairline)', borderRadius: 8, padding: '7px 12px', outline: 'none', display: 'flex', alignItems: 'center', gap: 6, cursor: 'pointer', width: '100%', justifyContent: 'space-between' }}>
-                <span style={{ color: value.length ? 'var(--ink)' : 'var(--muted)' }}>
-                    {value.length ? `Выбрано материалов: ${value.length}` : 'Выберите материалы для графика'}
-                </span>
-                <ChevronDown size={12} style={{ color: 'var(--muted)', transform: open ? 'rotate(180deg)' : 'none', transition: 'transform 150ms' }} />
-            </button>
-            {open && (
-                <div style={{ position: 'absolute', top: 'calc(100% + 4px)', left: 0, right: 0, zIndex: 200, background: 'var(--canvas)', border: '1px solid var(--hairline)', borderRadius: 8, boxShadow: '0 4px 16px rgba(20,20,19,0.1)', maxHeight: 260, display: 'flex', flexDirection: 'column' }}>
-                    <div style={{ padding: '8px 10px', borderBottom: '1px solid var(--hairline)', flexShrink: 0 }}>
-                        <div style={{ position: 'relative' }}>
-                            <Search size={12} style={{ position: 'absolute', left: 8, top: '50%', transform: 'translateY(-50%)', color: 'var(--muted)' }} />
-                            <input autoFocus
-                                style={{ fontFamily: 'var(--sans)', fontSize: 12, color: 'var(--ink)', background: 'var(--canvas)', border: '1px solid var(--hairline)', borderRadius: 6, padding: '5px 8px 5px 26px', outline: 'none', width: '100%', boxSizing: 'border-box' }}
-                                placeholder="Поиск..."
-                                value={search}
-                                onChange={e => setSearch(e.target.value)}
-                            />
-                        </div>
-                    </div>
-                    <div style={{ overflowY: 'auto' }}>
-                        {filtered.map(o => (
-                            <div key={o.value} onClick={() => toggle(o.value)}
-                                style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '7px 12px', cursor: 'pointer', fontFamily: 'var(--sans)', fontSize: 12, color: 'var(--ink)', background: value.includes(o.value) ? 'var(--surface-soft)' : 'transparent' }}
-                                onMouseEnter={e => { if (!value.includes(o.value)) e.currentTarget.style.background = 'var(--surface-soft)'; }}
-                                onMouseLeave={e => { if (!value.includes(o.value)) e.currentTarget.style.background = 'transparent'; }}
-                            >
-                                <div style={{ width: 14, height: 14, borderRadius: 3, border: `1px solid ${value.includes(o.value) ? 'var(--primary)' : 'var(--hairline)'}`, background: value.includes(o.value) ? 'var(--primary)' : 'transparent', flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                                    {value.includes(o.value) && <Check size={9} style={{ color: '#fff' }} />}
-                                </div>
-                                <span>{o.label}</span>
-                                {o.code && <span style={{ color: 'var(--muted)', marginLeft: 'auto', fontFamily: 'var(--mono)', fontSize: 11 }}>{o.code}</span>}
-                            </div>
-                        ))}
-                        {filtered.length === 0 && <div style={{ padding: '10px 14px', fontFamily: 'var(--sans)', fontSize: 12, color: 'var(--muted)' }}>Ничего не найдено</div>}
-                    </div>
-                    {value.length > 0 && (
-                        <div style={{ padding: '6px 10px', borderTop: '1px solid var(--hairline)' }}>
-                            <button onClick={() => { onChange([]); setOpen(false); }} style={{ fontFamily: 'var(--sans)', fontSize: 12, color: 'var(--muted)', background: 'none', border: 'none', cursor: 'pointer', padding: 0 }}>
-                                Сбросить выбор
-                            </button>
-                        </div>
-                    )}
-                </div>
-            )}
-        </div>
-    );
-};
 MaterialMultiSelect.propTypes = {
     options: PropTypes.arrayOf(PropTypes.shape({ value: PropTypes.number, label: PropTypes.string, code: PropTypes.string })).isRequired,
     value: PropTypes.arrayOf(PropTypes.number).isRequired,
@@ -101,7 +43,7 @@ const SupplyRow = ({ supply }) => {
                 <td style={{ fontFamily: 'var(--sans)', fontSize: 12, color: 'var(--ink)', padding: '8px 10px', borderBottom: '1px solid var(--hairline-soft)' }}>{supply.number}</td>
                 <td style={{ fontFamily: 'var(--sans)', fontSize: 12, color: 'var(--muted)', padding: '8px 10px', borderBottom: '1px solid var(--hairline-soft)' }}>{supply.date}</td>
                 <td style={{ fontFamily: 'var(--sans)', fontSize: 12, color: 'var(--body)', padding: '8px 10px', borderBottom: '1px solid var(--hairline-soft)' }}>{supply.items_count} позиций</td>
-                <td style={{ fontFamily: 'var(--sans)', fontSize: 12, color: 'var(--primary)', fontWeight: 500, padding: '8px 10px', borderBottom: '1px solid var(--hairline-soft)', textAlign: 'right' }}>{fmt(supply.sum)} ₽</td>
+                <td style={{ fontFamily: 'var(--sans)', fontSize: 12, color: 'var(--primary)', fontWeight: 500, padding: '8px 10px', borderBottom: '1px solid var(--hairline-soft)', textAlign: 'right' }}>{num(supply.sum)} ₽</td>
             </tr>
             {open && supply.items?.length > 0 && (
                 <tr>
@@ -120,9 +62,9 @@ const SupplyRow = ({ supply }) => {
                                     <tr key={i}>
                                         <td style={{ fontFamily: 'var(--sans)', fontSize: 12, color: 'var(--ink)', padding: '6px 8px' }}>{item.material_name}</td>
                                         <td style={{ fontFamily: 'var(--sans)', fontSize: 11, color: 'var(--muted)', padding: '6px 8px' }}>{item.material_group || '—'}</td>
-                                        <td style={{ fontFamily: 'var(--sans)', fontSize: 12, color: 'var(--body)', padding: '6px 8px' }}>{fmt(item.quantity)} {item.uom}</td>
-                                        <td style={{ fontFamily: 'var(--sans)', fontSize: 12, color: 'var(--body)', padding: '6px 8px' }}>{fmt(item.price)} ₽</td>
-                                        <td style={{ fontFamily: 'var(--sans)', fontSize: 12, color: 'var(--body)', padding: '6px 8px' }}>{fmt(item.total)} ₽</td>
+                                        <td style={{ fontFamily: 'var(--sans)', fontSize: 12, color: 'var(--body)', padding: '6px 8px' }}>{num(item.quantity)} {item.uom}</td>
+                                        <td style={{ fontFamily: 'var(--sans)', fontSize: 12, color: 'var(--body)', padding: '6px 8px' }}>{num(item.price)} ₽</td>
+                                        <td style={{ fontFamily: 'var(--sans)', fontSize: 12, color: 'var(--body)', padding: '6px 8px' }}>{num(item.total)} ₽</td>
                                     </tr>
                                 ))}
                             </tbody>
@@ -185,9 +127,7 @@ const SupplierDetailsModal = ({ supplier, visible, onClose, startDate, endDate }
                     <h2 style={{ fontFamily: 'var(--serif)', fontSize: 22, fontWeight: 400, letterSpacing: '-0.02em', color: 'var(--ink)', margin: 0 }}>
                         {supplier?.name}
                     </h2>
-                    <button onClick={onClose} style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--muted)', padding: 4, flexShrink: 0 }}>
-                        <X size={18} />
-                    </button>
+                    <CloseButton onClick={onClose} />
                 </div>
 
                 {/* Body */}
@@ -204,7 +144,6 @@ const SupplierDetailsModal = ({ supplier, visible, onClose, startDate, endDate }
                         <div style={{ display: 'flex', flexDirection: 'column', gap: 28 }}>
                             {/* Statistics */}
                             <div>
-                                <SectionLabel>Статистика</SectionLabel>
                                 <StatisticsSection statistics={details.statistics} />
                             </div>
 

@@ -14,7 +14,7 @@
     min-width: 240px;
 }
 
-.check-detail__run-btn {
+.check-detail__header .ui-btn {
     flex-shrink: 0;
 }
 
@@ -24,8 +24,12 @@
         align-items: stretch;
     }
 
-    .check-detail__run-btn {
+    .check-detail__header .ui-btn {
         width: 100%;
-        justify-content: center;
     }
+}
+
+/* Переключатель «Проверка / Исключения» отделён от содержимого под ним */
+.check-detail__tabs {
+    margin-bottom: 18px;
 }

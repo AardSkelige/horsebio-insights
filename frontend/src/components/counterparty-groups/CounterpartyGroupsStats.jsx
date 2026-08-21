@@ -2,10 +2,10 @@ import PropTypes from 'prop-types';
 import { formatNumber, formatCurrency } from '../../utils/formatters';
 
 const COLORS = {
-    large:      '#cc785c',
-    medium:     '#5c8acc',
-    small:      '#5cac6a',
-    rare_large: '#8c8a84',
+    large:      'var(--primary)',
+    medium:     'var(--info)',
+    small:      'var(--success)',
+    rare_large: 'var(--cat-clay)',
 };
 
 const CATEGORY_NAMES = {
@@ -15,18 +15,7 @@ const CATEGORY_NAMES = {
     rare_large: 'Крупные (редкие)',
 };
 
-const thStyle = {
-    fontFamily: 'var(--sans)', fontSize: '11px', fontWeight: 600,
-    letterSpacing: '0.06em', textTransform: 'uppercase', color: 'var(--muted)',
-    padding: '10px 14px', textAlign: 'left', borderBottom: '1px solid var(--hairline)',
-    whiteSpace: 'nowrap',
-};
 
-const tdStyle = {
-    fontFamily: 'var(--sans)', fontSize: '13px', color: 'var(--body)',
-    padding: '14px', borderBottom: '1px solid var(--hairline-soft)',
-    verticalAlign: 'middle',
-};
 
 export const CounterpartyGroupsStats = ({ data }) => {
     if (!data?.categories) return null;
@@ -48,36 +37,36 @@ export const CounterpartyGroupsStats = ({ data }) => {
     return (
         <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
             <div style={{ overflowX: 'auto' }}>
-                <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+                <table className="ui-table">
                     <thead>
                         <tr>
-                            <th style={thStyle}>Группа</th>
-                            <th style={thStyle}>Контрагенты</th>
-                            <th style={{ ...thStyle, minWidth: '220px' }}>Объём продаж</th>
-                            <th style={thStyle}>Активность</th>
+                            <th>Группа</th>
+                            <th>Контрагенты</th>
+                            <th style={{ minWidth: '220px' }}>Объём продаж</th>
+                            <th>Активность</th>
                         </tr>
                     </thead>
                     <tbody>
                         {rows.map(r => (
                             <tr key={r.key}>
-                                <td style={tdStyle}>
+                                <td>
                                     <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
                                         <span style={{ width: 10, height: 10, borderRadius: '50%', backgroundColor: r.color, flexShrink: 0 }} />
                                         <span style={{ fontWeight: 500, color: 'var(--ink)' }}>{r.name}</span>
                                     </div>
                                 </td>
-                                <td style={tdStyle}>
+                                <td>
                                     <div style={{ fontWeight: 500 }}>{formatNumber(r.count)}</div>
                                     <div style={{ fontSize: '11px', color: 'var(--muted)' }}>{r.countShare}% от общего</div>
                                 </td>
-                                <td style={tdStyle}>
+                                <td>
                                     <div style={{ fontWeight: 500, marginBottom: '6px' }}>{formatCurrency(r.volume)}</div>
                                     <div style={{ height: 4, borderRadius: 2, backgroundColor: 'var(--surface-cream-strong)', overflow: 'hidden', marginBottom: '4px' }}>
                                         <div style={{ height: '100%', borderRadius: 2, backgroundColor: r.color, width: `${(r.volumeShare * 100).toFixed(1)}%`, transition: 'width 400ms ease' }} />
                                     </div>
                                     <div style={{ fontSize: '11px', color: 'var(--muted)' }}>{(r.volumeShare * 100).toFixed(1)}% от общего объёма</div>
                                 </td>
-                                <td style={tdStyle}>
+                                <td>
                                     <div style={{ fontWeight: 500 }}>{(r.frequency * 100).toFixed(1)}%</div>
                                     <div style={{ fontSize: '11px', color: 'var(--muted)' }}>частота заказов</div>
                                 </td>

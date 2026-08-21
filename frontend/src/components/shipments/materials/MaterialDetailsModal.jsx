@@ -1,15 +1,13 @@
 import { useState, useEffect } from 'react';
+import { CloseButton, Disclosure, SectionLabel, StatCard, StatGrid } from '../../ui';
 import PropTypes from 'prop-types';
-import { X, ChevronRight, Loader2 } from 'lucide-react';
+import { Loader2 } from 'lucide-react';
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
-import { formatDate } from '../../../utils/formatters';
+import { formatDate, num } from '../../../utils/formatters';
 import { CHART_ANIMATION } from '../../../utils/chartAnimation';
-import SectionLabel from '../../ui/SectionLabel';
-import StatCard from '../../ui/StatCard';
 import { ModalShell } from '../../ui/motion';
 import { materialsApi } from '../../../api/materialsApi';
 
-const fmt = (n) => (n ?? 0).toLocaleString('ru-RU');
 
 const ProductCard = ({ product, totalUsage, uom }) => {
     const pct = totalUsage ? (product.quantity / totalUsage) * 100 : 0;
@@ -17,7 +15,7 @@ const ProductCard = ({ product, totalUsage, uom }) => {
         <div style={{ background: 'var(--surface-card)', borderRadius: 10, padding: '12px 14px', border: '1px solid var(--hairline)' }}>
             <div style={{ fontFamily: 'var(--sans)', fontSize: 13, fontWeight: 500, color: 'var(--ink)', marginBottom: 8, lineHeight: 1.35 }}>{product.name}</div>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6 }}>
-                <span style={{ fontFamily: 'var(--sans)', fontSize: 12, color: 'var(--muted)' }}>{fmt(product.quantity)} {uom}</span>
+                <span style={{ fontFamily: 'var(--sans)', fontSize: 12, color: 'var(--muted)' }}>{num(product.quantity)} {uom}</span>
                 <span style={{ fontFamily: 'var(--sans)', fontSize: 12, color: 'var(--primary)', fontWeight: 500 }}>{pct.toFixed(1)}%</span>
             </div>
             <div style={{ height: 3, borderRadius: 9999, background: 'var(--hairline)', overflow: 'hidden' }}>
@@ -32,38 +30,27 @@ ProductCard.propTypes = {
     uom: PropTypes.string.isRequired,
 };
 
-const HistoryGroup = ({ date, group, uom }) => {
-    const [open, setOpen] = useState(false);
-    return (
-        <div style={{ borderBottom: '1px solid var(--hairline-soft)' }}>
-            <button
-                onClick={() => setOpen(o => !o)}
-                style={{ width: '100%', display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '10px 0', background: 'none', border: 'none', cursor: 'pointer', textAlign: 'left' }}
-            >
-                <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                    <ChevronRight size={13} style={{ color: 'var(--muted)', transform: open ? 'rotate(90deg)' : 'none', transition: 'transform 150ms', flexShrink: 0 }} />
-                    <span style={{ fontFamily: 'var(--sans)', fontSize: 13, color: 'var(--ink)' }}>{formatDate(date)}</span>
+const HistoryGroup = ({ date, group, uom }) => (
+    <Disclosure
+        summary={formatDate(date)}
+        aside={<span style={{ color: 'var(--muted)', fontWeight: 400 }}>{group.items.length} отгрузок · {num(group.totalQuantity)} {uom}</span>}
+    >
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+            {group.items.map((item, i) => (
+                <div
+                    key={`${item.shipment_number}-${i}`}
+                    style={{ background: 'var(--surface-soft)', borderRadius: 8, padding: '8px 12px', display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 12 }}
+                >
+                    <div>
+                        <div style={{ fontSize: 'var(--size-sm)', fontWeight: 500, color: 'var(--ink)' }}>№{item.shipment_number}</div>
+                        <div style={{ fontSize: 'var(--size-xs)', color: 'var(--muted)', marginTop: 2 }}>{item.product_name}</div>
+                    </div>
+                    <span style={{ fontSize: 'var(--size-sm)', color: 'var(--ink)', whiteSpace: 'nowrap' }}>{num(item.quantity)} {uom}</span>
                 </div>
-                <span style={{ fontFamily: 'var(--sans)', fontSize: 12, color: 'var(--muted)' }}>
-                    {group.items.length} отгрузок · {fmt(group.totalQuantity)} {uom}
-                </span>
-            </button>
-            {open && (
-                <div style={{ paddingBottom: 10, display: 'flex', flexDirection: 'column', gap: 6 }}>
-                    {group.items.map((item, i) => (
-                        <div key={`${item.shipment_number}-${i}`} style={{ background: 'var(--surface-soft)', borderRadius: 8, padding: '8px 12px', display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 12 }}>
-                            <div>
-                                <div style={{ fontFamily: 'var(--sans)', fontSize: 12, fontWeight: 500, color: 'var(--ink)' }}>№{item.shipment_number}</div>
-                                <div style={{ fontFamily: 'var(--sans)', fontSize: 11, color: 'var(--muted)', marginTop: 2 }}>{item.product_name}</div>
-                            </div>
-                            <span style={{ fontFamily: 'var(--sans)', fontSize: 12, color: 'var(--ink)', whiteSpace: 'nowrap' }}>{fmt(item.quantity)} {uom}</span>
-                        </div>
-                    ))}
-                </div>
-            )}
+            ))}
         </div>
-    );
-};
+    </Disclosure>
+);
 HistoryGroup.propTypes = {
     date: PropTypes.string.isRequired,
     group: PropTypes.shape({ items: PropTypes.array, totalQuantity: PropTypes.number }).isRequired,
@@ -121,9 +108,7 @@ const MaterialDetailsModal = ({ material, visible, onClose, dateRange }) => {
                         <h2 style={{ fontFamily: 'var(--serif)', fontSize: 22, fontWeight: 400, letterSpacing: '-0.02em', color: 'var(--ink)', margin: 0, lineHeight: 1.2 }}>{material?.name}</h2>
                         {material?.code && <span style={{ fontFamily: 'var(--mono)', fontSize: 12, color: 'var(--muted)' }}>{material.code}</span>}
                     </div>
-                    <button onClick={onClose} style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--muted)', padding: 4, flexShrink: 0 }}>
-                        <X size={18} />
-                    </button>
+                    <CloseButton onClick={onClose} />
                 </div>
 
                 {/* Body */}
@@ -140,12 +125,11 @@ const MaterialDetailsModal = ({ material, visible, onClose, dateRange }) => {
                         <div style={{ display: 'flex', flexDirection: 'column', gap: 24 }}>
                             {/* Stats */}
                             <div>
-                                <SectionLabel>Статистика</SectionLabel>
-                                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: 12 }}>
-                                    <StatCard title="Всего использовано" value={`${fmt(details.statistics.total_usage)} ${details.material.uom}`} />
-                                    <StatCard title="Отгрузок" value={fmt(details.statistics.total_shipments)} />
-                                    <StatCard title="Продуктов" value={fmt(details.statistics.total_products)} />
-                                </div>
+                                <StatGrid>
+                                    <StatCard title="Всего использовано" value={`${num(details.statistics.total_usage)} ${details.material.uom}`} />
+                                    <StatCard title="Отгрузок" value={num(details.statistics.total_shipments)} />
+                                    <StatCard title="Продуктов" value={num(details.statistics.total_products)} />
+                                </StatGrid>
                             </div>
 
                             {/* Chart */}
@@ -157,10 +141,10 @@ const MaterialDetailsModal = ({ material, visible, onClose, dateRange }) => {
                                             <LineChart data={chartData} margin={{ top: 4, right: 8, left: 0, bottom: 0 }}>
                                                 <CartesianGrid strokeDasharray="3 3" stroke="var(--hairline)" />
                                                 <XAxis dataKey="month" tick={{ fontFamily: 'var(--sans)', fontSize: 11, fill: 'var(--muted)' }} interval="preserveStartEnd" />
-                                                <YAxis tick={{ fontFamily: 'var(--sans)', fontSize: 11, fill: 'var(--muted)' }} tickFormatter={fmt} width={56} />
+                                                <YAxis tick={{ fontFamily: 'var(--sans)', fontSize: 11, fill: 'var(--muted)' }} tickFormatter={num} width={56} />
                                                 <Tooltip
                                                     contentStyle={{ fontFamily: 'var(--sans)', fontSize: 12, borderRadius: 8, border: '1px solid var(--hairline)', background: 'var(--canvas)' }}
-                                                    formatter={(v) => [`${fmt(v)} ${details.material.uom}`, 'Количество']}
+                                                    formatter={(v) => [`${num(v)} ${details.material.uom}`, 'Количество']}
                                                 />
                                                 <Line {...CHART_ANIMATION} type="monotone" dataKey="quantity" stroke="var(--primary)" strokeWidth={2} dot={{ r: 3, fill: 'var(--primary)' }} activeDot={{ r: 5 }} />
                                             </LineChart>

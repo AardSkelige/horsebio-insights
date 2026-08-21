@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef } from 'react';
+import { Page, PageHeader, Skeleton } from '../ui';
 import { X } from 'lucide-react';
 import { seasonalAnalysisApi } from '../../api/seasonalAnalysis';
 import { SeasonalFilters } from './SeasonalFilters';
@@ -7,7 +8,6 @@ import { SeasonalStatistics } from './SeasonalStatistics';
 import { SeasonalCharts } from './SeasonalCharts';
 import SeasonalProductDetails from './SeasonalProductDetails';
 import { FadeRise } from '../ui/motion';
-import { Skeleton } from '../ui/Skeleton';
 
 const sectionCard = { backgroundColor: 'var(--canvas)', border: '1px solid var(--hairline)', borderRadius: '10px', padding: '24px' };
 const sectionHeading = { fontFamily: 'var(--serif)', fontSize: '22px', fontWeight: 400, letterSpacing: '-0.02em', color: 'var(--ink)', margin: '0 0 16px' };
@@ -73,16 +73,11 @@ export const SeasonalAnalysis = () => {
     const handleFiltersChange = (f) => { setError(null); setSelectedProduct(null); setFilters(f); };
 
     return (
-        <div style={{ display: 'flex', flexDirection: 'column', gap: '20px', color: 'var(--ink)' }}>
-            {/* Header */}
-            <div style={{ borderBottom: '1px solid var(--hairline)', paddingBottom: '16px' }}>
-                <h1 style={{ fontFamily: 'var(--serif)', fontSize: '32px', fontWeight: 400, letterSpacing: '-0.025em', lineHeight: 1.1, color: 'var(--ink)', margin: '0 0 4px' }}>
-                    Анализ сезонности
-                </h1>
-                <p style={{ fontFamily: 'var(--sans)', fontSize: '13px', color: 'var(--muted)', margin: 0 }}>
-                    Сезонные паттерны продаж для оптимизации запасов и планирования производства
-                </p>
-            </div>
+        <Page>
+            <PageHeader
+                title="Сезонность"
+                subtitle="Сезонные паттерны продаж для оптимизации запасов и планирования производства"
+            />
 
             {/* Filters */}
             <FadeRise style={{ ...sectionCard, backgroundColor: 'var(--surface-soft)' }}>
@@ -100,9 +95,9 @@ export const SeasonalAnalysis = () => {
 
             {/* Error */}
             {error && !loading && (
-                <div style={{ display: 'flex', alignItems: 'flex-start', gap: '10px', padding: '12px 16px', backgroundColor: 'rgba(198,69,69,0.08)', border: '1px solid rgba(198,69,69,0.3)', borderRadius: '8px', fontFamily: 'var(--sans)', fontSize: '13px', color: '#c64545' }}>
+                <div style={{ display: 'flex', alignItems: 'flex-start', gap: '10px', padding: '12px 16px', backgroundColor: 'var(--error-bg)', border: '1px solid var(--error-border)', borderRadius: '8px', fontFamily: 'var(--sans)', fontSize: '13px', color: 'var(--error)' }}>
                     <span style={{ flex: 1 }}><b>Ошибка загрузки данных:</b> {error}</span>
-                    <button onClick={() => setError(null)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#c64545', padding: 0, flexShrink: 0 }}>
+                    <button onClick={() => setError(null)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--error)', padding: 0, flexShrink: 0 }}>
                         <X style={{ width: 14, height: 14 }} />
                     </button>
                 </div>
@@ -138,7 +133,7 @@ export const SeasonalAnalysis = () => {
                     )}
                 </div>
             )}
-        </div>
+        </Page>
     );
 };
 

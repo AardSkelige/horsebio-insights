@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { RefreshCw } from 'lucide-react';
+import { timeOnly } from '../../utils/formatters';
+import { EmptyState, ErrorState, Page, PageHeader, Skeleton, StatCard, StatGrid } from '../ui';
 import { FadeRise, Stagger, StaggerItem } from '../ui/motion';
 import { discountedApi } from '../../api/discountedApi';
 import DiscountedCard from './DiscountedCard';
@@ -25,23 +26,11 @@ const FLOW = [
     ['Система', 'Остаток на сайте едет за МойСклад сам; за два месяца до конца срока позиция снимается с продажи'],
 ];
 
-function formatTime(iso) {
-    if (!iso) return null;
-    return new Date(iso).toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' });
-}
-
 export default function DiscountedPage() {
     const [data, setData] = useState(null);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState(null);
-    const [isMobile, setIsMobile] = useState(() => window.innerWidth < 768);
     const abortRef = useRef(null);
-
-    useEffect(() => {
-        const handler = () => setIsMobile(window.innerWidth < 768);
-        window.addEventListener('resize', handler);
-        return () => window.removeEventListener('resize', handler);
-    }, []);
 
     const load = useCallback(async (refresh = false) => {
         abortRef.current?.abort();
@@ -73,46 +62,34 @@ export default function DiscountedPage() {
 
     return (
         <FadeRise>
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 18, color: 'var(--ink)' }}>
-                <div style={{
-                    display: 'flex', justifyContent: 'space-between',
-                    alignItems: 'flex-start', gap: 16, flexWrap: 'wrap',
-                }}>
-                    <div>
-                        <h1 style={{
-                            fontFamily: 'var(--serif)', fontWeight: 400, fontSize: isMobile ? 24 : 30,
-                            letterSpacing: '-0.02em', margin: '0 0 4px',
-                        }}>
-                            Уценка
-                        </h1>
-                        <p style={{ fontFamily: 'var(--sans)', fontSize: 13, color: 'var(--muted)', margin: 0 }}>
+            <Page>
+                <PageHeader
+                    title="Уценка"
+                    subtitle={
+                        <>
                             Товар с подходящим сроком годности на складе «Уценка»
                             {data?.rules && ` — скидка ${Math.round(data.rules.discount_rate * 100)} %, снимаем с продажи за ${data.rules.months_to_delist} месяца до конца срока`}
-                            {data?.generated_at && (
-                                <>
-                                    {' · '}
-                                    <span style={{ fontFamily: 'var(--mono)', fontSize: 12, color: 'var(--muted-soft)' }}>
-                                        данные на {formatTime(data.generated_at)}
-                                    </span>
-                                </>
-                            )}
-                        </p>
+                        </>
+                    }
+                    updatedAt={data?.generated_at ? timeOnly(data.generated_at) : undefined}
+                    onRefresh={() => load(true)}
+                    refreshing={loading}
+                />
+
+                {error && <ErrorState hint={error} onRetry={() => load(true)} />}
+
+                {/* Первая загрузка: три дорожки-заглушки на месте будущих колонок,
+                    чтобы страница не выглядела пустой, пока идёт запрос */}
+                {loading && !data && !error && (
+                    <div className="uc-board">
+                        {LANES.map((lane) => (
+                            <div key={lane.key} className="uc-col">
+                                <div className="uc-col-head"><span>{lane.title}</span></div>
+                                <Skeleton height={64} style={{ marginBottom: 9 }} />
+                                <Skeleton height={64} />
+                            </div>
+                        ))}
                     </div>
-                    <button
-                        type="button"
-                        className="uc-btn ghost"
-                        onClick={() => load(true)}
-                        disabled={loading}
-                    >
-                        <RefreshCw size={13} aria-hidden="true" />
-                        Обновить
-                    </button>
-                </div>
-
-                {error && <div className="uc-error" style={{ fontSize: 13 }}>{error}</div>}
-
-                {loading && !data && (
-                    <p style={{ fontSize: 13, color: 'var(--muted)' }}>Загружаю…</p>
                 )}
 
                 {data && (
@@ -149,35 +126,22 @@ export default function DiscountedPage() {
                         </div>
 
                         {inStock.length === 0 && (
-                            <p style={{ fontSize: 13, color: 'var(--muted)' }}>
-                                На складе «Уценка» сейчас пусто. Позиции появятся здесь после того,
-                                как Лера проведёт техоперацию в МойСклад.
-                            </p>
+                            <EmptyState
+                                title="На складе «Уценка» сейчас пусто"
+                                hint="Позиции появятся здесь после того, как Лера проведёт техоперацию в МойСклад."
+                            />
                         )}
 
                         {stats && (
                             <section className="uc-block">
-                                <h2 className="uc-h2">
-                                    Итоги за год
-                                    <span className="uc-h2-note">с {stats.period_from}</span>
-                                </h2>
-                                <div className="uc-stats">
-                                    <div>
-                                        <div className="k">Уценено</div>
-                                        <div className="v">{units(stats.marked.quantity)}</div>
-                                        <div className="s">себестоимость {money(stats.marked.cost)}</div>
-                                    </div>
-                                    <div>
-                                        <div className="k">Продано</div>
-                                        <div className="v">{units(stats.sold.quantity)}</div>
-                                        <div className="s">выручка {money(stats.sold.revenue)}</div>
-                                    </div>
-                                    <div>
-                                        <div className="k">Списано</div>
-                                        <div className="v">{units(stats.written_off.quantity)}</div>
-                                        <div className="s">потеряно {money(stats.written_off.cost)}</div>
-                                    </div>
-                                </div>
+                                <StatGrid>
+                                    <StatCard title="Уценено" value={units(stats.marked.quantity)}
+                                        note={`себестоимость ${money(stats.marked.cost)}`} />
+                                    <StatCard title="Продано" value={units(stats.sold.quantity)}
+                                        note={`выручка ${money(stats.sold.revenue)}`} />
+                                    <StatCard title="Списано" value={units(stats.written_off.quantity)}
+                                        note={`потеряно ${money(stats.written_off.cost)}`} />
+                                </StatGrid>
                                 <p className="uc-note">
                                     Выручка от уценки — это деньги, которых иначе не было бы вовсе:
                                     товар с истекающим сроком ушёл бы в списание. «Списано» считается
@@ -199,7 +163,7 @@ export default function DiscountedPage() {
                         </section>
                     </>
                 )}
-            </div>
+            </Page>
         </FadeRise>
     );
 }

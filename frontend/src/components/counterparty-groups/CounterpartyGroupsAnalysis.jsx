@@ -1,11 +1,11 @@
 import { useState, useEffect, useCallback } from 'react';
+import { Page, PageHeader, Skeleton, StatGrid } from '../ui';
 import { X } from 'lucide-react';
 import { CounterpartyGroupsFilters } from './CounterpartyGroupsFilters';
 import { CounterpartyGroupsStats } from './CounterpartyGroupsStats';
 import { CounterpartyGroupsCharts } from './CounterpartyGroupsCharts';
 import { CounterpartyGroupsTable } from './CounterpartyGroupsTable';
 import { FadeRise } from '../ui/motion';
-import { Skeleton } from '../ui/Skeleton';
 import { counterpartiesApi } from '../../api/counterpartiesApi';
 
 const GROUPS = [
@@ -16,7 +16,7 @@ const GROUPS = [
 ];
 
 const GROUP_COLORS = {
-    large: 'var(--primary)', medium: '#5c8acc', small: '#5cac6a', rare_large: 'var(--muted)',
+    large: 'var(--primary)', medium: 'var(--info)', small: 'var(--success)', rare_large: 'var(--muted)',
 };
 
 const RECOMMENDATIONS = [
@@ -54,26 +54,21 @@ export const CounterpartyGroupsAnalysis = () => {
     useEffect(() => { fetchData(); }, [fetchData]);
 
     return (
-        <div style={{ display: 'flex', flexDirection: 'column', gap: '24px', color: 'var(--ink)' }}>
-            {/* Header */}
-            <div style={{ borderBottom: '1px solid var(--hairline)', paddingBottom: '16px' }}>
-                <h1 style={{ fontFamily: 'var(--serif)', fontSize: '32px', fontWeight: 400, letterSpacing: '-0.025em', lineHeight: 1.1, color: 'var(--ink)', margin: '0 0 4px' }}>
-                    Группы контрагентов
-                </h1>
-                <p style={{ fontFamily: 'var(--sans)', fontSize: '13px', color: 'var(--muted)', margin: 0 }}>
-                    Анализ клиентской базы по объёму закупок и частоте заказов
-                </p>
-            </div>
+        <Page>
+            <PageHeader
+                title="Группы клиентов"
+                subtitle="Анализ клиентской базы по объёму закупок и частоте заказов"
+            />
 
-            {/* Group legend */}
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(300px, 1fr))', gap: '12px' }}>
+            {/* Легенда групп */}
+            <StatGrid min={240}>
                 {GROUPS.map(g => (
                     <div key={g.key} style={{ backgroundColor: 'var(--surface-soft)', borderRadius: '8px', padding: '14px', display: 'flex', flexDirection: 'column', gap: '4px' }}>
                         <div style={{ fontFamily: 'var(--sans)', fontSize: '12px', fontWeight: 600, color: GROUP_COLORS[g.key] }}>{g.label}</div>
                         <div style={{ fontFamily: 'var(--sans)', fontSize: '12px', color: 'var(--muted)', lineHeight: 1.4 }}>{g.desc}</div>
                     </div>
                 ))}
-            </div>
+            </StatGrid>
 
             {/* Filters */}
             <FadeRise style={{ ...sectionCard, backgroundColor: 'var(--surface-soft)' }}>
@@ -92,9 +87,9 @@ export const CounterpartyGroupsAnalysis = () => {
 
             {/* Error */}
             {error && !loading && (
-                <div style={{ display: 'flex', alignItems: 'flex-start', gap: '10px', padding: '12px 16px', backgroundColor: 'rgba(198,69,69,0.08)', border: '1px solid rgba(198,69,69,0.3)', borderRadius: '8px', fontFamily: 'var(--sans)', fontSize: '13px', color: '#c64545' }}>
+                <div style={{ display: 'flex', alignItems: 'flex-start', gap: '10px', padding: '12px 16px', backgroundColor: 'var(--error-bg)', border: '1px solid var(--error-border)', borderRadius: '8px', fontFamily: 'var(--sans)', fontSize: '13px', color: 'var(--error)' }}>
                     <span style={{ flex: 1 }}><b>Ошибка загрузки данных:</b> {error}</span>
-                    <button onClick={() => setError(null)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#c64545', padding: 0, flexShrink: 0 }}>
+                    <button onClick={() => setError(null)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--error)', padding: 0, flexShrink: 0 }}>
                         <X style={{ width: 14, height: 14 }} />
                     </button>
                 </div>
@@ -141,7 +136,7 @@ export const CounterpartyGroupsAnalysis = () => {
                     </FadeRise>
                 </div>
             )}
-        </div>
+        </Page>
     );
 };
 

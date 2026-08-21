@@ -1,8 +1,8 @@
 import PropTypes from 'prop-types';
+import { money, num } from '../../../utils/formatters';
+import { StatGrid } from '../../ui';
 import { StatisticsPropTypes } from './types';
 
-const fmt = (n) => (n ?? 0).toLocaleString('ru-RU');
-const fmtRub = (v) => (v ?? 0).toLocaleString('ru-RU', { style: 'currency', currency: 'RUB', minimumFractionDigits: 0, maximumFractionDigits: 0 });
 
 const TopList = ({ title, items, renderItem, maxValue }) => (
     <div style={{ background: 'var(--surface-card)', borderRadius: 12, padding: '16px 20px', border: '1px solid var(--hairline)' }}>
@@ -38,14 +38,14 @@ const ProductStatistics = ({ stats }) => {
     const byAvg = (stats.top_by_average_quantity || []).map(i => ({ ...i, _val: parseFloat(i.average_quantity) || 0 }));
 
     return (
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(300px, 1fr))', gap: 12, marginBottom: 20 }}>
+        <StatGrid min={300}>
             <TopList
                 title="Топ по количеству"
                 items={byQty}
                 maxValue={byQty[0]?._val}
                 renderItem={(item) => (
                     <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-                        <span style={{ fontFamily: 'var(--serif)', fontSize: 16, fontWeight: 400, color: 'var(--ink)', fontVariantNumeric: 'lining-nums', fontFeatureSettings: '"lnum" 1' }}>{fmt(item.quantity)} шт.</span>
+                        <span style={{ fontFamily: 'var(--serif)', fontSize: 16, fontWeight: 400, color: 'var(--ink)', fontVariantNumeric: 'lining-nums', fontFeatureSettings: '"lnum" 1' }}>{num(item.quantity)} шт.</span>
                         <span style={{ fontFamily: 'var(--sans)', fontSize: 11, color: 'var(--muted)', alignSelf: 'flex-end' }}>{item.shipments_count} отгрузок</span>
                     </div>
                 )}
@@ -56,8 +56,8 @@ const ProductStatistics = ({ stats }) => {
                 maxValue={byRev[0]?._val}
                 renderItem={(item) => (
                     <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-                        <span style={{ fontFamily: 'var(--serif)', fontSize: 16, fontWeight: 400, color: 'var(--ink)', fontVariantNumeric: 'lining-nums', fontFeatureSettings: '"lnum" 1' }}>{fmtRub(item.revenue)}</span>
-                        <span style={{ fontFamily: 'var(--sans)', fontSize: 11, color: 'var(--muted)', alignSelf: 'flex-end' }}>{fmt(item.price_per_unit)} ₽/шт.</span>
+                        <span style={{ fontFamily: 'var(--serif)', fontSize: 16, fontWeight: 400, color: 'var(--ink)', fontVariantNumeric: 'lining-nums', fontFeatureSettings: '"lnum" 1' }}>{money(item.revenue)}</span>
+                        <span style={{ fontFamily: 'var(--sans)', fontSize: 11, color: 'var(--muted)', alignSelf: 'flex-end' }}>{num(item.price_per_unit)} ₽/шт.</span>
                     </div>
                 )}
             />
@@ -69,7 +69,7 @@ const ProductStatistics = ({ stats }) => {
                     <span style={{ fontFamily: 'var(--serif)', fontSize: 16, fontWeight: 400, color: 'var(--ink)', fontVariantNumeric: 'lining-nums', fontFeatureSettings: '"lnum" 1' }}>{item.average_quantity} шт.</span>
                 )}
             />
-        </div>
+        </StatGrid>
     );
 };
 

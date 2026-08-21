@@ -1,29 +1,21 @@
 import { useState, useEffect, useCallback } from 'react';
+import { CloseButton, SectionLabel, StatCard, StatGrid } from '../../ui';
 import PropTypes from 'prop-types';
 import { counterpartiesApi } from '../../../api/counterpartiesApi';
-import { X, ChevronDown, Loader2, AlertCircle } from 'lucide-react';
+import { ChevronDown, Loader2, AlertCircle } from 'lucide-react';
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend } from 'recharts';
 import { CounterpartyPropTypes } from './types';
 import { CHART_ANIMATION } from '../../../utils/chartAnimation';
-import { formatDateTime, formatDate } from '../../../utils/formatters';
-import SectionLabel from '../../ui/SectionLabel';
+import { formatDate, formatDateTime, pluralWith } from '../../../utils/formatters';
 import { ModalShell } from '../../ui/motion';
 
 /* ── helpers ──────────────────────────────────────────────── */
 
 const fmt  = (n) => (n == null ? '—' : n.toLocaleString('ru-RU'));
 const fmtC = (v) => (v == null ? '—' : v.toLocaleString('ru-RU', { style: 'currency', currency: 'RUB', maximumFractionDigits: 0 }));
-const plural = (n) => n === 1 ? 'отгрузка' : n < 5 ? 'отгрузки' : 'отгрузок';
 
 /* ── sub-components ───────────────────────────────────────── */
 
-const StatCard = ({ title, value }) => (
-    <div style={{ background: 'var(--surface-card)', borderRadius: 10, padding: '14px 16px', border: '1px solid var(--hairline)' }}>
-        <div style={{ fontFamily: 'var(--sans)', fontSize: 11, fontWeight: 500, letterSpacing: '0.08em', textTransform: 'uppercase', color: 'var(--muted)', marginBottom: 6 }}>{title}</div>
-        <div style={{ fontFamily: 'var(--serif)', fontSize: 26, fontWeight: 400, letterSpacing: '-0.02em', color: 'var(--ink)', fontVariantNumeric: 'lining-nums', fontFeatureSettings: '"lnum" 1' }}>{value}</div>
-    </div>
-);
-StatCard.propTypes = { title: PropTypes.string.isRequired, value: PropTypes.string.isRequired };
 
 const TopProductCard = ({ product }) => {
     if (!product?.name) return null;
@@ -36,7 +28,7 @@ const TopProductCard = ({ product }) => {
             </div>
             {product.shipments_count > 0 && (
                 <span style={{ fontFamily: 'var(--sans)', fontSize: 11, background: 'var(--surface-card)', color: 'var(--muted)', borderRadius: 9999, padding: '2px 8px', marginTop: 4, display: 'inline-block' }}>
-                    {product.shipments_count} {plural(product.shipments_count)}
+                    {pluralWith(product.shipments_count, 'отгрузка', 'отгрузки', 'отгрузок')}
                 </span>
             )}
         </div>
@@ -155,9 +147,7 @@ const CounterpartyDetailsModal = ({ counterparty, visible, onClose, dateRange })
                         </h2>
                         <p style={{ fontFamily: 'var(--sans)', fontSize: 12, color: 'var(--muted)', margin: '4px 0 0' }}>Детальная статистика контрагента</p>
                     </div>
-                    <button onClick={onClose} style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--muted)', padding: 4, marginTop: 2 }}>
-                        <X size={18} />
-                    </button>
+                    <CloseButton onClick={onClose} />
                 </div>
 
                 {/* Body */}
@@ -170,7 +160,7 @@ const CounterpartyDetailsModal = ({ counterparty, visible, onClose, dateRange })
                     )}
 
                     {error && !loading && (
-                        <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '16px', borderRadius: 8, background: 'var(--surface-soft)', color: '#c64545' }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '16px', borderRadius: 8, background: 'var(--surface-soft)', color: 'var(--error)' }}>
                             <AlertCircle size={15} />
                             <span style={{ fontFamily: 'var(--sans)', fontSize: 13 }}>{error}</span>
                         </div>
@@ -180,12 +170,11 @@ const CounterpartyDetailsModal = ({ counterparty, visible, onClose, dateRange })
                         <>
                             {/* Статистика */}
                             <section>
-                                <SectionLabel>Статистика</SectionLabel>
-                                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(130px, 1fr))', gap: 10 }}>
+                                <StatGrid>
                                     <StatCard title="Всего отгрузок" value={fmt(details.statistics?.total_shipments)} />
                                     <StatCard title="Всего товаров"  value={fmt(details.statistics?.total_products)}  />
                                     <StatCard title="Видов товаров"  value={fmt(details.statistics?.unique_products)} />
-                                </div>
+                                </StatGrid>
                             </section>
 
                             {/* Топы */}
@@ -242,7 +231,7 @@ const CounterpartyDetailsModal = ({ counterparty, visible, onClose, dateRange })
                                                 >
                                                     <span style={{ fontWeight: 500, color: 'var(--ink)' }}>{formatDate(date)}</span>
                                                     <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                                                        <span style={{ fontSize: 12, color: 'var(--muted)' }}>{shipments.length} {plural(shipments.length)}</span>
+                                                        <span style={{ fontSize: 12, color: 'var(--muted)' }}>{pluralWith(shipments.length, 'отгрузка', 'отгрузки', 'отгрузок')}</span>
                                                         <ChevronDown size={14} style={{ color: 'var(--muted)', transform: openDates[date] ? 'rotate(180deg)' : 'none', transition: 'transform 150ms' }} />
                                                     </div>
                                                 </button>

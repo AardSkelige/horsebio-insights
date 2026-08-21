@@ -1,4 +1,6 @@
 import PropTypes from 'prop-types';
+import { Badge, DataTable, SectionLabel } from '../ui';
+import { formatDateTimeShort } from '../../utils/formatters';
 
 function formatMonthLabel(yyyyMm) {
     const [year, month] = yyyyMm.split('-');
@@ -12,28 +14,8 @@ function formatMonthShort(yyyyMm) {
     return d.toLocaleDateString('ru-RU', { month: 'short', year: '2-digit' });
 }
 
-const th = {
-    fontFamily: 'var(--sans)',
-    fontSize: 11,
-    fontWeight: 600,
-    textTransform: 'uppercase',
-    letterSpacing: '0.05em',
-    color: 'var(--muted)',
-    padding: '10px 16px',
-    textAlign: 'left',
-    whiteSpace: 'nowrap',
-};
-
-const td = {
-    fontFamily: 'var(--sans)',
-    fontSize: 13,
-    color: 'var(--ink)',
-    padding: '11px 16px',
-    borderTop: '1px solid var(--hairline-soft)',
-};
-
 function PctBar({ pct }) {
-    const color = pct >= 80 ? 'var(--success)' : pct >= 50 ? '#f59e0b' : 'var(--error)';
+    const color = pct >= 80 ? 'var(--success)' : pct >= 50 ? 'var(--warning)' : 'var(--error)';
     return (
         <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
             <div style={{
@@ -54,17 +36,8 @@ PctBar.propTypes = { pct: PropTypes.number.isRequired };
 
 export default function InventoryHistoryTable({ history, selectedMonth, onSelectMonth, isMobile }) {
     return (
-        <div style={{ marginTop: 48 }}>
-            <h2 style={{
-                fontFamily: 'var(--serif)',
-                fontSize: isMobile ? 18 : 22,
-                fontWeight: 400,
-                letterSpacing: '-0.02em',
-                color: 'var(--ink)',
-                margin: '0 0 16px',
-            }}>
-                По месяцам
-            </h2>
+        <div>
+            <SectionLabel>По месяцам</SectionLabel>
 
             <div style={{ background: 'var(--canvas)', border: '1px solid var(--hairline)', borderRadius: 12, overflow: 'hidden' }}>
                 {isMobile ? (
@@ -73,7 +46,7 @@ export default function InventoryHistoryTable({ history, selectedMonth, onSelect
                         {history.map((row, i) => {
                             const monthKey = row.month_start.slice(0, 7);
                             const active = selectedMonth === monthKey;
-                            const color = row.pct >= 80 ? 'var(--success)' : row.pct >= 50 ? '#f59e0b' : 'var(--error)';
+                            const color = row.pct >= 80 ? 'var(--success)' : row.pct >= 50 ? 'var(--warning)' : 'var(--error)';
                             return (
                                 <div
                                     key={row.month_start}
@@ -99,7 +72,7 @@ export default function InventoryHistoryTable({ history, selectedMonth, onSelect
                                             </span>
                                             {row.is_snapshot && (
                                                 <span style={{
-                                                    background: 'rgba(93,184,114,0.12)',
+                                                    background: 'var(--success-bg)',
                                                     color: 'var(--success)',
                                                     fontFamily: 'var(--sans)', fontSize: 10,
                                                     fontWeight: 500, padding: '2px 7px', borderRadius: 10,
@@ -128,76 +101,44 @@ export default function InventoryHistoryTable({ history, selectedMonth, onSelect
                         })}
                     </div>
                 ) : (
-                    /* ── Desktop table ── */
-                    <div style={{ overflowX: 'auto' }}>
-                        <table style={{ width: '100%', borderCollapse: 'collapse' }}>
-                            <thead>
-                                <tr style={{ background: 'var(--surface-soft)' }}>
-                                    <th style={th}>Месяц</th>
-                                    <th style={{ ...th, textAlign: 'right' }}>Всего</th>
-                                    <th style={{ ...th, textAlign: 'right' }}>Были</th>
-                                    <th style={{ ...th, textAlign: 'right' }}>Не были</th>
-                                    <th style={th}>Охват</th>
-                                    <th style={th}>Обновлено</th>
-                                    <th style={th}></th>
-                                </tr>
-                            </thead>
-                            <tbody>
-                                {history.map(row => {
-                                    const monthKey = row.month_start.slice(0, 7);
-                                    const active = selectedMonth === monthKey;
-                                    return (
-                                        <tr
-                                            key={row.month_start}
-                                            onClick={() => onSelectMonth(active ? null : monthKey)}
-                                            style={{
-                                                background: active ? 'var(--surface-soft)' : 'transparent',
-                                                cursor: 'pointer',
-                                                transition: 'background 0.1s',
-                                            }}
-                                        >
-                                            <td style={td}>
-                                                <span style={{
-                                                    color: active ? 'var(--primary)' : 'var(--ink)',
-                                                    fontWeight: active ? 600 : 400,
-                                                }}>
-                                                    {formatMonthLabel(monthKey)}
-                                                </span>
-                                            </td>
-                                            <td style={{ ...td, textAlign: 'right', color: 'var(--muted)' }}>
-                                                {row.total}
-                                            </td>
-                                            <td style={{ ...td, textAlign: 'right', color: 'var(--success)' }}>
-                                                {row.inventoried}
-                                            </td>
-                                            <td style={{ ...td, textAlign: 'right', color: row.not_inventoried > 0 ? 'var(--error)' : 'var(--muted)' }}>
-                                                {row.not_inventoried}
-                                            </td>
-                                            <td style={td}><PctBar pct={row.pct} /></td>
-                                            <td style={{ ...td, color: 'var(--muted)', fontSize: 12 }}>
-                                                {new Date(row.run_at).toLocaleString('ru-RU', {
-                                                    day: '2-digit', month: '2-digit',
-                                                    hour: '2-digit', minute: '2-digit',
-                                                })}
-                                            </td>
-                                            <td style={td}>
-                                                {row.is_snapshot && (
-                                                    <span style={{
-                                                        background: 'rgba(93,184,114,0.12)',
-                                                        color: 'var(--success)',
-                                                        fontFamily: 'var(--sans)', fontSize: 11,
-                                                        fontWeight: 500, padding: '2px 9px', borderRadius: 10,
-                                                    }}>
-                                                        снимок
-                                                    </span>
-                                                )}
-                                            </td>
-                                        </tr>
-                                    );
-                                })}
-                            </tbody>
-                        </table>
-                    </div>
+                    <DataTable
+                        columns={[
+                            { key: 'month', label: 'Месяц', render: (r) => formatMonthLabel(r.month_start.slice(0, 7)) },
+                            { key: 'total', label: 'Всего', numeric: true },
+                            {
+                                key: 'inventoried',
+                                label: 'Были',
+                                numeric: true,
+                                render: (r) => <span style={{ color: 'var(--success-ink)' }}>{r.inventoried}</span>,
+                            },
+                            {
+                                key: 'not_inventoried',
+                                label: 'Не были',
+                                numeric: true,
+                                render: (r) => (
+                                    <span style={{ color: r.not_inventoried > 0 ? 'var(--error-ink)' : 'var(--muted)' }}>
+                                        {r.not_inventoried}
+                                    </span>
+                                ),
+                            },
+                            { key: 'pct', label: 'Охват', render: (r) => <PctBar pct={r.pct} /> },
+                            { key: 'run_at', label: 'Обновлено', render: (r) => formatDateTimeShort(r.run_at) },
+                            {
+                                key: 'snapshot',
+                                label: '',
+                                sortable: false,
+                                render: (r) => r.is_snapshot && <Badge tone="success">снимок</Badge>,
+                            },
+                        ]}
+                        rows={history}
+                        rowKey="month_start"
+                        onRowClick={(r) => {
+                            const monthKey = r.month_start.slice(0, 7);
+                            onSelectMonth(selectedMonth === monthKey ? null : monthKey);
+                        }}
+                        isRowActive={(r) => selectedMonth === r.month_start.slice(0, 7)}
+                        emptyText="Инвентаризаций пока не было"
+                    />
                 )}
             </div>
         </div>

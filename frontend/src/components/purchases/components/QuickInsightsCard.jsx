@@ -1,25 +1,8 @@
 import { useState } from 'react';
 import PropTypes from 'prop-types';
+import { Notice, StatCard, StatGrid } from '../../ui';
 import { materialsApi } from '../../../api/materialsApi';
 
-const StatCard = ({ label, value, suffix, hint, accent }) => (
-    <div style={{ backgroundColor: 'var(--surface-dark)', borderRadius: '10px', padding: '20px', display: 'flex', flexDirection: 'column', gap: '6px' }}>
-        <div style={{ fontFamily: 'var(--sans)', fontSize: '11px', fontWeight: 600, letterSpacing: '0.08em', textTransform: 'uppercase', color: accent || 'var(--on-dark-soft)' }}>{label}</div>
-        <div style={{ fontFamily: 'var(--serif)', fontSize: '26px', fontWeight: 400, color: 'var(--on-dark)', lineHeight: 1, fontVariantNumeric: 'lining-nums', fontFeatureSettings: '"lnum" 1' }}>
-            {typeof value === 'number' ? value.toLocaleString('ru', { maximumFractionDigits: 2 }) : value}
-            {suffix && <span style={{ fontFamily: 'var(--sans)', fontSize: '13px', fontWeight: 400, marginLeft: '5px', color: 'var(--on-dark-soft)' }}>{suffix}</span>}
-        </div>
-        {hint && <div style={{ fontFamily: 'var(--sans)', fontSize: '11px', color: 'var(--on-dark-soft)' }}>{hint}</div>}
-    </div>
-);
-
-StatCard.propTypes = {
-    label: PropTypes.string.isRequired,
-    value: PropTypes.oneOfType([PropTypes.number, PropTypes.string]),
-    suffix: PropTypes.string,
-    hint: PropTypes.string,
-    accent: PropTypes.string,
-};
 
 const selectStyle = {
     height: '32px', padding: '0 8px',
@@ -70,9 +53,6 @@ const QuickInsightsCard = ({ analysisData, material, onPeriodChange }) => {
         finally { setSaving(false); }
     };
 
-    const noticeColors = { success: '#059669', error: '#c64545' };
-    const noticeBgs = { success: 'rgba(5,150,105,0.08)', error: 'rgba(198,69,69,0.08)' };
-
     return (
         <div style={{ backgroundColor: 'var(--canvas)', border: '1px solid var(--hairline)', borderRadius: '10px', padding: '24px', display: 'flex', flexDirection: 'column', gap: '20px' }}>
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '12px' }}>
@@ -102,7 +82,7 @@ const QuickInsightsCard = ({ analysisData, material, onPeriodChange }) => {
             </div>
 
             {trendDetected && (
-                <div style={{ padding: '10px 14px', backgroundColor: 'rgba(204,120,92,0.08)', border: '1px solid rgba(204,120,92,0.3)', borderRadius: '8px', fontFamily: 'var(--sans)', fontSize: '13px', color: 'var(--primary)' }}>
+                <div style={{ padding: '10px 14px', backgroundColor: 'var(--accent-bg)', border: '1px solid var(--accent-border)', borderRadius: '8px', fontFamily: 'var(--sans)', fontSize: '13px', color: 'var(--primary)' }}>
                     Рост спроса{growthRatio ? ` (${growthRatio.toFixed(1)}×)` : ''} — расчёт по последним 3 месяцам
                     {yearlyAvg > 0 && recentAvg > 0 && (
                         <span style={{ color: 'var(--muted)', marginLeft: 8 }}>
@@ -113,10 +93,10 @@ const QuickInsightsCard = ({ analysisData, material, onPeriodChange }) => {
             )}
 
             {ordersCount === 0 && (
-                <div style={{ padding: '10px 14px', backgroundColor: 'rgba(212,160,23,0.08)', border: '1px solid rgba(212,160,23,0.3)', borderRadius: '8px', fontFamily: 'var(--sans)', fontSize: '13px', color: '#a07010' }}>
+                <div style={{ padding: '10px 14px', backgroundColor: 'var(--warning-bg)', border: '1px solid var(--warning-border)', borderRadius: '8px', fontFamily: 'var(--sans)', fontSize: '13px', color: 'var(--warning-ink)' }}>
                     За выбранный период ({periodMonths} мес) нет заказов — расчёт времени доставки невозможен.
                     {periodIsCustom && (
-                        <button onClick={() => patchPeriod(null)} style={{ marginLeft: 8, background: 'none', border: 'none', cursor: 'pointer', color: '#a07010', textDecoration: 'underline', fontSize: '13px', fontFamily: 'var(--sans)' }}>
+                        <button onClick={() => patchPeriod(null)} style={{ marginLeft: 8, background: 'none', border: 'none', cursor: 'pointer', color: 'var(--warning-ink)', textDecoration: 'underline', fontSize: '13px', fontFamily: 'var(--sans)' }}>
                             Сбросить к 12 мес
                         </button>
                     )}
@@ -124,19 +104,17 @@ const QuickInsightsCard = ({ analysisData, material, onPeriodChange }) => {
             )}
 
             {notice && (
-                <div style={{ padding: '8px 12px', borderRadius: '8px', fontFamily: 'var(--sans)', fontSize: '12px', color: noticeColors[notice.type], backgroundColor: noticeBgs[notice.type], border: `1px solid ${noticeColors[notice.type]}40` }}>
-                    {notice.text}
-                </div>
+                <Notice tone={notice.type}>{notice.text}</Notice>
             )}
 
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(300px, 1fr))', gap: '12px' }}>
-                <StatCard label="Потребление в день" value={dailyConsumption} suffix={material.uom} />
-                <StatCard label="Среднее время поставки" value={leadTime.avg || 0} suffix="дней" hint={`мин ${leadTime.min || 0} · макс ${leadTime.max || 0}`} accent="var(--primary)" />
-                <StatCard label="Точка заказа" value={reorderPoint} suffix={material.uom} hint="Сделайте заказ при этом остатке" />
-                <StatCard label="Оптимальный размер (EOQ)" value={optimalOrder} suffix={material.uom} hint="Справочно" />
-                <StatCard label="Ежемесячный заказ" value={monthlyOrder} suffix={material.uom} hint="Минимум на 30 дней" />
-                <StatCard label="Квартальный заказ" value={quarterlyOrder} suffix={material.uom} hint="Минимум на 90 дней" />
-            </div>
+            <StatGrid>
+                <StatCard tone="dark" title="Потребление в день" value={dailyConsumption} suffix={material.uom} />
+                <StatCard tone="dark" title="Среднее время поставки" value={leadTime.avg || 0} suffix="дней" note={`мин ${leadTime.min || 0} · макс ${leadTime.max || 0}`} />
+                <StatCard tone="dark" title="Точка заказа" value={reorderPoint} suffix={material.uom} note="Сделайте заказ при этом остатке" />
+                <StatCard tone="dark" title="Оптимальный размер (EOQ)" value={optimalOrder} suffix={material.uom} note="Справочно" />
+                <StatCard tone="dark" title="Ежемесячный заказ" value={monthlyOrder} suffix={material.uom} note="Минимум на 30 дней" />
+                <StatCard tone="dark" title="Квартальный заказ" value={quarterlyOrder} suffix={material.uom} note="Минимум на 90 дней" />
+            </StatGrid>
         </div>
     );
 };

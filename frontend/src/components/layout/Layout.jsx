@@ -130,7 +130,7 @@ const Layout = ({ children }) => {
                     onTouchMove={e => e.preventDefault()}
                     style={{
                         position: 'fixed', inset: 0, zIndex: 34,
-                        backgroundColor: 'rgba(20,20,19,0.45)',
+                        backgroundColor: 'var(--scrim)',
                         opacity: mobileOpen ? 1 : 0,
                         pointerEvents: mobileOpen ? 'auto' : 'none',
                         transition: 'opacity 220ms ease',
@@ -202,7 +202,7 @@ const Layout = ({ children }) => {
             {/* Data panel backdrop */}
             <div style={{
                 position: 'fixed', inset: 0, zIndex: 39,
-                backgroundColor: 'rgba(20,20,19,0.25)',
+                backgroundColor: 'var(--scrim-soft)',
                 opacity: open ? 1 : 0,
                 pointerEvents: open ? 'auto' : 'none',
                 transition: 'opacity 200ms ease',
@@ -218,7 +218,7 @@ const Layout = ({ children }) => {
                     position: 'fixed', top: 0, left: 0, right: 0, zIndex: 40,
                     backgroundColor: 'var(--canvas)',
                     borderBottom: '1px solid var(--hairline)',
-                    boxShadow: '0 8px 32px rgba(20,20,19,0.10)',
+                    boxShadow: 'var(--shadow-soft)',
                     pointerEvents: open ? 'auto' : 'none',
                 }}>
                 <div style={{ maxWidth: '1280px', margin: '0 auto', padding: '20px 24px', position: 'relative' }}>

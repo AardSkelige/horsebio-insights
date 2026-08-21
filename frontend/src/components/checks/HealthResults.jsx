@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import PropTypes from 'prop-types';
 import { ExternalLink, Plus, Check, Undo2, Loader2, ShieldCheck, ChevronRight, Trash2 } from 'lucide-react';
+import { Button } from '../ui';
 import { checksApi, SEV, sevOf, msLink, relTime } from './checksShared';
 import { useConfirmDelete } from '../../hooks/useConfirmDelete';
 import InfoTip from './InfoTip';
@@ -35,7 +36,7 @@ const statLabelStyle = {
     textTransform: 'uppercase', color: 'var(--muted)', marginBottom: 8,
 };
 const TONE = {
-    ok: 'var(--success)', critical: 'var(--error)', warning: '#c47d2f', neutral: 'var(--ink)',
+    ok: 'var(--success)', critical: 'var(--error)', warning: 'var(--cat-orange)', neutral: 'var(--ink)',
 };
 
 /** Счётчики робота (Закупочные цены и т.п.) — только ненулевые, чтобы не было «Ошибки: 0». */
@@ -162,7 +163,7 @@ function ChecksGrid({ checks, onJump }) {
                         style={{
                             display: 'flex', alignItems: 'center', gap: 7, padding: '8px 11px',
                             borderRadius: 10, border: '1px solid var(--hairline)',
-                            background: clean ? 'rgba(93,184,114,0.07)' : skipped ? 'var(--surface-soft)' : c.bg,
+                            background: clean ? 'var(--success-bg)' : skipped ? 'var(--surface-soft)' : c.bg,
                             cursor: clickable ? 'pointer' : 'default',
                             opacity: skipped ? 0.6 : 1,
                         }}>
@@ -229,9 +230,7 @@ function FindingRow({ cat, item, excepted, prevReason, onAdded, onDeleted }) {
                     <Check size={15} /> Добавлено в исключения — {item.object}
                     {reason.trim() && <span style={{ color: 'var(--muted)', fontWeight: 400 }}>({reason.trim()})</span>}
                 </span>
-                <button onClick={undo} style={linkBtn('var(--muted)')}>
-                    <Undo2 size={13} /> Отменить
-                </button>
+                <Button variant="subtle" size="sm" icon={Undo2} onClick={undo}>Отменить</Button>
             </div>
         );
     }
@@ -268,12 +267,12 @@ function FindingRow({ cat, item, excepted, prevReason, onAdded, onDeleted }) {
                         }}
                     />
                     <div style={{ display: 'flex', gap: 6 }}>
-                        <button onClick={add} disabled={state === 'busy'} style={{ ...linkBtn('var(--on-primary, #fff)'), background: 'var(--primary)', padding: '7px 12px' }}>
-                            {state === 'busy' ? <Loader2 size={13} className="animate-spin" /> : <Plus size={13} />} Добавить
-                        </button>
-                        <button onClick={() => { setState('idle'); setReason(''); }} disabled={state === 'busy'} style={{ ...linkBtn('var(--muted)'), padding: '7px 12px' }}>
+                        <Button variant="primary" size="sm" icon={Plus} loading={state === 'busy'} onClick={add}>
+                            Добавить
+                        </Button>
+                        <Button variant="subtle" size="sm" disabled={state === 'busy'} onClick={() => { setState('idle'); setReason(''); }}>
                             Отмена
-                        </button>
+                        </Button>
                     </div>
                 </div>
             </div>
@@ -299,28 +298,31 @@ function FindingRow({ cat, item, excepted, prevReason, onAdded, onDeleted }) {
             </div>
             <div className="finding-row__actions">
                 {link && (
-                    <a href={link} target="_blank" rel="noreferrer" style={linkBtn('var(--muted)')}>
-                        <ExternalLink size={13} /> МС
-                    </a>
+                    <Button as="a" variant="subtle" size="sm" icon={ExternalLink}
+                        href={link} target="_blank" rel="noreferrer">
+                        МС
+                    </Button>
                 )}
                 {(item.links || []).map((l, i) => (
-                    <a key={i} href={l.href} target="_blank" rel="noreferrer" style={linkBtn('var(--muted)')}>
-                        <ExternalLink size={13} /> {l.label}
-                    </a>
+                    <Button key={i} as="a" variant="subtle" size="sm" icon={ExternalLink}
+                        href={l.href} target="_blank" rel="noreferrer">
+                        {l.label}
+                    </Button>
                 ))}
                 {excepted ? (
                     <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5, fontSize: 12, color: 'var(--success)', fontWeight: 600 }}>
                         <ShieldCheck size={13} /> в исключениях
                     </span>
                 ) : canExcept ? (
-                    <button onClick={() => setState('reason')} style={linkBtn('var(--primary)')}>
-                        <Plus size={13} /> в искл.
-                    </button>
+                    <Button variant="subtle" tone="accent" size="sm" icon={Plus} onClick={() => setState('reason')}>
+                        в искл.
+                    </Button>
                 ) : null}
                 {item.delete_action && (
-                    <button onClick={handleDelete} disabled={deleting} style={linkBtn('var(--error)')} title="Убрать запись из журнала">
-                        {deleting ? <Loader2 size={13} className="animate-spin" /> : <Trash2 size={13} />} Удалить
-                    </button>
+                    <Button variant="subtle" tone="danger" size="sm" icon={Trash2} loading={deleting}
+                        onClick={handleDelete} title="Убрать запись из журнала">
+                        Удалить
+                    </Button>
                 )}
             </div>
         </div>
@@ -512,13 +514,6 @@ export default function HealthResults({ scriptId, runId, running, onExceptionCha
     );
 }
 
-function linkBtn(color) {
-    return {
-        display: 'inline-flex', alignItems: 'center', gap: 4, padding: '4px 9px', borderRadius: 7,
-        background: 'var(--surface-soft)', border: 'none', color, fontSize: 12, fontWeight: 600,
-        cursor: 'pointer', textDecoration: 'none', whiteSpace: 'nowrap',
-    };
-}
 
 HealthResults.propTypes = {
     scriptId: PropTypes.string.isRequired,

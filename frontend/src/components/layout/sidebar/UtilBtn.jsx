@@ -16,7 +16,7 @@ const tooltipStyle = (top) => ({
     whiteSpace: 'nowrap',
     zIndex: 200,
     pointerEvents: 'none',
-    boxShadow: '0 2px 8px rgba(0,0,0,0.3)',
+    boxShadow: 'var(--shadow-on-dark)',
     animation: 'sidebar-tooltip-in 150ms ease forwards',
 });
 
@@ -49,7 +49,7 @@ const UtilBtn = ({ icon: Icon, label, expanded, onClick, btnRef }) => {
                     margin: '1px 6px',
                     borderRadius: 8,
                     border: 'none',
-                    backgroundColor: hov ? 'rgba(255,255,255,0.06)' : 'transparent',
+                    backgroundColor: hov ? 'var(--on-dark-wash)' : 'transparent',
                     color: 'var(--on-dark-soft)',
                     cursor: 'pointer',
                     transition: 'background 150ms ease',

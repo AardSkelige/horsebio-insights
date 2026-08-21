@@ -1,4 +1,5 @@
 import { useState, useMemo, useCallback } from 'react';
+import { num, plural } from '../../../utils/formatters';
 import PropTypes from 'prop-types';
 import { ChevronDown, ChevronUp, ChevronRight } from 'lucide-react';
 
@@ -46,7 +47,6 @@ const DetailBlock = ({ title, content }) => content ? (
 
 DetailBlock.propTypes = { title: PropTypes.string.isRequired, content: PropTypes.string };
 
-const fmt = (n) => Number(n || 0).toLocaleString('ru', { maximumFractionDigits: 0 });
 
 const SummaryPill = ({ label, value, uom, accent, note }) => (
     <div style={{ backgroundColor: 'var(--surface-soft)', borderRadius: '8px', padding: '12px 14px', display: 'flex', flexDirection: 'column', gap: '4px' }}>
@@ -79,23 +79,23 @@ const DetailedCalculations = ({ details, uom }) => {
         <div style={{ display: 'flex', flexDirection: 'column', gap: '16px', marginTop: '4px' }}>
             {/* Суть простым языком */}
             <p style={{ fontFamily: 'var(--sans)', fontSize: '14px', color: 'var(--body)', margin: 0, lineHeight: 1.5 }}>
-                Заказывайте, когда остаток упадёт до <b style={{ color: 'var(--ink)' }}>{fmt(reorder)} {uom}</b>.
-                {!optimalMissing && <> Оптимальная партия — <b style={{ color: 'var(--ink)' }}>{fmt(optimal)} {uom}</b>.</>}
+                Заказывайте, когда остаток упадёт до <b style={{ color: 'var(--ink)' }}>{num(reorder)} {uom}</b>.
+                {!optimalMissing && <> Оптимальная партия — <b style={{ color: 'var(--ink)' }}>{num(optimal)} {uom}</b>.</>}
             </p>
 
             {/* Ключевые числа */}
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(150px, 1fr))', gap: '10px' }}>
-                <SummaryPill label="Точка заказа" value={fmt(reorder)} uom={uom} accent="var(--primary)" note="когда делать заказ" />
-                <SummaryPill label="Оптимальная партия" value={optimalMissing ? '—' : fmt(optimal)} uom={uom} note={optimalMissing ? 'нет данных о цене' : 'EOQ'} />
-                <SummaryPill label="Страховой запас" value={fmt(safety)} uom={uom} note="буфер на задержки" />
+                <SummaryPill label="Точка заказа" value={num(reorder)} uom={uom} accent="var(--primary)" note="когда делать заказ" />
+                <SummaryPill label="Оптимальная партия" value={optimalMissing ? '—' : num(optimal)} uom={uom} note={optimalMissing ? 'нет данных о цене' : 'EOQ'} />
+                <SummaryPill label="Страховой запас" value={num(safety)} uom={uom} note="буфер на задержки" />
                 <SummaryPill label="Срок поставки" value={leadAvg.toFixed(1)} uom="дн." note="в среднем" />
             </div>
 
             {/* Периодичность */}
             {(monthly > 0 || quarterly > 0) && (
                 <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(150px, 1fr))', gap: '10px' }}>
-                    {monthly > 0 && <SummaryPill label="Ежемесячно" value={fmt(monthly)} uom={uom} note="партия на 30 дней" />}
-                    {quarterly > 0 && <SummaryPill label="Ежеквартально" value={fmt(quarterly)} uom={uom} note="партия на 90 дней" />}
+                    {monthly > 0 && <SummaryPill label="Ежемесячно" value={num(monthly)} uom={uom} note="партия на 30 дней" />}
+                    {quarterly > 0 && <SummaryPill label="Ежеквартально" value={num(quarterly)} uom={uom} note="партия на 90 дней" />}
                 </div>
             )}
 
@@ -132,8 +132,8 @@ const DetailedCalculations = ({ details, uom }) => {
                             </div>
                         )}
                         {details.safety_stock && (
-                            <div style={{ ...sectionStyle, padding: '12px', backgroundColor: 'rgba(92,138,204,0.06)', borderRadius: '8px', border: '1px solid rgba(92,138,204,0.2)' }}>
-                                <div style={{ ...blockTitleStyle, color: '#5c8acc' }}>Страховой запас</div>
+                            <div style={{ ...sectionStyle, padding: '12px', backgroundColor: 'var(--info-bg)', borderRadius: '8px', border: '1px solid var(--info-border)' }}>
+                                <div style={{ ...blockTitleStyle, color: 'var(--info)' }}>Страховой запас</div>
                                 <div style={{ ...blockBodyStyle, backgroundColor: 'transparent', padding: 0 }}>{details.safety_stock.details}</div>
                             </div>
                         )}
@@ -146,18 +146,7 @@ const DetailedCalculations = ({ details, uom }) => {
 
 DetailedCalculations.propTypes = { details: PropTypes.object, uom: PropTypes.string };
 
-const thStyle = {
-    fontFamily: 'var(--sans)', fontSize: '11px', fontWeight: 600,
-    letterSpacing: '0.06em', textTransform: 'uppercase', color: 'var(--muted)',
-    padding: '10px 12px', textAlign: 'left', borderBottom: '1px solid var(--hairline)',
-};
-const tdStyle = {
-    fontFamily: 'var(--sans)', fontSize: '13px', color: 'var(--body)',
-    padding: '12px', borderBottom: '1px solid var(--hairline-soft)',
-    verticalAlign: 'top',
-};
 
-const plural = (n, ...forms) => forms[n === 1 ? 0 : n >= 2 && n <= 4 ? 1 : 2];
 
 const PurchaseRecommendations = ({ recommendations = [], material, generalCalculations, suppliers, activityThreshold, showInactive }) => {
     const [expandedRows, setExpandedRows] = useState(new Set());
@@ -199,15 +188,15 @@ const PurchaseRecommendations = ({ recommendations = [], material, generalCalcul
                 badge={hiddenCount > 0 ? `Скрыто неактивных: ${hiddenCount}` : undefined}
             >
                 <div style={{ overflowX: 'auto' }}>
-                    <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+                    <table className="ui-table">
                         <thead>
                             <tr>
-                                <th style={{ ...thStyle, width: '40px' }} />
-                                <th style={{ ...thStyle, width: '20%' }}>Поставщик</th>
-                                <th style={thStyle}>Надёжность</th>
-                                <th style={thStyle}>Точка заказа</th>
-                                <th style={thStyle}>Оптимальный размер</th>
-                                <th style={thStyle}>Lead time</th>
+                                <th style={{ width: '40px' }} />
+                                <th style={{ width: '20%' }}>Поставщик</th>
+                                <th>Надёжность</th>
+                                <th>Точка заказа</th>
+                                <th>Оптимальный размер</th>
+                                <th>Lead time</th>
                             </tr>
                         </thead>
                         <tbody>
@@ -215,7 +204,7 @@ const PurchaseRecommendations = ({ recommendations = [], material, generalCalcul
                                 const expanded = expandedRows.has(rec.supplier_name);
                                 return [
                                     <tr key={rec.supplier_name}>
-                                        <td style={{ ...tdStyle, padding: '8px' }}>
+                                        <td style={{ padding: '8px' }}>
                                             <button
                                                 onClick={() => toggleRow(rec.supplier_name)}
                                                 style={{ background: 'none', border: 'none', cursor: 'pointer', padding: '4px', color: 'var(--muted)', display: 'flex', alignItems: 'center' }}
@@ -223,8 +212,8 @@ const PurchaseRecommendations = ({ recommendations = [], material, generalCalcul
                                                 {expanded ? <ChevronDown style={{ width: 14, height: 14 }} /> : <ChevronRight style={{ width: 14, height: 14 }} />}
                                             </button>
                                         </td>
-                                        <td style={{ ...tdStyle, fontWeight: 500, color: 'var(--ink)' }}>{rec.supplier_name}</td>
-                                        <td style={tdStyle}>
+                                        <td style={{ fontWeight: 500, color: 'var(--ink)' }}>{rec.supplier_name}</td>
+                                        <td>
                                             <div>{rec.reliability ? `${(rec.reliability * 100).toFixed(0)}%` : '0%'}</div>
                                             {rec.orders_in_transit > 0 && (
                                                 <div style={{ fontSize: '12px', color: 'var(--muted)' }}>
@@ -232,9 +221,9 @@ const PurchaseRecommendations = ({ recommendations = [], material, generalCalcul
                                                 </div>
                                             )}
                                         </td>
-                                        <td style={tdStyle}>{(rec.reorder_point || 0).toLocaleString('ru')} {material?.uom || ''}</td>
-                                        <td style={tdStyle}>{(rec.optimal_batch || 0).toLocaleString('ru')} {material?.uom || ''}</td>
-                                        <td style={tdStyle}>{(rec.lead_time || 0).toFixed(1)} дней</td>
+                                        <td>{(rec.reorder_point || 0).toLocaleString('ru')} {material?.uom || ''}</td>
+                                        <td>{(rec.optimal_batch || 0).toLocaleString('ru')} {material?.uom || ''}</td>
+                                        <td>{(rec.lead_time || 0).toFixed(1)} дней</td>
                                     </tr>,
                                     expanded && (
                                         <tr key={`${rec.supplier_name}-detail`}>
@@ -247,7 +236,7 @@ const PurchaseRecommendations = ({ recommendations = [], material, generalCalcul
                             })}
                             {filteredRecs.length === 0 && (
                                 <tr>
-                                    <td colSpan={6} style={{ ...tdStyle, textAlign: 'center', color: 'var(--muted)', padding: '32px' }}>
+                                    <td colSpan={6} style={{ textAlign: 'center', color: 'var(--muted)', padding: '32px' }}>
                                         Нет активных поставщиков с рекомендациями
                                     </td>
                                 </tr>

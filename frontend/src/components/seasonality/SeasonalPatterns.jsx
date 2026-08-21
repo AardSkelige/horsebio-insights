@@ -5,10 +5,10 @@ import { TrendingUp, TrendingDown, AlertTriangle } from 'lucide-react';
 const MONTHS = ['Янв', 'Фев', 'Мар', 'Апр', 'Май', 'Июн', 'Июл', 'Авг', 'Сен', 'Окт', 'Ноя', 'Дек'];
 
 const TYPE_STYLE = {
-    STABLE:     { bg: 'rgba(92,138,204,0.1)',  color: '#3a68a0', border: 'rgba(92,138,204,0.3)'  },
-    MULTI_PEAK: { bg: 'rgba(140,92,204,0.1)',  color: '#6a3a9e', border: 'rgba(140,92,204,0.3)'  },
-    SUMMER:     { bg: 'rgba(92,172,106,0.1)',  color: '#3a7c4a', border: 'rgba(92,172,106,0.3)'  },
-    WINTER:     { bg: 'rgba(58,156,156,0.1)',  color: '#2a7878', border: 'rgba(58,156,156,0.3)'  },
+    STABLE:     { bg: 'var(--info-bg)',  color: 'var(--info-ink)', border: 'var(--info-border)'  },
+    MULTI_PEAK: { bg: 'var(--cat-violet-bg)',  color: 'var(--cat-violet-ink)', border: 'var(--cat-violet-border)'  },
+    SUMMER:     { bg: 'var(--success-bg)',  color: 'var(--success-ink)', border: 'var(--success-border)'  },
+    WINTER:     { bg: 'var(--cat-teal-bg)',  color: 'var(--cat-teal-ink)', border: 'var(--cat-teal-border)'  },
 };
 const DEFAULT_TYPE = { bg: 'var(--surface-card)', color: 'var(--muted)', border: 'var(--hairline)' };
 
@@ -16,8 +16,8 @@ const FactorCell = ({ value }) => {
     if (!value || typeof value !== 'number') return <span style={{ color: 'var(--muted)' }}>—</span>;
     const isHigh = value >= 1.2;
     const isLow  = value <= 0.8;
-    const color  = isHigh ? '#3a7c4a' : isLow ? '#a03a3a' : 'var(--body)';
-    const bg     = isHigh ? 'rgba(92,172,106,0.12)' : isLow ? 'rgba(198,69,69,0.1)' : 'transparent';
+    const color  = isHigh ? 'var(--success-ink)' : isLow ? 'var(--error-ink)' : 'var(--body)';
+    const bg     = isHigh ? 'var(--success-bg)' : isLow ? 'var(--error-bg)' : 'transparent';
     return (
         <span style={{ display: 'inline-flex', alignItems: 'center', gap: '3px', padding: '2px 6px', borderRadius: '6px', backgroundColor: bg, color, fontFamily: 'var(--mono)', fontSize: '11px', fontWeight: 600 }}>
             {isHigh && <TrendingUp style={{ width: 10, height: 10 }} />}
@@ -70,7 +70,7 @@ export const SeasonalPatterns = ({ data, onProductSelect }) => {
                                             <span style={{ display: 'inline-block', padding: '2px 8px', borderRadius: '20px', fontSize: '11px', fontWeight: 600, backgroundColor: ts.bg, color: ts.color, border: `1px solid ${ts.border}`, whiteSpace: 'nowrap' }}>
                                                 {p.seasonality_name}
                                             </span>
-                                            {highVol && <AlertTriangle style={{ width: 12, height: 12, color: '#cc9c3a', flexShrink: 0 }} title="Высокая волатильность" />}
+                                            {highVol && <AlertTriangle style={{ width: 12, height: 12, color: 'var(--warning)', flexShrink: 0 }} title="Высокая волатильность" />}
                                         </div>
                                     </td>
                                     {MONTHS.map((_, i) => (
@@ -98,7 +98,7 @@ export const SeasonalPatterns = ({ data, onProductSelect }) => {
                             <button
                                 key={i}
                                 onClick={() => setPage(i + 1)}
-                                style={{ fontFamily: 'var(--sans)', fontSize: '12px', padding: '4px 10px', borderRadius: '6px', border: `1px solid ${page === i + 1 ? 'var(--primary)' : 'var(--hairline)'}`, backgroundColor: page === i + 1 ? 'var(--primary)' : 'var(--canvas)', color: page === i + 1 ? '#fff' : 'var(--body)', cursor: 'pointer' }}
+                                style={{ fontFamily: 'var(--sans)', fontSize: '12px', padding: '4px 10px', borderRadius: '6px', border: `1px solid ${page === i + 1 ? 'var(--primary)' : 'var(--hairline)'}`, backgroundColor: page === i + 1 ? 'var(--primary)' : 'var(--canvas)', color: page === i + 1 ? 'var(--on-primary)' : 'var(--body)', cursor: 'pointer' }}
                             >
                                 {i + 1}
                             </button>

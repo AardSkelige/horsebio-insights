@@ -1,4 +1,5 @@
 import { useState, useCallback, useRef, useEffect, useMemo } from 'react';
+import { Page, PageHeader, SectionLabel, Segmented } from '../ui';
 import {
     Search,
     Trash2,
@@ -13,8 +14,6 @@ import {
     StickyNote,
     ClipboardList,
 } from 'lucide-react';
-import { m } from 'motion/react';
-import SectionLabel from '../ui/SectionLabel';
 import Tooltip from '../ui/Tooltip';
 import { FadeRise, Stagger, StaggerItem } from '../ui/motion';
 import { deliveryApi } from '../../api/deliveryApi';
@@ -625,38 +624,23 @@ const DeliveryCalculatorPage = () => {
     );
 
     return (
-        <div className="delivery-page">
-            <header className="delivery-page__header">
-                <h1>Калькулятор доставки</h1>
-                <p>Подбор упаковки и сравнение тарифов ПЭК и СДЭК для клиентских заказов.</p>
-            </header>
+        <Page className="delivery-page">
+            <PageHeader
+                title="Расчёт доставки"
+                subtitle="Подбор упаковки и сравнение тарифов ПЭК и СДЭК для клиентских заказов."
+            />
 
             <section>
                 <SectionLabel>Источник расчёта</SectionLabel>
-                <div className="delivery-tabs" role="tablist" aria-label="Источник расчёта">
-                    {[
-                        { key: 'order', label: 'Заказ МойСклад' },
-                        { key: 'manual', label: 'Ручной состав' },
-                    ].map((tab) => (
-                        <button
-                            key={tab.key}
-                            type="button"
-                            role="tab"
-                            aria-selected={mode === tab.key}
-                            className={mode === tab.key ? 'delivery-tabs__button is-active' : 'delivery-tabs__button'}
-                            onClick={() => changeMode(tab.key)}
-                        >
-                            {tab.label}
-                            {mode === tab.key && (
-                                <m.span
-                                    layoutId="delivery-tab-pill"
-                                    className="delivery-tabs__active"
-                                    transition={{ type: 'spring', stiffness: 500, damping: 40 }}
-                                />
-                            )}
-                        </button>
-                    ))}
-                </div>
+                <Segmented
+                    layoutId="delivery-tab"
+                    value={mode}
+                    onChange={changeMode}
+                    options={[
+                        { value: 'order', label: 'Заказ МойСклад' },
+                        { value: 'manual', label: 'Ручной состав' },
+                    ]}
+                />
 
                 {mode === 'order' ? (
                     <FadeRise className="delivery-workspace">
@@ -853,7 +837,7 @@ const DeliveryCalculatorPage = () => {
                 )}
             </section>
 
-        </div>
+        </Page>
     );
 };
 

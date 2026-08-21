@@ -203,10 +203,18 @@
 }
 
 .home-dashboard__work-grid,
+/* Системных разделов обычно один-два, а сетка была жёстко на четыре колонки:
+   «Администрирование» занимало четверть ширины, его карточки выстраивались
+   в столбик и без нужды удлиняли страницу. Колонки — по числу секций. */
 .home-dashboard__system-grid {
     display: grid;
-    grid-template-columns: repeat(4, minmax(0, 1fr));
+    grid-template-columns: repeat(auto-fit, minmax(min(280px, 100%), 1fr));
     gap: 14px;
+}
+
+/* Внутри системной секции ссылки идут рядом, а не столбиком */
+.home-dashboard__system-grid .home-dashboard__links {
+    grid-template-columns: repeat(auto-fill, minmax(min(240px, 100%), 1fr));
 }
 
 .home-dashboard__group {

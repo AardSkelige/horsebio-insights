@@ -1,10 +1,11 @@
 import { useState, useMemo } from 'react';
+import { plural } from '../../../utils/formatters';
 import PropTypes from 'prop-types';
 import { ChevronDown, ChevronUp, ChevronRight } from 'lucide-react';
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip as RechartsTooltip, ResponsiveContainer } from 'recharts';
 import { CHART_ANIMATION } from '../../../utils/chartAnimation';
 
-const CHART_COLORS = ['#cc785c', '#5c8acc', '#5cac6a', '#8a5ccc', '#cc5c8a', '#accc5c'];
+const CHART_COLORS = ['var(--primary)', 'var(--info)', 'var(--success)', 'var(--cat-violet)', 'var(--cat-pink)', 'var(--cat-green)'];
 
 const getSupplierStatus = (supplier, threshold = 6, now = new Date()) => {
     const lastOrderDate = supplier.orders?.[0]?.date ? new Date(supplier.orders[0].date) : new Date(0);
@@ -20,7 +21,7 @@ const SwitchToggle = ({ checked, onChange, label }) => (
         <span style={{ position: 'relative', display: 'inline-block', width: '34px', height: '18px', flexShrink: 0 }}>
             <input type="checkbox" checked={checked} onChange={e => onChange(e.target.checked)} style={{ position: 'absolute', opacity: 0, width: 0, height: 0 }} />
             <span style={{ position: 'absolute', inset: 0, borderRadius: '9px', backgroundColor: checked ? 'var(--primary)' : 'var(--surface-cream-strong)', transition: 'background-color 200ms' }} />
-            <span style={{ position: 'absolute', top: '2px', left: checked ? '18px' : '2px', width: '14px', height: '14px', borderRadius: '50%', backgroundColor: '#fff', transition: 'left 200ms', boxShadow: '0 1px 3px rgba(0,0,0,0.2)' }} />
+            <span style={{ position: 'absolute', top: '2px', left: checked ? '18px' : '2px', width: '14px', height: '14px', borderRadius: '50%', backgroundColor: 'var(--on-primary)', transition: 'left 200ms', boxShadow: 'var(--shadow-card)' }} />
         </span>
         <span style={{ fontFamily: 'var(--sans)', fontSize: '13px', color: 'var(--muted)' }}>{label}</span>
     </label>
@@ -39,26 +40,15 @@ const selectStyle = {
     borderRadius: '6px', outline: 'none', cursor: 'pointer',
 };
 
-const thStyle = {
-    fontFamily: 'var(--sans)', fontSize: '11px', fontWeight: 600,
-    letterSpacing: '0.06em', textTransform: 'uppercase', color: 'var(--muted)',
-    padding: '10px 12px', textAlign: 'left', borderBottom: '1px solid var(--hairline)',
-    whiteSpace: 'nowrap',
-};
 
-const tdStyle = {
-    fontFamily: 'var(--sans)', fontSize: '13px', color: 'var(--body)',
-    padding: '12px', borderBottom: '1px solid var(--hairline-soft)',
-    verticalAlign: 'top',
-};
 
 const Badge = ({ active }) => (
     <span style={{
         display: 'inline-block', padding: '2px 8px', borderRadius: '20px',
         fontSize: '11px', fontWeight: 600, fontFamily: 'var(--sans)',
-        backgroundColor: active ? 'rgba(5,150,105,0.1)' : 'rgba(212,160,23,0.1)',
-        color: active ? '#059669' : '#a07010',
-        border: `1px solid ${active ? 'rgba(5,150,105,0.3)' : 'rgba(212,160,23,0.3)'}`,
+        backgroundColor: active ? 'var(--success-bg)' : 'var(--warning-bg)',
+        color: active ? 'var(--success-ink)' : 'var(--warning-ink)',
+        border: `1px solid ${active ? 'var(--success-border)' : 'var(--warning-border)'}`,
     }}>
         {active ? 'Активный' : 'Неактивный'}
     </span>
@@ -124,7 +114,6 @@ const SupplierAnalysisCard = ({ suppliers, material, activityThreshold, setActiv
     }, [filteredSuppliers]);
 
     const fmtDate = (d) => new Date(d).toLocaleDateString('ru');
-    const plural = (n, ...forms) => forms[n === 1 ? 0 : n >= 2 && n <= 4 ? 1 : 2];
 
     return (
         <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
@@ -182,7 +171,7 @@ const SupplierAnalysisCard = ({ suppliers, material, activityThreshold, setActiv
                                     <RechartsTooltip
                                         formatter={(v, name) => [`${Number(v).toLocaleString('ru')} ₽`, name]}
                                         labelFormatter={fmtDate}
-                                        contentStyle={{ backgroundColor: 'var(--canvas)', fontFamily: 'var(--sans)', fontSize: 12, borderRadius: 8, border: '1px solid var(--hairline)', boxShadow: '0 4px 16px rgba(0,0,0,0.12)' }}
+                                        contentStyle={{ backgroundColor: 'var(--canvas)', fontFamily: 'var(--sans)', fontSize: 12, borderRadius: 8, border: '1px solid var(--hairline)', boxShadow: 'var(--shadow-soft)' }}
                                         labelStyle={{ color: 'var(--ink)', fontWeight: 600, marginBottom: 4 }}
                                         cursor={{ stroke: 'var(--hairline)' }}
                                     />
@@ -197,13 +186,13 @@ const SupplierAnalysisCard = ({ suppliers, material, activityThreshold, setActiv
 
                 {/* Suppliers table */}
                 <div style={{ overflowX: 'auto' }}>
-                    <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+                    <table className="ui-table">
                         <thead>
                             <tr>
-                                <th style={{ ...thStyle, width: '25%' }}>Поставщик</th>
-                                <th style={{ ...thStyle, width: '20%' }}>Статистика заказов</th>
-                                <th style={{ ...thStyle, width: '30%' }}>Сроки поставки</th>
-                                <th style={{ ...thStyle, width: '25%' }}>Размеры заказов</th>
+                                <th style={{ width: '25%' }}>Поставщик</th>
+                                <th style={{ width: '20%' }}>Статистика заказов</th>
+                                <th style={{ width: '30%' }}>Сроки поставки</th>
+                                <th style={{ width: '25%' }}>Размеры заказов</th>
                             </tr>
                         </thead>
                         <tbody>
@@ -211,25 +200,25 @@ const SupplierAnalysisCard = ({ suppliers, material, activityThreshold, setActiv
                                 const status = getSupplierStatus(s, activityThreshold);
                                 return (
                                     <tr key={s.supplier_name}>
-                                        <td style={tdStyle}>
+                                        <td>
                                             <div style={{ fontWeight: 500, marginBottom: 4 }}>{s.supplier_name}</div>
                                             <Badge active={status.isActive} />
                                             <div style={{ fontFamily: 'var(--sans)', fontSize: '12px', color: 'var(--muted)', marginTop: 4 }}>
                                                 {status.monthsAgo > 0 ? `${status.monthsAgo} мес. назад` : 'менее месяца назад'}
                                             </div>
                                         </td>
-                                        <td style={tdStyle}>
-                                            <div style={{ fontSize: '18px', fontFamily: 'var(--serif)', color: s.delivery_reliability >= 0.95 ? '#059669' : '#a07010', fontVariantNumeric: 'lining-nums' }}>
+                                        <td>
+                                            <div style={{ fontSize: '18px', fontFamily: 'var(--serif)', color: s.delivery_reliability >= 0.95 ? 'var(--success-ink)' : 'var(--warning-ink)', fontVariantNumeric: 'lining-nums' }}>
                                                 {(s.delivery_reliability * 100).toFixed(0)}%
                                             </div>
                                             <div style={{ fontSize: '12px', color: 'var(--muted)', marginTop: 4 }}>Всего: {s.total_orders} · Выполнено: {s.completed_orders}</div>
                                             {s.orders_in_transit > 0 && (
-                                                <div style={{ fontSize: '12px', color: '#5c8acc', marginTop: 2 }}>
+                                                <div style={{ fontSize: '12px', color: 'var(--info)', marginTop: 2 }}>
                                                     {s.orders_in_transit} {plural(s.orders_in_transit, 'заказ', 'заказа', 'заказов')} в пути
                                                 </div>
                                             )}
                                         </td>
-                                        <td style={tdStyle}>
+                                        <td>
                                             <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: 6 }}>
                                                 <div style={{ flex: 1, height: 4, borderRadius: 2, backgroundColor: 'var(--surface-card)', overflow: 'hidden' }}>
                                                     <div style={{ height: '100%', borderRadius: 2, backgroundColor: 'var(--primary)', width: `${(s.avg_lead_time / s.max_lead_time * 100) || 0}%` }} />
@@ -244,7 +233,7 @@ const SupplierAnalysisCard = ({ suppliers, material, activityThreshold, setActiv
                                                     <div style={{ display: 'flex', justifyContent: 'space-between' }}>
                                                         <span style={{ color: 'var(--muted)' }}>{fmtDate(o.date)}</span>
                                                         {o.is_in_transit
-                                                            ? <span style={{ color: '#5c8acc', fontWeight: 500 }}>В пути</span>
+                                                            ? <span style={{ color: 'var(--info)', fontWeight: 500 }}>В пути</span>
                                                             : <span style={{ fontWeight: 500 }}>{o.lead_time} дн.</span>}
                                                     </div>
                                                     <div style={{ color: 'var(--muted)' }}>
@@ -253,13 +242,13 @@ const SupplierAnalysisCard = ({ suppliers, material, activityThreshold, setActiv
                                                 </div>
                                             ))}
                                         </td>
-                                        <td style={tdStyle}>
+                                        <td>
                                             {Object.entries(s.common_quantities || {})
                                                 .sort((a, b) => b[1] - a[1])
                                                 .map(([qty, count], i) => (
                                                     <div key={i} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6 }}>
                                                         <span style={{ fontSize: '13px' }}>{Number(qty).toLocaleString('ru')} {material.uom}</span>
-                                                        <span style={{ fontSize: '11px', fontWeight: 600, padding: '2px 7px', borderRadius: '20px', backgroundColor: 'rgba(92,138,204,0.12)', color: '#5c8acc' }}>
+                                                        <span style={{ fontSize: '11px', fontWeight: 600, padding: '2px 7px', borderRadius: '20px', backgroundColor: 'var(--info-bg)', color: 'var(--info)' }}>
                                                             {count} {plural(count, 'раз', 'раза', 'раз')}
                                                         </span>
                                                     </div>
@@ -270,7 +259,7 @@ const SupplierAnalysisCard = ({ suppliers, material, activityThreshold, setActiv
                                 );
                             })}
                             {filteredSuppliers.length === 0 && (
-                                <tr><td colSpan={4} style={{ ...tdStyle, textAlign: 'center', color: 'var(--muted)', padding: '32px' }}>Нет активных поставщиков</td></tr>
+                                <tr><td colSpan={4} style={{ textAlign: 'center', color: 'var(--muted)', padding: '32px' }}>Нет активных поставщиков</td></tr>
                             )}
                         </tbody>
                     </table>

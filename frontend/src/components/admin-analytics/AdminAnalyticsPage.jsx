@@ -1,5 +1,8 @@
 import { useEffect, useState } from 'react';
+import { duration, formatDateTime } from '../../utils/formatters';
+import { useIsMobile } from '../../hooks/useIsMobile';
 import { Activity, Users, CalendarDays, TrendingUp } from 'lucide-react';
+import { Page, PageHeader, Select, Skeleton, StatCard, StatGrid } from '../ui';
 import { authApi } from '../../api/authApi';
 
 const sectionLabel = {
@@ -14,12 +17,6 @@ const card = {
     padding: 20,
 };
 
-const summaryCard = {
-    backgroundColor: 'var(--surface-card)',
-    borderRadius: 10,
-    padding: '13px 15px',
-};
-
 const MONTH_NAMES = [
     '', 'Январь', 'Февраль', 'Март', 'Апрель', 'Май', 'Июнь',
     'Июль', 'Август', 'Сентябрь', 'Октябрь', 'Ноябрь', 'Декабрь',
@@ -31,33 +28,11 @@ const formatMonth = (ym) => {
     return `${MONTH_NAMES[month]} ${year}`;
 };
 
-const formatMinutes = (minutes) => {
-    if (!minutes) return '0';
-    if (minutes < 60) return `${minutes} мин`;
-    const h = Math.floor(minutes / 60);
-    const m = minutes % 60;
-    return m > 0 ? `${h} ч ${m} м` : `${h} ч`;
-};
-
-const formatDateTime = (value) => {
-    if (!value) return '—';
-    return new Intl.DateTimeFormat('ru-RU', {
-        day: '2-digit', month: '2-digit', year: 'numeric',
-        hour: '2-digit', minute: '2-digit',
-    }).format(new Date(value));
-};
-
 const AdminAnalyticsPage = () => {
     const [data, setData] = useState(null);
     const [loading, setLoading] = useState(true);
     const [selectedMonth, setSelectedMonth] = useState('');
-    const [isMobile, setIsMobile] = useState(() => window.innerWidth < 768);
-
-    useEffect(() => {
-        const handler = () => setIsMobile(window.innerWidth < 768);
-        window.addEventListener('resize', handler);
-        return () => window.removeEventListener('resize', handler);
-    }, []);
+    const isMobile = useIsMobile();
 
     useEffect(() => {
         const ctrl = new AbortController();
@@ -69,11 +44,30 @@ const AdminAnalyticsPage = () => {
         return () => ctrl.abort();
     }, [selectedMonth]);
 
+    const header = (
+        <PageHeader
+            title="Активность"
+            subtitle="Кто и сколько работает в системе"
+            actions={data?.availableMonths?.length > 0 && (
+                <Select
+                    value={selectedMonth || data.period}
+                    onChange={e => setSelectedMonth(e.target.value)}
+                    options={data.availableMonths.map(m => ({ value: m, label: formatMonth(m) }))}
+                    aria-label="Месяц"
+                    className="is-inline"
+                />
+            )}
+        />
+    );
+
     if (!data && loading) {
         return (
-            <div style={{ color: 'var(--muted)', fontSize: 13, padding: 40, textAlign: 'center' }}>
-                Загрузка...
-            </div>
+            <Page>
+                {header}
+                <StatGrid>
+                    {[0, 1, 2, 3].map((i) => <Skeleton key={i} height={72} />)}
+                </StatGrid>
+            </Page>
         );
     }
 
@@ -82,59 +76,29 @@ const AdminAnalyticsPage = () => {
     const maxVisits = data.topPages[0]?.visits || 1;
 
     const summaryItems = [
-        { label: 'Всего пользователей', value: data.totalUsers,    icon: Users },
-        { label: 'Активны за 7 дней',   value: data.active7d,       icon: Activity },
-        { label: 'Активны за 30 дней',  value: data.active30d,      icon: TrendingUp },
-        { label: 'Сессий за период',    value: data.sessionsPeriod, icon: CalendarDays },
+        { label: 'Пользователей',    value: data.totalUsers,     icon: Users },
+        { label: 'Активны за 7 дней', value: data.active7d,      icon: Activity },
+        { label: 'За 30 дней',       value: data.active30d,      icon: TrendingUp },
+        { label: 'Сессий',           value: data.sessionsPeriod, icon: CalendarDays },
     ];
 
     return (
-        <div style={{ color: 'var(--ink)', maxWidth: 1180, margin: '0 auto' }}>
+        <Page>
 
-            {/* Header */}
-            <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 18, flexWrap: 'wrap' }}>
-                <span style={sectionLabel}>Аналитика системы</span>
-                <div style={{ flex: 1, height: 1, backgroundColor: 'var(--hairline)', minWidth: 20 }} />
-                {data.availableMonths.length > 0 && (
-                    <select
-                        value={selectedMonth || data.period}
-                        onChange={e => setSelectedMonth(e.target.value)}
-                        style={{
-                            fontFamily: 'var(--sans)', fontSize: 13,
-                            color: 'var(--ink)', backgroundColor: 'var(--surface-card)',
-                            border: '1px solid var(--hairline)', borderRadius: 8,
-                            padding: '5px 10px', cursor: 'pointer', outline: 'none',
-                        }}
-                    >
-                        {data.availableMonths.map(m => (
-                            <option key={m} value={m}>{formatMonth(m)}</option>
-                        ))}
-                    </select>
-                )}
-            </div>
+            {header}
 
-            {/* Summary cards */}
-            <div style={{
-                display: 'grid',
-                gridTemplateColumns: isMobile ? 'repeat(2, 1fr)' : 'repeat(4, 1fr)',
-                gap: 12, marginBottom: 12,
-            }}>
+            {/* Сводка — общие карточки показателей */}
+            <StatGrid>
                 {summaryItems.map(({ label, value, icon: Icon }) => (
-                    <div key={label} style={summaryCard}>
-                        <div style={{ display: 'flex', alignItems: 'center', gap: 7, marginBottom: 7 }}>
-                            <Icon size={13} color="var(--primary)" style={{ flexShrink: 0 }} />
-                            <span style={{ ...sectionLabel, fontSize: 10.5, whiteSpace: 'normal', lineHeight: 1.25 }}>{label}</span>
-                        </div>
-                        <div style={{
-                            fontFamily: 'var(--serif)', fontSize: isMobile ? 24 : 28, fontWeight: 400,
-                            letterSpacing: '-0.025em', lineHeight: 1, color: 'var(--ink)',
-                            fontVariantNumeric: 'lining-nums', fontFeatureSettings: '"lnum" 1',
-                        }}>
-                            {loading ? '…' : value}
-                        </div>
-                    </div>
+                    <StatCard
+                        key={label}
+                        icon={Icon}
+                        title={label}
+                        value={loading ? '…' : value}
+                       
+                    />
                 ))}
-            </div>
+            </StatGrid>
 
             {/* Main grid */}
             <div style={{
@@ -227,7 +191,7 @@ const AdminAnalyticsPage = () => {
                                             Сессий: <span style={{ color: 'var(--ink)', fontWeight: 500 }}>{u.sessionsPeriod}</span>
                                         </span>
                                         <span style={{ fontSize: 12, color: 'var(--muted)' }}>
-                                            Время: <span style={{ color: 'var(--ink)', fontWeight: 500 }}>{formatMinutes(u.minutesPeriod)}</span>
+                                            Время: <span style={{ color: 'var(--ink)', fontWeight: 500 }}>{duration(u.minutesPeriod)}</span>
                                         </span>
                                     </div>
                                 </div>
@@ -279,7 +243,7 @@ const AdminAnalyticsPage = () => {
                                         {u.sessionsPeriod}
                                     </span>
                                     <span style={{ fontSize: 13, color: u.minutesPeriod > 0 ? 'var(--ink)' : 'var(--muted)' }}>
-                                        {formatMinutes(u.minutesPeriod)}
+                                        {duration(u.minutesPeriod)}
                                     </span>
                                     <span style={{ fontSize: 12, color: 'var(--muted)' }}>
                                         {formatDateTime(u.lastLogin)}
@@ -290,7 +254,7 @@ const AdminAnalyticsPage = () => {
                     )}
                 </section>
             </div>
-        </div>
+        </Page>
     );
 };
 

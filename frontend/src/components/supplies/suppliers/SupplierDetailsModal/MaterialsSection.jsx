@@ -1,21 +1,11 @@
 import { useState } from 'react';
+import { num } from '../../../../utils/formatters';
 import PropTypes from 'prop-types';
 import { m } from 'motion/react';
 import { ChevronRight } from 'lucide-react';
 
-const fmt = (n) => (n ?? 0).toLocaleString('ru-RU');
 
-const thStyle = {
-    fontFamily: 'var(--sans)', fontSize: '11px', fontWeight: 500,
-    letterSpacing: '0.07em', textTransform: 'uppercase', color: 'var(--muted)',
-    padding: '7px 10px', textAlign: 'left', borderBottom: '1px solid var(--hairline)',
-    whiteSpace: 'nowrap', background: 'var(--canvas)',
-};
 
-const tdStyle = {
-    fontFamily: 'var(--sans)', fontSize: 12, color: 'var(--body)',
-    padding: '8px 10px', borderBottom: '1px solid var(--hairline-soft)', verticalAlign: 'middle',
-};
 
 const MaterialRow = ({ material }) => {
     const [open, setOpen] = useState(false);
@@ -27,15 +17,15 @@ const MaterialRow = ({ material }) => {
                 onMouseEnter={e => { if (!open) e.currentTarget.style.background = 'var(--surface-soft)'; }}
                 onMouseLeave={e => { if (!open) e.currentTarget.style.background = ''; }}
             >
-                <td style={{ ...tdStyle, paddingLeft: 6, width: 20 }}>
+                <td style={{ paddingLeft: 6, width: 20 }}>
                     <ChevronRight size={12} style={{ color: 'var(--muted)', transform: open ? 'rotate(90deg)' : 'none', transition: 'transform 150ms' }} />
                 </td>
-                <td style={{ ...tdStyle, fontWeight: 500, color: 'var(--ink)' }}>{material.name}</td>
-                <td style={{ ...tdStyle, fontFamily: 'var(--mono)', fontSize: 11 }}>{material.code}</td>
-                <td style={tdStyle}>{fmt(material.total_quantity)} {material.uom}</td>
-                <td style={tdStyle}>{fmt(material.avg_price)} ₽</td>
-                <td style={tdStyle}>{fmt(material.last_price)} ₽</td>
-                <td style={tdStyle}>{fmt(material.total_sum)} ₽</td>
+                <td style={{ fontWeight: 500, color: 'var(--ink)' }}>{material.name}</td>
+                <td style={{ fontFamily: 'var(--mono)', fontSize: 11 }}>{material.code}</td>
+                <td>{num(material.total_quantity)} {material.uom}</td>
+                <td>{num(material.avg_price)} ₽</td>
+                <td>{num(material.last_price)} ₽</td>
+                <td>{num(material.total_sum)} ₽</td>
             </tr>
             {open && (
                 <tr>
@@ -45,7 +35,7 @@ const MaterialRow = ({ material }) => {
                                 <div key={i} style={{ background: 'var(--canvas)', borderRadius: 8, padding: '8px 12px', border: '1px solid var(--hairline)', display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 16 }}>
                                     <span style={{ fontFamily: 'var(--sans)', fontSize: 12, color: 'var(--muted)' }}>{s.date}</span>
                                     <span style={{ fontFamily: 'var(--sans)', fontSize: 12, color: 'var(--ink)' }}>
-                                        {fmt(s.quantity)} {material.uom} · {(s.price || 0).toFixed(2)} ₽ · {fmt(s.total)} ₽
+                                        {num(s.quantity)} {material.uom} · {(s.price || 0).toFixed(2)} ₽ · {num(s.total)} ₽
                                     </span>
                                 </div>
                             ))}
@@ -86,7 +76,7 @@ const MaterialsSection = ({ categories }) => {
             <div style={{ display: 'flex', gap: 4, marginBottom: 12, flexWrap: 'wrap' }}>
                 {tabs.map(tab => (
                     <button key={tab.key} onClick={() => setActiveTab(tab.key)}
-                        style={{ position: 'relative', fontFamily: 'var(--sans)', fontSize: 12, fontWeight: 500, padding: '5px 12px', borderRadius: 6, border: tab.key === activeTab ? '1px solid transparent' : '1px solid var(--hairline)', background: 'transparent', color: tab.key === activeTab ? '#fff' : 'var(--body)', cursor: 'pointer', transition: 'color 150ms ease' }}>
+                        style={{ position: 'relative', fontFamily: 'var(--sans)', fontSize: 12, fontWeight: 500, padding: '5px 12px', borderRadius: 6, border: tab.key === activeTab ? '1px solid transparent' : '1px solid var(--hairline)', background: 'transparent', color: tab.key === activeTab ? 'var(--on-primary)' : 'var(--body)', cursor: 'pointer', transition: 'color 150ms ease' }}>
                         {tab.key === activeTab && (
                             <m.span
                                 layoutId="materials-tabs-pill"
@@ -101,22 +91,22 @@ const MaterialsSection = ({ categories }) => {
 
             {/* Table */}
             <div style={{ maxHeight: 400, overflowY: 'auto', border: '1px solid var(--hairline)', borderRadius: 8 }}>
-                <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+                <table className="ui-table">
                     <thead>
                         <tr>
-                            <th style={{ ...thStyle, width: 20 }} />
-                            <th style={thStyle}>Наименование</th>
-                            <th style={thStyle}>Код</th>
-                            <th style={thStyle}>Количество</th>
-                            <th style={thStyle}>Средняя цена</th>
-                            <th style={thStyle}>Последняя цена</th>
-                            <th style={thStyle}>Общая сумма</th>
+                            <th style={{ width: 20 }} />
+                            <th>Наименование</th>
+                            <th>Код</th>
+                            <th>Количество</th>
+                            <th>Средняя цена</th>
+                            <th>Последняя цена</th>
+                            <th>Общая сумма</th>
                         </tr>
                     </thead>
                     <tbody>
                         {currentMaterials.map(m => <MaterialRow key={m.id} material={m} />)}
                         {currentMaterials.length === 0 && (
-                            <tr><td colSpan={7} style={{ ...tdStyle, textAlign: 'center', color: 'var(--muted)', padding: '20px 0' }}>Нет данных</td></tr>
+                            <tr><td colSpan={7} style={{ textAlign: 'center', color: 'var(--muted)', padding: '20px 0' }}>Нет данных</td></tr>
                         )}
                     </tbody>
                 </table>

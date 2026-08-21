@@ -1,0 +1,1213 @@
+/* Примитивы интерфейса.
+   Единственное место, где описан внешний вид кнопок, полей, таблиц и плашек.
+   Страницы работают с компонентами из `ui/`, а не с этими классами напрямую —
+   благодаря этому способ стилизации можно поменять, не трогая сами страницы.
+
+   Все значения берутся из токенов `index.css`: ни одного хекса и ни одного
+   размера «на глаз». */
+
+/* ── Кнопка ─────────────────────────────────────────────── */
+
+.ui-btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: var(--space-2);
+    font-family: var(--sans);
+    font-weight: 500;
+    white-space: nowrap;
+    text-decoration: none;
+    cursor: pointer;
+    border: 1px solid transparent;
+    border-radius: var(--radius-md);
+    transition: background-color 150ms ease, color 150ms ease, border-color 150ms ease;
+}
+
+.ui-btn:focus-visible {
+    outline: 2px solid var(--primary);
+    outline-offset: 2px;
+}
+
+.ui-btn:disabled,
+.ui-btn[aria-disabled='true'] {
+    opacity: 0.55;
+    cursor: default;
+}
+
+.ui-btn[aria-disabled='true'] {
+    pointer-events: none;
+}
+
+/* размеры */
+.ui-btn--md {
+    font-size: var(--size-md);
+    padding: var(--control-pad-y) var(--control-pad-x);
+    min-height: var(--control-height);
+}
+
+.ui-btn--sm {
+    font-size: var(--size-sm);
+    padding: 5px 10px;
+    gap: var(--space-1);
+}
+
+/* варианты */
+.ui-btn--primary {
+    background: var(--primary);
+    border-color: var(--primary);
+    color: var(--on-primary);
+}
+
+.ui-btn--primary:hover:not(:disabled) {
+    background: var(--primary-active);
+    border-color: var(--primary-active);
+}
+
+.ui-btn--secondary {
+    background: var(--canvas);
+    border-color: var(--hairline);
+    color: var(--ink);
+}
+
+.ui-btn--secondary:hover:not(:disabled) {
+    border-color: var(--muted-soft);
+}
+
+/* Заливка без рамки — второстепенное действие в шапке раздела и в панелях
+   («Экспорт», «Загрузить», переключатели периода) */
+.ui-btn--soft {
+    background: var(--surface-card);
+    border-color: transparent;
+    color: var(--ink);
+}
+
+.ui-btn--soft:hover:not(:disabled) {
+    background: var(--surface-cream-strong);
+}
+
+.ui-btn--ghost {
+    background: transparent;
+    border-color: var(--hairline);
+    color: var(--muted);
+}
+
+.ui-btn--ghost:hover:not(:disabled) {
+    color: var(--ink);
+    border-color: var(--muted-soft);
+}
+
+.ui-btn--danger {
+    background: transparent;
+    border-color: var(--error-border);
+    color: var(--error-ink);
+}
+
+.ui-btn--danger:hover:not(:disabled) {
+    background: var(--error-bg);
+}
+
+/* Текстовая кнопка без рамки — «Обновить», «Детали», «Сбросить».
+   Самый частый вариант в приложении. */
+.ui-btn--link {
+    background: none;
+    border-color: transparent;
+    color: var(--primary);
+    padding: 0;
+    min-height: 0;
+}
+
+.ui-btn--link:hover:not(:disabled) {
+    color: var(--primary-active);
+}
+
+.ui-btn--link:disabled {
+    color: var(--muted);
+    opacity: 1;
+}
+
+/* Мелкое действие внутри плотного списка: заливка отделяет его от строки,
+   а тон задаётся отдельным модификатором — «в исключения», «удалить», «отменить» */
+.ui-btn--subtle {
+    background: var(--surface-soft);
+    border-color: transparent;
+    color: var(--muted);
+    font-weight: 600;
+}
+
+.ui-btn--subtle:hover:not(:disabled) {
+    background: var(--surface-cream-strong);
+    color: var(--ink);
+}
+
+.ui-btn--subtle.is-accent { color: var(--primary); }
+.ui-btn--subtle.is-danger { color: var(--error-ink); }
+.ui-btn--subtle.is-accent:hover:not(:disabled) { color: var(--primary-active); }
+.ui-btn--subtle.is-danger:hover:not(:disabled) { background: var(--error-bg); }
+
+/* Приглушённая текстовая кнопка — второстепенное действие рядом с основным */
+.ui-btn--quiet {
+    background: none;
+    border-color: transparent;
+    color: var(--muted);
+    padding: 0;
+    min-height: 0;
+}
+
+.ui-btn--quiet:hover:not(:disabled) {
+    color: var(--ink);
+}
+
+.ui-btn--block {
+    width: 100%;
+}
+
+/* Иконка внутри кнопки не должна сжиматься при нехватке места */
+.ui-btn > svg {
+    flex: 0 0 auto;
+}
+
+.ui-btn__spinner {
+    animation: spin 1s linear infinite;
+}
+
+/* ── Поля ввода ─────────────────────────────────────────── */
+
+.ui-input {
+    font-family: var(--sans);
+    font-size: var(--size-md);
+    color: var(--ink);
+    background: var(--canvas);
+    border: 1px solid var(--hairline);
+    border-radius: var(--radius-md);
+    padding: var(--control-pad-y) var(--control-pad-x);
+    outline: none;
+    min-width: 0;
+    box-sizing: border-box;
+    transition: border-color 150ms ease, box-shadow 150ms ease;
+}
+
+.ui-input::placeholder {
+    color: var(--muted-soft);
+}
+
+.ui-input:focus {
+    border-color: var(--primary);
+    box-shadow: 0 0 0 3px color-mix(in srgb, var(--primary) 15%, transparent);
+}
+
+.ui-input:disabled {
+    opacity: 0.55;
+    cursor: default;
+}
+
+.ui-input--block {
+    width: 100%;
+}
+
+/* Поиск: иконка слева, крестик очистки справа */
+.ui-search {
+    position: relative;
+    display: flex;
+    align-items: center;
+    flex: 1 1 200px;
+    min-width: 0;
+}
+
+.ui-search__icon {
+    position: absolute;
+    left: 10px;
+    color: var(--muted);
+    pointer-events: none;
+    display: flex;
+}
+
+.ui-search__input {
+    width: 100%;
+    padding-left: 30px;
+}
+
+.ui-search__clear {
+    position: absolute;
+    right: 8px;
+    display: flex;
+    background: none;
+    border: none;
+    padding: 0;
+    cursor: pointer;
+    color: var(--muted);
+}
+
+.ui-search__clear:hover {
+    color: var(--ink);
+}
+
+/* Выпадающий список: своя стрелка вместо системной */
+.ui-select {
+    position: relative;
+    display: flex;
+    flex: 1 1 140px;
+    min-width: 0;
+}
+
+.ui-select__control {
+    width: 100%;
+    cursor: pointer;
+    padding-right: 36px;
+    appearance: none;
+    -webkit-appearance: none;
+}
+
+.ui-select__control.is-placeholder {
+    color: var(--muted);
+}
+
+.ui-select__chevron {
+    position: absolute;
+    right: var(--control-pad-x);
+    top: 50%;
+    transform: translateY(-50%);
+    color: var(--muted);
+    pointer-events: none;
+}
+
+/* Внутри кнопки мультиселекта стрелка уже в потоке — её не нужно позиционировать */
+.ui-select__chevron.is-static {
+    position: static;
+    transform: none;
+    flex-shrink: 0;
+    transition: transform 150ms ease;
+}
+
+.ui-select__chevron.is-static.is-open {
+    transform: rotate(180deg);
+}
+
+.ui-date-sep {
+    font-size: var(--size-sm);
+    color: var(--muted);
+    flex-shrink: 0;
+    line-height: 1;
+}
+
+.ui-reset {
+    flex: 0 0 auto;
+}
+
+/* Селект вне панели фильтров занимает столько, сколько нужно содержимому */
+.ui-select.is-inline {
+    flex: 0 0 auto;
+}
+
+/* ── Множественный выбор ────────────────────────────────── */
+
+.ui-multiselect {
+    position: relative;
+    flex: 1 1 200px;
+    min-width: 0;
+}
+
+/* Вне панели фильтров — на всю ширину контейнера */
+.ui-multiselect.is-block {
+    flex: none;
+    width: 100%;
+}
+
+.ui-multiselect.is-block .ui-multiselect__menu {
+    right: 0;
+    min-width: 0;
+}
+
+.ui-multiselect__label {
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+/* Вспомогательная метка справа — код материала, артикул */
+.ui-multiselect__hint {
+    margin-left: auto;
+    padding-left: var(--space-2);
+    font-family: var(--mono);
+    font-size: var(--size-xs);
+    color: var(--muted);
+    flex-shrink: 0;
+}
+
+.ui-multiselect__control {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: var(--space-2);
+    width: 100%;
+    cursor: pointer;
+    text-align: left;
+}
+
+.ui-multiselect__placeholder {
+    color: var(--muted);
+}
+
+.ui-multiselect__menu {
+    position: absolute;
+    top: calc(100% + 4px);
+    left: 0;
+    z-index: 100;
+    display: flex;
+    flex-direction: column;
+    min-width: 260px;
+    max-height: 280px;
+    background: var(--canvas);
+    border: 1px solid var(--hairline);
+    border-radius: var(--radius-md);
+    box-shadow: var(--shadow-soft);
+}
+
+.ui-multiselect__search {
+    padding: var(--space-2) 10px;
+    border-bottom: 1px solid var(--hairline);
+}
+
+.ui-multiselect__list {
+    overflow-y: auto;
+    max-height: 220px;
+}
+
+.ui-multiselect__empty {
+    padding: var(--space-3) 14px;
+    font-family: var(--sans);
+    font-size: var(--size-sm);
+    color: var(--muted);
+}
+
+.ui-multiselect__option {
+    display: flex;
+    align-items: center;
+    gap: var(--space-2);
+    padding: var(--space-2) var(--control-pad-x);
+    cursor: pointer;
+    font-family: var(--sans);
+    font-size: var(--size-md);
+    color: var(--ink);
+}
+
+.ui-multiselect__option:hover,
+.ui-multiselect__option.is-checked {
+    background: var(--surface-soft);
+}
+
+/* Нативный чекбокс скрыт, но остаётся в потоке — так работают клавиатура
+   и скринридер, а рисуем мы свой квадрат */
+.ui-multiselect__native {
+    position: absolute;
+    opacity: 0;
+    width: 0;
+    height: 0;
+}
+
+.ui-multiselect__box {
+    width: 14px;
+    height: 14px;
+    border-radius: 3px;
+    border: 1px solid var(--hairline);
+    flex-shrink: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: var(--on-primary);
+}
+
+.ui-multiselect__option.is-checked .ui-multiselect__box {
+    border-color: var(--primary);
+    background: var(--primary);
+}
+
+.ui-multiselect__native:focus-visible + .ui-multiselect__box {
+    outline: 2px solid var(--primary);
+    outline-offset: 2px;
+}
+
+.ui-multiselect__footer {
+    padding: 6px 10px;
+    border-top: 1px solid var(--hairline);
+}
+
+/* ── Шапка страницы ─────────────────────────────────────── */
+
+.ui-page-header {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: var(--space-4);
+    flex-wrap: wrap;
+    padding-bottom: var(--space-4);
+    border-bottom: 1px solid var(--hairline);
+}
+
+.ui-page-header__title {
+    font-family: var(--serif);
+    font-size: var(--size-display);
+    font-weight: 400;
+    letter-spacing: -0.025em;
+    line-height: 1.1;
+    color: var(--ink);
+    margin: 0;
+}
+
+.ui-page-header__subtitle {
+    font-family: var(--sans);
+    font-size: var(--size-md);
+    color: var(--muted);
+    margin: var(--space-1) 0 0;
+}
+
+.ui-page-header__actions {
+    display: flex;
+    align-items: center;
+    gap: var(--space-4);
+    flex-wrap: wrap;
+}
+
+.ui-page-header__meta {
+    font-family: var(--sans);
+    font-size: var(--size-sm);
+    color: var(--muted-soft);
+    font-variant-numeric: tabular-nums;
+}
+
+@media (max-width: 600px) {
+    .ui-page-header__title {
+        font-size: var(--size-xl);
+    }
+}
+
+/* ── Оболочка страницы ──────────────────────────────────── */
+
+/* Оболочка задаёт не только ширину, но и вертикальный ритм: раньше каждая
+   страница держала свой контейнер с gap (18, 20, 24, 32 — вразнобой), и при
+   переходе на общую оболочку блоки схлопывались вплотную. */
+.ui-page {
+    max-width: 1200px;
+    margin: 0 auto;
+    padding: 0 0 40px;
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-5);
+}
+
+/* ── Панель инструментов (фильтры, поиск) ───────────────── */
+
+.ui-toolbar {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 10px;
+    align-items: center;
+}
+
+/* ── Карточка ───────────────────────────────────────────── */
+
+.ui-card {
+    background: var(--surface-card);
+    border: 1px solid var(--hairline);
+    border-radius: var(--radius-lg);
+    padding: var(--space-4) var(--space-5);
+    min-width: 0;
+}
+
+.ui-card--quiet {
+    background: var(--surface-soft);
+}
+
+.ui-card--plain {
+    background: transparent;
+}
+
+.ui-card__title {
+    font-family: var(--sans);
+    font-size: var(--size-xs);
+    font-weight: 500;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    color: var(--muted);
+    margin: 0 0 var(--space-2);
+}
+
+/* ── Таблица ────────────────────────────────────────────── */
+
+.ui-table-wrap {
+    overflow-x: auto;
+}
+
+.ui-table {
+    width: 100%;
+    border-collapse: collapse;
+}
+
+.ui-table th {
+    font-family: var(--sans);
+    font-size: var(--size-xs);
+    font-weight: 500;
+    letter-spacing: 0.07em;
+    text-transform: uppercase;
+    color: var(--muted);
+    padding: 9px var(--control-pad-x);
+    text-align: left;
+    border-bottom: 1px solid var(--hairline);
+    white-space: nowrap;
+    user-select: none;
+    background: var(--canvas);
+}
+
+.ui-table th.is-sortable {
+    cursor: pointer;
+}
+
+.ui-table th.is-sorted {
+    color: var(--primary);
+}
+
+.ui-table td {
+    font-family: var(--sans);
+    font-size: var(--size-md);
+    color: var(--body);
+    padding: 10px var(--control-pad-x);
+    border-bottom: 1px solid var(--hairline-soft);
+    vertical-align: middle;
+}
+
+.ui-table td.is-numeric,
+.ui-table th.is-numeric {
+    text-align: right;
+    font-variant-numeric: tabular-nums;
+}
+
+.ui-table td.is-strong {
+    font-weight: 500;
+    color: var(--ink);
+}
+
+.ui-table__body--loading {
+    opacity: 0.45;
+    transition: opacity 200ms ease;
+}
+
+.ui-table__sort-icon {
+    margin-left: 3px;
+    vertical-align: middle;
+}
+
+.ui-table__sort-icon--idle {
+    opacity: 0.4;
+}
+
+.ui-table__head-cell {
+    display: flex;
+    align-items: center;
+}
+
+.ui-table__head-cell.is-numeric {
+    justify-content: flex-end;
+}
+
+/* Раскрывающиеся строки */
+
+.ui-table__expander-head {
+    width: 28px;
+    padding: 0;
+}
+
+.ui-table__expander {
+    width: 28px;
+    padding-left: var(--space-2);
+    padding-right: var(--space-1);
+}
+
+.ui-table__chevron {
+    color: var(--muted);
+    transition: transform 150ms ease;
+}
+
+.ui-table__chevron.is-open {
+    transform: rotate(90deg);
+}
+
+.ui-table tr.is-expanded,
+.ui-table tr.is-active {
+    background: var(--surface-soft);
+}
+
+/* Выбранная строка отмечается ещё и цветом первой ячейки */
+.ui-table tr.is-active td:first-child {
+    color: var(--primary);
+    font-weight: 600;
+}
+
+.ui-table__expanded {
+    padding: var(--space-3) var(--space-4);
+    background: var(--surface-soft);
+    border-bottom: 1px solid var(--hairline-soft);
+}
+
+/* ── Карточка показателя ────────────────────────────────── */
+
+/* Компактная карточка: подпись мелким капслоком, значение засечным в 23px.
+   Размер взят с экрана ДДС — прежние 28px на 16/20 паддинге занимали
+   непропорционально много места в ряду из четырёх-пяти показателей. */
+.ui-stat {
+    position: relative;
+    border-radius: var(--radius-lg);
+    padding: 14px 16px;
+    min-width: 0;
+}
+
+.ui-stat--card {
+    background: var(--surface-card);
+    border: 1px solid var(--hairline);
+}
+
+/* На тёмной подложке карточка светлеет от фона, а не от рамки */
+.ui-stat--dark {
+    background: var(--surface-dark);
+    border: 1px solid transparent;
+}
+
+.ui-stat--plain {
+    background: transparent;
+    border: 1px solid var(--hairline);
+}
+
+.ui-stat__title {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    font-family: var(--sans);
+    font-size: 10px;
+    font-weight: 500;
+    letter-spacing: 0.07em;
+    text-transform: uppercase;
+    color: var(--muted);
+    margin-bottom: 7px;
+}
+
+.ui-stat--dark .ui-stat__title {
+    color: var(--on-dark-soft);
+}
+
+.ui-stat__value {
+    font-family: var(--serif);
+    font-weight: 400;
+    letter-spacing: -0.02em;
+    line-height: 1.1;
+    color: var(--ink);
+    font-variant-numeric: lining-nums tabular-nums;
+    font-feature-settings: 'lnum' 1;
+    overflow-wrap: break-word;
+}
+
+.ui-stat--dark .ui-stat__value {
+    color: var(--on-dark);
+}
+
+/* Единица измерения не должна спорить с самим числом */
+.ui-stat__suffix {
+    font-family: var(--sans);
+    font-size: var(--size-sm);
+    margin-left: 5px;
+    color: var(--muted);
+}
+
+.ui-stat--dark .ui-stat__suffix {
+    color: var(--on-dark-soft);
+}
+
+.ui-stat__note {
+    font-family: var(--sans);
+    font-size: var(--size-xs);
+    color: var(--muted);
+    margin-top: 5px;
+    font-variant-numeric: tabular-nums;
+}
+
+/* На узком экране значение ещё немного уменьшается */
+@media (max-width: 600px) {
+    .ui-stat__value {
+        font-size: 20px !important;
+    }
+}
+
+.ui-stat--dark .ui-stat__note {
+    color: var(--on-dark-soft);
+}
+
+/* ── Плитка метрики ─────────────────────────────────────── */
+
+.ui-metric {
+    background: var(--surface-soft);
+    border-radius: var(--radius-sm);
+    padding: 6px var(--space-2);
+    min-width: 0;
+}
+
+.ui-metric__label {
+    font-family: var(--sans);
+    font-size: 10px;
+    color: var(--muted);
+    margin-bottom: 2px;
+}
+
+.ui-metric__value {
+    font-family: var(--sans);
+    font-size: var(--size-sm);
+    font-weight: 500;
+    color: var(--ink);
+}
+
+/* На заливке `surface-soft` плитка сливалась бы с фоном — внутри
+   раскрытой строки она получает более светлую подложку */
+.ui-table__expanded .ui-metric,
+.ui-card--quiet .ui-metric {
+    background: var(--surface-card);
+}
+
+.ui-metric-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(110px, 1fr));
+    gap: 6px;
+}
+
+/* ── Пагинация ──────────────────────────────────────────── */
+
+.ui-pagination {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: var(--space-3);
+    padding: var(--space-3) var(--space-1) var(--space-1);
+    margin-top: var(--space-1);
+    flex-wrap: wrap;
+}
+
+.ui-pagination__summary {
+    font-family: var(--sans);
+    font-size: var(--size-sm);
+    color: var(--muted);
+    font-variant-numeric: tabular-nums;
+}
+
+.ui-pagination__pages {
+    display: flex;
+    gap: var(--space-1);
+}
+
+.ui-pagination__page {
+    min-width: 28px;
+    padding: var(--space-1) 6px;
+    border-radius: var(--radius-sm);
+    border: 1px solid var(--hairline);
+    background: var(--canvas);
+    color: var(--body);
+    font-family: var(--sans);
+    font-size: var(--size-sm);
+    cursor: pointer;
+    transition: border-color 150ms ease, background-color 150ms ease;
+}
+
+.ui-pagination__page:hover:not(.is-current) {
+    border-color: var(--muted-soft);
+}
+
+.ui-pagination__page.is-current {
+    border-color: var(--primary);
+    background: var(--primary);
+    color: var(--on-primary);
+}
+
+.ui-pagination__gap {
+    padding: var(--space-1) 6px;
+    font-family: var(--sans);
+    font-size: var(--size-sm);
+    color: var(--muted);
+}
+
+/* ── Переключатель ──────────────────────────────────────── */
+
+.ui-segmented {
+    display: inline-flex;
+    gap: var(--space-1);
+    flex-wrap: wrap;
+}
+
+/* Внутри секции переключатель отделяется от содержимого под ним: свой отступ
+   раньше жил в стилях самодельных вкладок, и после перехода на примитив
+   содержимое прижалось к табам вплотную. */
+.ui-page section > .ui-segmented,
+.ui-page > .ui-segmented {
+    margin-bottom: var(--space-4);
+}
+
+/* На подложке сегменты читаются как один орган управления */
+.ui-segmented--panel {
+    padding: var(--space-1);
+    background: var(--surface-soft);
+    border-radius: 10px;
+}
+
+.ui-segmented__item {
+    position: relative;
+    padding: 6px 16px;
+    font-family: var(--sans);
+    font-size: var(--size-md);
+    font-weight: 600;
+    color: var(--muted);
+    background: transparent;
+    border: none;
+    border-radius: 7px;
+    cursor: pointer;
+    transition: color 150ms ease, background-color 150ms ease;
+    white-space: nowrap;
+}
+
+.ui-segmented__item:hover:not(:disabled):not(.is-active) {
+    color: var(--ink);
+}
+
+.ui-segmented__item.is-active {
+    color: var(--ink);
+}
+
+.ui-segmented__item:disabled {
+    opacity: 0.55;
+    cursor: default;
+}
+
+.ui-segmented__item:focus-visible {
+    outline: 2px solid var(--primary);
+    outline-offset: 2px;
+}
+
+/* Подсветка активного едет за выбором; текст лежит поверх неё */
+.ui-segmented__pill {
+    position: absolute;
+    inset: 0;
+    border-radius: 7px;
+    background: var(--canvas);
+    box-shadow: var(--shadow-hairline);
+}
+
+.ui-segmented__label {
+    position: relative;
+}
+
+/* Поверх тёмной карточки: там своя пара «фон/текст», и обычные токены
+   поверхностей дали бы невидимый сегмент */
+.ui-segmented--dark .ui-segmented__item {
+    background: var(--surface-dark-elevated);
+    color: var(--on-dark-soft);
+    font-weight: 500;
+    font-size: var(--size-sm);
+    padding: 6px 12px;
+    border-radius: var(--radius-md);
+}
+
+.ui-segmented--dark .ui-segmented__item:hover:not(:disabled):not(.is-active) {
+    color: var(--on-dark);
+}
+
+.ui-segmented--dark .ui-segmented__item.is-active {
+    background: var(--primary);
+    color: var(--on-primary);
+}
+
+.ui-segmented--dark .ui-segmented__pill {
+    display: none;
+}
+
+/* Без подложки — отдельные «таблетки», как фильтры периода */
+.ui-segmented--plain .ui-segmented__item {
+    border: 1px solid var(--hairline);
+    border-radius: var(--radius-pill);
+    font-weight: 500;
+}
+
+.ui-segmented--plain .ui-segmented__item.is-active {
+    border-color: var(--primary);
+    color: var(--primary);
+}
+
+.ui-segmented--plain .ui-segmented__pill {
+    border-radius: var(--radius-pill);
+    background: var(--accent-bg);
+    box-shadow: none;
+}
+
+/* ── Бейдж статуса ──────────────────────────────────────── */
+
+.ui-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--space-1);
+    font-family: var(--sans);
+    font-size: var(--size-sm);
+    font-weight: 500;
+    line-height: 1.3;
+    padding: 3px 9px;
+    border-radius: var(--radius-pill);
+    border: 1px solid transparent;
+    white-space: nowrap;
+}
+
+.ui-badge--neutral {
+    background: var(--surface-cream-strong);
+    border-color: var(--hairline);
+    color: var(--body);
+}
+
+.ui-badge--success {
+    background: var(--success-bg);
+    border-color: var(--success-border);
+    color: var(--success-ink);
+}
+
+.ui-badge--warning {
+    background: var(--warning-bg);
+    border-color: var(--warning-border);
+    color: var(--warning-ink);
+}
+
+.ui-badge--error {
+    background: var(--error-bg);
+    border-color: var(--error-border);
+    color: var(--error-ink);
+}
+
+.ui-badge--info {
+    background: var(--info-bg);
+    border-color: var(--info-border);
+    color: var(--info-ink);
+}
+
+.ui-badge--accent {
+    background: var(--accent-bg);
+    border-color: var(--accent-border);
+    color: var(--primary-active);
+}
+
+/* ── Кнопка-иконка ──────────────────────────────────────── */
+
+.ui-icon-btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+    padding: var(--space-1);
+    background: none;
+    border: none;
+    border-radius: var(--radius-sm);
+    cursor: pointer;
+    transition: color 150ms ease, background-color 150ms ease;
+}
+
+.ui-icon-btn:focus-visible {
+    outline: 2px solid var(--primary);
+    outline-offset: 2px;
+}
+
+.ui-icon-btn--muted { color: var(--muted); }
+.ui-icon-btn--ink   { color: var(--ink); }
+.ui-icon-btn--danger { color: var(--error-ink); }
+
+.ui-icon-btn--muted:hover,
+.ui-icon-btn--ink:hover {
+    color: var(--ink);
+    background: var(--surface-soft);
+}
+
+.ui-icon-btn--danger:hover {
+    background: var(--error-bg);
+}
+
+.ui-icon-btn:disabled {
+    opacity: 0.5;
+    cursor: default;
+}
+
+/* ── Раскрывающаяся строка ──────────────────────────────── */
+
+.ui-disclosure.is-divided {
+    border-bottom: 1px solid var(--hairline-soft);
+}
+
+.ui-disclosure__head {
+    width: 100%;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: var(--space-2);
+    padding: 10px 0;
+    background: none;
+    border: none;
+    cursor: pointer;
+    text-align: left;
+    font-family: var(--sans);
+    font-size: var(--size-md);
+    color: var(--ink);
+}
+
+.ui-disclosure__head:focus-visible {
+    outline: 2px solid var(--primary);
+    outline-offset: 2px;
+}
+
+.ui-disclosure__summary {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    min-width: 0;
+}
+
+.ui-disclosure__chevron {
+    color: var(--muted);
+    flex-shrink: 0;
+    transition: transform 150ms ease;
+}
+
+.ui-disclosure__chevron.is-open {
+    transform: rotate(90deg);
+}
+
+.ui-disclosure__aside {
+    color: var(--primary);
+    font-weight: 500;
+    white-space: nowrap;
+    flex-shrink: 0;
+}
+
+.ui-disclosure__body {
+    padding-bottom: var(--space-3);
+}
+
+/* ── Плашка уведомления ─────────────────────────────────── */
+
+.ui-notice {
+    display: flex;
+    align-items: flex-start;
+    gap: 10px;
+    padding: 10px 14px;
+    border-radius: var(--radius-md);
+    border: 1px solid transparent;
+    font-family: var(--sans);
+    font-size: var(--size-md);
+    line-height: 1.45;
+}
+
+.ui-notice__icon {
+    flex: 0 0 auto;
+    margin-top: 2px;
+}
+
+.ui-notice__text {
+    flex: 1;
+    min-width: 0;
+}
+
+.ui-notice__close {
+    flex: 0 0 auto;
+    background: none;
+    border: none;
+    padding: 0;
+    cursor: pointer;
+    color: var(--muted);
+    display: flex;
+}
+
+.ui-notice__close:hover {
+    color: var(--ink);
+}
+
+.ui-notice--success {
+    background: var(--success-bg);
+    border-color: var(--success-border);
+    color: var(--success-ink);
+}
+
+.ui-notice--error {
+    background: var(--error-bg);
+    border-color: var(--error-border);
+    color: var(--error-ink);
+}
+
+.ui-notice--warning {
+    background: var(--warning-bg);
+    border-color: var(--warning-border);
+    color: var(--warning-ink);
+}
+
+.ui-notice--info {
+    background: var(--info-bg);
+    border-color: var(--info-border);
+    color: var(--info-ink);
+}
+
+.ui-notice--loading {
+    background: var(--surface-card);
+    border-color: var(--hairline);
+    color: var(--muted);
+}
+
+/* ── Состояния: пусто и ошибка ──────────────────────────── */
+
+.ui-state {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: var(--space-2);
+    text-align: center;
+    font-family: var(--sans);
+    font-size: var(--size-md);
+    color: var(--muted);
+    padding: var(--space-6) var(--space-4);
+}
+
+.ui-state__icon {
+    color: var(--muted-soft);
+}
+
+.ui-state__title {
+    color: var(--ink);
+    font-weight: 500;
+}
+
+.ui-state__hint {
+    font-size: var(--size-sm);
+    color: var(--muted-soft);
+    max-width: 46ch;
+    line-height: 1.5;
+}
+
+.ui-state--error .ui-state__icon {
+    color: var(--error);
+}
+
+.ui-state--error .ui-state__title {
+    color: var(--error-ink);
+}
+
+/* Компактный вариант — внутри карточки или ячейки таблицы */
+.ui-state--inline {
+    padding: var(--space-4) var(--space-3);
+}
+
+@media (prefers-reduced-motion: reduce) {
+
+    .ui-disclosure__chevron,
+    .ui-segmented__item,
+    .ui-icon-btn,
+    .ui-btn,
+    .ui-input,
+    .ui-pagination__page {
+        transition: none;
+    }
+
+    .ui-btn__spinner {
+        animation: none;
+    }
+}

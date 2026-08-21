@@ -1,23 +1,23 @@
 import { useState, useEffect, useCallback } from 'react';
+import { Button, IconButton, Page, PageHeader, Skeleton } from '../ui';
 import { Download, X } from 'lucide-react';
 import { ABCFilters } from './ABCFilters';
 import { ABCStatistics } from './ABCStatistics';
 import { ABCCharts } from './ABCCharts';
 import { ABCTable } from './ABCTable';
 import { FadeRise } from '../ui/motion';
-import { Skeleton } from '../ui/Skeleton';
 import { abcAnalysisApi } from '../../api/abcAnalysis';
 
 const CATEGORIES = [
-    { key: 'A', label: 'Категория A', desc: 'Ключевые продукты (80% выручки)', color: '#a0583e' },
-    { key: 'B', label: 'Категория B', desc: 'Средние продукты (15% выручки)',  color: '#3a68a0' },
-    { key: 'C', label: 'Категория C', desc: 'Редкие продукты (5% выручки)',    color: '#7a6010' },
+    { key: 'A', label: 'Категория A', desc: 'Ключевые продукты (80% выручки)', color: 'var(--primary-active)' },
+    { key: 'B', label: 'Категория B', desc: 'Средние продукты (15% выручки)',  color: 'var(--info-ink)' },
+    { key: 'C', label: 'Категория C', desc: 'Редкие продукты (5% выручки)',    color: 'var(--warning-ink)' },
 ];
 
 const RECOMMENDATIONS = [
-    { key: 'A', label: 'Категория A', color: '#a0583e', items: ['Постоянный контроль', 'Точный прогноз спроса', 'Частые поставки', 'Оптимальный запас'] },
-    { key: 'B', label: 'Категория B', color: '#3a68a0', items: ['Периодический контроль', 'Средний запас', 'Регулярные поставки', 'Стандартный учёт'] },
-    { key: 'C', label: 'Категория C', color: '#7a6010', items: ['Упрощённый контроль', 'Увеличенные партии', 'Редкие поставки', 'Минимальный запас'] },
+    { key: 'A', label: 'Категория A', color: 'var(--primary-active)', items: ['Постоянный контроль', 'Точный прогноз спроса', 'Частые поставки', 'Оптимальный запас'] },
+    { key: 'B', label: 'Категория B', color: 'var(--info-ink)', items: ['Периодический контроль', 'Средний запас', 'Регулярные поставки', 'Стандартный учёт'] },
+    { key: 'C', label: 'Категория C', color: 'var(--warning-ink)', items: ['Упрощённый контроль', 'Увеличенные партии', 'Редкие поставки', 'Минимальный запас'] },
 ];
 
 const sectionCard    = { backgroundColor: 'var(--canvas)', border: '1px solid var(--hairline)', borderRadius: '10px', padding: '24px' };
@@ -69,26 +69,16 @@ export const ABCAnalysis = () => {
     };
 
     return (
-        <div style={{ display: 'flex', flexDirection: 'column', gap: '20px', color: 'var(--ink)' }}>
-            {/* Header */}
-            <div style={{ borderBottom: '1px solid var(--hairline)', paddingBottom: '16px', display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: '12px', flexWrap: 'wrap' }}>
-                <div>
-                    <h1 style={{ fontFamily: 'var(--serif)', fontSize: '32px', fontWeight: 400, letterSpacing: '-0.025em', lineHeight: 1.1, color: 'var(--ink)', margin: '0 0 4px' }}>
-                        ABC-анализ продуктов
-                    </h1>
-                    <p style={{ fontFamily: 'var(--sans)', fontSize: '13px', color: 'var(--muted)', margin: 0 }}>
-                        Анализ продуктов по объёму продаж и выручке
-                    </p>
-                </div>
-                <button
-                    onClick={handleExport}
-                    style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', height: '36px', padding: '0 16px', borderRadius: '8px', border: '1px solid var(--hairline)', backgroundColor: 'var(--canvas)', fontFamily: 'var(--sans)', fontSize: '13px', fontWeight: 500, color: 'var(--ink)', cursor: 'pointer', transition: 'background-color 150ms', flexShrink: 0 }}
-                    onMouseEnter={e => e.currentTarget.style.backgroundColor = 'var(--surface-soft)'}
-                    onMouseLeave={e => e.currentTarget.style.backgroundColor = 'var(--canvas)'}
-                >
-                    <Download style={{ width: 14, height: 14 }} /> Экспорт
-                </button>
-            </div>
+        <Page>
+            <PageHeader
+                title="ABC Анализ"
+                subtitle="Анализ продуктов по объёму продаж и выручке"
+                actions={
+                    <Button variant="secondary" icon={Download} onClick={handleExport}>
+                        Экспорт
+                    </Button>
+                }
+            />
 
             {/* Category legend */}
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(300px, 1fr))', gap: '12px' }}>
@@ -119,11 +109,9 @@ export const ABCAnalysis = () => {
 
             {/* Error */}
             {error && !loading && (
-                <div style={{ display: 'flex', alignItems: 'flex-start', gap: '10px', padding: '12px 16px', backgroundColor: 'rgba(198,69,69,0.08)', border: '1px solid rgba(198,69,69,0.3)', borderRadius: '8px', fontFamily: 'var(--sans)', fontSize: '13px', color: '#c64545' }}>
+                <div style={{ display: 'flex', alignItems: 'flex-start', gap: '10px', padding: '12px 16px', backgroundColor: 'var(--error-bg)', border: '1px solid var(--error-border)', borderRadius: '8px', fontFamily: 'var(--sans)', fontSize: '13px', color: 'var(--error)' }}>
                     <span style={{ flex: 1 }}><b>Ошибка загрузки данных:</b> {error}</span>
-                    <button onClick={() => setError(null)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#c64545', padding: 0, flexShrink: 0 }}>
-                        <X style={{ width: 14, height: 14 }} />
-                    </button>
+                    <IconButton icon={X} label="Скрыть ошибку" size={14} tone="danger" onClick={() => setError(null)} />
                 </div>
             )}
 
@@ -168,7 +156,7 @@ export const ABCAnalysis = () => {
                     </FadeRise>
                 </div>
             )}
-        </div>
+        </Page>
     );
 };
 

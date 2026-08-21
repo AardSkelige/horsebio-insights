@@ -15,14 +15,14 @@ const ModalShell = ({ open, onClose, children, maxWidth = 1000 }) => createPorta
                     animate={{ opacity: 1 }}
                     exit={{ opacity: 0 }}
                     transition={{ duration: 0.2 }}
-                    style={{ position: 'absolute', inset: 0, background: 'rgba(20,20,19,0.55)' }}
+                    style={{ position: 'absolute', inset: 0, background: 'var(--scrim)' }}
                 />
                 <m.div
                     initial={{ opacity: 0, y: 24, scale: 0.96 }}
                     animate={{ opacity: 1, y: 0, scale: 1 }}
                     exit={{ opacity: 0, y: 12, scale: 0.98, transition: { duration: 0.15 } }}
                     transition={{ type: 'spring', stiffness: 350, damping: 30 }}
-                    style={{ position: 'relative', background: 'var(--canvas)', borderRadius: 16, border: '1px solid var(--hairline)', width: '100%', maxWidth, maxHeight: 'calc(100vh - 80px)', display: 'flex', flexDirection: 'column', boxShadow: '0 8px 40px rgba(20,20,19,0.18)' }}
+                    style={{ position: 'relative', background: 'var(--canvas)', borderRadius: 16, border: '1px solid var(--hairline)', width: '100%', maxWidth, maxHeight: 'calc(100vh - 80px)', display: 'flex', flexDirection: 'column', boxShadow: 'var(--shadow-menu)' }}
                 >
                     {children}
                 </m.div>

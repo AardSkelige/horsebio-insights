@@ -1,13 +1,18 @@
 // Общие утилиты и токены страницы /checks
 import api from '../../utils/api';
+import { money, plural } from '../../utils/formatters';
+
+// Переэкспорт: проверки исторически берут форматирование отсюда
+export { plural };
+export const fmtRub = money;
 
 // Палитра severity — три различимых уровня + ok/info
 export const SEV = {
-    critical:  { color: '#c64545', bg: 'rgba(198,69,69,0.10)',  label: 'Критичные' },
-    important: { color: '#c47d2f', bg: 'rgba(196,125,47,0.10)', label: 'Важные' },
-    warning:   { color: '#b08a1f', bg: 'rgba(176,138,31,0.10)', label: 'Предупреждения' },
-    info:      { color: 'var(--muted)', bg: 'rgba(0,0,0,0.04)', label: 'Инфо' },
-    ok:        { color: 'var(--success)', bg: 'rgba(93,184,114,0.10)', label: 'Норма' },
+    critical:  { color: 'var(--error-ink)',      bg: 'var(--error-bg)',      label: 'Критичные' },
+    important: { color: 'var(--cat-orange-ink)', bg: 'var(--cat-orange-bg)', label: 'Важные' },
+    warning:   { color: 'var(--warning-ink)',    bg: 'var(--warning-bg)',    label: 'Предупреждения' },
+    info:      { color: 'var(--muted)',          bg: 'var(--surface-soft)',  label: 'Инфо' },
+    ok:        { color: 'var(--success-ink)',    bg: 'var(--success-bg)',    label: 'Норма' },
 };
 
 export const SEV_RANK = { critical: 3, important: 2, warning: 1, info: 0, ok: 0 };
@@ -37,28 +42,17 @@ export const KIND_MS_TYPE = {
 
 // Цвет бейджа категории исключения (приглушённая палитра)
 export const KIND_BADGE = {
-    enters:       '#5c8acc',
-    enter_zero:   '#c64545',
-    losses:       '#b08a1f',
-    inventories:  '#7a6bd0',
-    moves:        '#3fa3a3',
-    supplies:     '#c47d2f',
-    salesreturns: '#cc6f9c',
-    deviations:   '#5db872',
-    supply_jumps: '#9a8c7a',
+    enters:       'var(--cat-blue)',
+    enter_zero:   'var(--error)',
+    losses:       'var(--cat-amber)',
+    inventories:  'var(--cat-violet)',
+    moves:        'var(--cat-teal)',
+    supplies:     'var(--cat-orange)',
+    salesreturns: 'var(--cat-pink)',
+    deviations:   'var(--cat-green)',
+    supply_jumps: 'var(--cat-clay)',
 };
 
-// Русское склонение: plural(3, 'возврат', 'возврата', 'возвратов') → 'возврата'
-export function plural(n, one, few, many) {
-    const m10 = Math.abs(n) % 10, m100 = Math.abs(n) % 100;
-    if (m10 === 1 && m100 !== 11) return one;
-    if (m10 >= 2 && m10 <= 4 && (m100 < 12 || m100 > 14)) return few;
-    return many;
-}
-
-export function fmtRub(v) {
-    return `${Math.round(v || 0).toLocaleString('ru-RU')} ₽`;
-}
 
 export const PENDING_RETURNS_ID = 'horsebio_pending_returns';
 

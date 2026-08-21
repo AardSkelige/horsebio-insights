@@ -4,6 +4,7 @@ import { BrowserRouter as Router, Routes, Route } from 'react-router-dom';
 import PropTypes from 'prop-types';
 import Layout from './components/layout/Layout';
 import { MotionProvider } from './components/ui/motion';
+import { Card } from './components/ui';
 import { LoadingProvider } from './contexts/LoadingContext';
 import { DataPanelProvider } from './contexts/DataPanelContext';
 import LoginPage from './components/auth/LoginPage';
@@ -80,7 +81,7 @@ function AppRoutes() {
         <Route path="/shipments" element={
           <ProtectedRoute>
             <LayoutWrapper>
-              <div className="card">Обзор отгрузок</div>
+              <Card>Обзор отгрузок</Card>
             </LayoutWrapper>
           </ProtectedRoute>
         } />
@@ -129,7 +130,7 @@ function AppRoutes() {
         <Route path="/supplies" element={
           <ProtectedRoute>
             <LayoutWrapper>
-              <div className="card">Обзор приемок</div>
+              <Card>Обзор приемок</Card>
             </LayoutWrapper>
           </ProtectedRoute>
         } />

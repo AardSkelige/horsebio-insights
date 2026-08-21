@@ -19,7 +19,7 @@ const tooltipStyle = (top) => ({
     whiteSpace: 'nowrap',
     zIndex: 200,
     pointerEvents: 'none',
-    boxShadow: '0 2px 8px rgba(0,0,0,0.3)',
+    boxShadow: 'var(--shadow-on-dark)',
 });
 
 const NavItem = ({
@@ -62,7 +62,7 @@ const NavItem = ({
                     <m.span
                         layoutId="sidebar-hover-pill"
                         transition={{ type: 'spring', stiffness: 550, damping: 45 }}
-                        style={{ position: 'absolute', inset: 0, borderRadius: 8, backgroundColor: 'rgba(255,255,255,0.06)' }}
+                        style={{ position: 'absolute', inset: 0, borderRadius: 8, backgroundColor: 'var(--on-dark-wash)' }}
                     />
                 )}
                 {/* Активная пилюля: перелетает к выбранному пункту при навигации */}
@@ -70,7 +70,7 @@ const NavItem = ({
                     <m.span
                         layoutId="sidebar-active-pill"
                         transition={{ type: 'spring', stiffness: 450, damping: 38 }}
-                        style={{ position: 'absolute', inset: 0, borderRadius: 8, backgroundColor: 'rgba(255,255,255,0.10)' }}
+                        style={{ position: 'absolute', inset: 0, borderRadius: 8, backgroundColor: 'var(--on-dark-hairline)' }}
                     />
                 )}
                 <Icon style={{

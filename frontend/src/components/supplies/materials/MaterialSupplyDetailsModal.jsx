@@ -1,56 +1,27 @@
 import { useState, useEffect } from 'react';
+import { num } from '../../../utils/formatters';
+import { CloseButton, Disclosure, Metric, MetricGrid, SectionLabel, StatCard, StatGrid } from '../../ui';
 import PropTypes from 'prop-types';
-import { X, ChevronRight, Loader2 } from 'lucide-react';
+import { Loader2 } from 'lucide-react';
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
 import { CHART_ANIMATION } from '../../../utils/chartAnimation';
-import SectionLabel from '../../ui/SectionLabel';
-import StatCard from '../../ui/StatCard';
 import { ModalShell } from '../../ui/motion';
 import { suppliesApi } from '../../../api/suppliesApi';
 
-const fmt = (n) => (n ?? 0).toLocaleString('ru-RU');
 
-const SupplyRow = ({ supply, uom }) => {
-    const [open, setOpen] = useState(false);
-    return (
-        <div style={{ borderBottom: '1px solid var(--hairline-soft)' }}>
-            <button onClick={() => setOpen(o => !o)}
-                style={{ width: '100%', display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '10px 0', background: 'none', border: 'none', cursor: 'pointer', textAlign: 'left' }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                    <ChevronRight size={13} style={{ color: 'var(--muted)', transform: open ? 'rotate(90deg)' : 'none', transition: 'transform 150ms', flexShrink: 0 }} />
-                    <span style={{ fontFamily: 'var(--sans)', fontSize: 13, color: 'var(--ink)' }}>
-                        Приёмка №{supply.number} от {supply.date}
-                    </span>
-                </div>
-                <span style={{ fontFamily: 'var(--sans)', fontSize: 12, color: 'var(--muted)', whiteSpace: 'nowrap' }}>
-                    {fmt(supply.quantity)} {uom}
-                </span>
-            </button>
-            {open && (
-                <div style={{ paddingBottom: 10 }}>
-                    <div style={{ background: 'var(--surface-soft)', borderRadius: 8, padding: '10px 14px', display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
-                        <div>
-                            <div style={{ fontFamily: 'var(--sans)', fontSize: 10, color: 'var(--muted)', marginBottom: 2 }}>Поставщик</div>
-                            <div style={{ fontFamily: 'var(--sans)', fontSize: 12, color: 'var(--ink)' }}>{supply.supplier}</div>
-                        </div>
-                        <div>
-                            <div style={{ fontFamily: 'var(--sans)', fontSize: 10, color: 'var(--muted)', marginBottom: 2 }}>Цена за единицу</div>
-                            <div style={{ fontFamily: 'var(--sans)', fontSize: 12, color: 'var(--ink)' }}>{(supply.price || 0).toFixed(2)} ₽</div>
-                        </div>
-                        <div>
-                            <div style={{ fontFamily: 'var(--sans)', fontSize: 10, color: 'var(--muted)', marginBottom: 2 }}>Количество</div>
-                            <div style={{ fontFamily: 'var(--sans)', fontSize: 12, color: 'var(--ink)' }}>{fmt(supply.quantity)} {uom}</div>
-                        </div>
-                        <div>
-                            <div style={{ fontFamily: 'var(--sans)', fontSize: 10, color: 'var(--muted)', marginBottom: 2 }}>Сумма</div>
-                            <div style={{ fontFamily: 'var(--sans)', fontSize: 12, color: 'var(--ink)' }}>{fmt(supply.total)} ₽</div>
-                        </div>
-                    </div>
-                </div>
-            )}
-        </div>
-    );
-};
+const SupplyRow = ({ supply, uom }) => (
+    <Disclosure
+        summary={`Приёмка №${supply.number} от ${supply.date}`}
+        aside={<span style={{ color: 'var(--muted)', fontWeight: 400 }}>{num(supply.quantity)} {uom}</span>}
+    >
+        <MetricGrid style={{ background: 'var(--surface-soft)', borderRadius: 8, padding: '10px 14px' }}>
+            <Metric label="Поставщик" value={supply.supplier} />
+            <Metric label="Цена за единицу" value={`${(supply.price || 0).toFixed(2)} ₽`} />
+            <Metric label="Количество" value={`${num(supply.quantity)} ${uom}`} />
+            <Metric label="Сумма" value={`${num(supply.total)} ₽`} />
+        </MetricGrid>
+    </Disclosure>
+);
 SupplyRow.propTypes = {
     supply: PropTypes.shape({ number: PropTypes.string, date: PropTypes.string, supplier: PropTypes.string, price: PropTypes.number, quantity: PropTypes.number, total: PropTypes.number }).isRequired,
     uom: PropTypes.string.isRequired,
@@ -63,7 +34,7 @@ const ChartTooltip = ({ active, payload, label, uom }) => {
             <div style={{ color: 'var(--muted)', marginBottom: 4 }}>{label}</div>
             {payload.map((entry, i) => (
                 <div key={i} style={{ color: entry.color }}>
-                    {entry.name === 'quantity' ? `${fmt(entry.value)} ${uom}` : `${entry.value.toFixed(2)} ₽`}
+                    {entry.name === 'quantity' ? `${num(entry.value)} ${uom}` : `${entry.value.toFixed(2)} ₽`}
                 </div>
             ))}
         </div>
@@ -121,9 +92,7 @@ const MaterialSupplyDetailsModal = ({ material, visible, onClose, dateRange }) =
                             <span style={{ fontFamily: 'var(--mono)', fontSize: 12, color: 'var(--muted)' }}>{details.material.code}</span>
                         )}
                     </div>
-                    <button onClick={onClose} style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--muted)', padding: 4, flexShrink: 0 }}>
-                        <X size={18} />
-                    </button>
+                    <CloseButton onClick={onClose} />
                 </div>
 
                 {/* Body */}
@@ -140,12 +109,11 @@ const MaterialSupplyDetailsModal = ({ material, visible, onClose, dateRange }) =
                         <div style={{ display: 'flex', flexDirection: 'column', gap: 24 }}>
                             {/* Stats */}
                             <div>
-                                <SectionLabel>Статистика</SectionLabel>
-                                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(160px, 1fr))', gap: 12 }}>
-                                    <StatCard title="Получено" value={`${fmt(details.statistics.total_quantity)} ${uom}`} />
-                                    <StatCard title="Приёмок" value={fmt(details.statistics.total_supplies)} />
-                                    <StatCard title="Общая сумма" value={`${fmt(details.statistics.total_sum)} ₽`} />
-                                </div>
+                                <StatGrid>
+                                    <StatCard title="Получено" value={`${num(details.statistics.total_quantity)} ${uom}`} />
+                                    <StatCard title="Приёмок" value={num(details.statistics.total_supplies)} />
+                                    <StatCard title="Общая сумма" value={`${num(details.statistics.total_sum)} ₽`} />
+                                </StatGrid>
                             </div>
 
                             {/* Chart */}
@@ -157,11 +125,11 @@ const MaterialSupplyDetailsModal = ({ material, visible, onClose, dateRange }) =
                                             <LineChart data={chartData} margin={{ top: 4, right: 48, left: 0, bottom: 0 }}>
                                                 <CartesianGrid strokeDasharray="3 3" stroke="var(--hairline)" />
                                                 <XAxis dataKey="month" tick={{ fontFamily: 'var(--sans)', fontSize: 11, fill: 'var(--muted)' }} />
-                                                <YAxis yAxisId="qty" tick={{ fontFamily: 'var(--sans)', fontSize: 11, fill: 'var(--muted)' }} tickFormatter={fmt} width={50} />
+                                                <YAxis yAxisId="qty" tick={{ fontFamily: 'var(--sans)', fontSize: 11, fill: 'var(--muted)' }} tickFormatter={num} width={50} />
                                                 <YAxis yAxisId="price" orientation="right" tick={{ fontFamily: 'var(--sans)', fontSize: 11, fill: 'var(--muted)' }} tickFormatter={v => `${v.toFixed(0)}₽`} width={44} />
                                                 <Tooltip content={<ChartTooltip uom={uom} />} />
                                                 <Line {...CHART_ANIMATION} yAxisId="qty" type="monotone" dataKey="quantity" name="quantity" stroke="var(--primary)" strokeWidth={2} dot={{ r: 3, fill: 'var(--primary)' }} activeDot={{ r: 5 }} />
-                                                <Line {...CHART_ANIMATION} yAxisId="price" type="monotone" dataKey="price" name="price" stroke="#5a8a6a" strokeWidth={2} dot={{ r: 3, fill: '#5a8a6a' }} activeDot={{ r: 5 }} />
+                                                <Line {...CHART_ANIMATION} yAxisId="price" type="monotone" dataKey="price" name="price" stroke="var(--success-ink)" strokeWidth={2} dot={{ r: 3, fill: 'var(--success-ink)' }} activeDot={{ r: 5 }} />
                                             </LineChart>
                                         </ResponsiveContainer>
                                     </div>

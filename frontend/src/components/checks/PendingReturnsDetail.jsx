@@ -2,6 +2,7 @@ import { useState, useEffect, useCallback, useLayoutEffect, useRef } from 'react
 import { createPortal } from 'react-dom';
 import PropTypes from 'prop-types';
 import { ArrowLeft, ExternalLink, Loader2, PackageOpen, ChevronRight } from 'lucide-react';
+import { Button } from '../ui';
 import { checksApi, relTime, fmtRub, plural, PENDING_RETURNS_HINT, PENDING_RETURNS_ID } from './checksShared';
 import { AccountBadge } from './ScriptCard';
 import InfoTip from './InfoTip';
@@ -10,17 +11,18 @@ import InfoTip from './InfoTip';
 
 // Корзины возраста для ленты: [от, до) дней, цвет, подпись
 const BUCKETS = [
-    { from: 0, to: 10, color: '#ecd9cf', label: 'до 10 дней', darkText: true },
-    { from: 10, to: 20, color: '#dcae99', label: '10–20 дней' },
-    { from: 20, to: 30, color: '#cc785c', label: '20–30 дней' },
+    // Шкала «свежести»: чем дольше возврат висит, тем плотнее заливка
+    { from: 0, to: 10, color: 'color-mix(in srgb, var(--primary) 25%, var(--canvas))', label: 'до 10 дней', darkText: true },
+    { from: 10, to: 20, color: 'color-mix(in srgb, var(--primary) 55%, var(--canvas))', label: '10–20 дней' },
+    { from: 20, to: 30, color: 'var(--primary)', label: '20–30 дней' },
     { from: 30, to: Infinity, color: 'var(--warning)', label: '⚠ дольше 30', warn: true },
 ];
 
 // Маркетплейсы: короткая подпись + цвет точки. Порядок — как показываем в разбивке.
 const MP_ORDER = ['ozon', 'wb', 'other'];
 const MP_META = {
-    ozon:  { label: 'Озон',   color: '#cc785c' },
-    wb:    { label: 'ВБ',     color: '#9a8778' },
+    ozon:  { label: 'Озон',   color: 'var(--primary)' },
+    wb:    { label: 'ВБ',     color: 'var(--cat-clay)' },
     other: { label: 'Прочее', color: 'var(--muted-soft)' },
 };
 
@@ -93,9 +95,9 @@ function AgeStrip({ items }) {
                 // свайп-карточки) ломают position:fixed — плашка уезжала от курсора.
                 <div ref={tipRef} style={{
                     position: 'fixed', left: tip.x + 14, top: tip.y + 16, zIndex: 50, pointerEvents: 'none',
-                    background: 'var(--surface-dark, #262521)', color: 'var(--on-dark, #f5f2ea)',
+                    background: 'var(--surface-dark)', color: 'var(--on-dark)',
                     fontSize: 12, fontWeight: 500, lineHeight: 1.4, borderRadius: 9, padding: '7px 11px',
-                    boxShadow: '0 6px 22px rgba(0,0,0,0.25)', whiteSpace: 'nowrap',
+                    boxShadow: 'var(--shadow-float)', whiteSpace: 'nowrap',
                 }}>
                     <div style={{ fontWeight: 700 }}>{tip.title}</div>
                     {tip.rows?.map((r) => (
@@ -124,8 +126,8 @@ function AgeStrip({ items }) {
                             <span style={{
                                 position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center',
                                 fontSize: 11.5, fontWeight: 700, whiteSpace: 'nowrap', overflow: 'hidden',
-                                color: b.darkText ? '#6b4632' : '#fff',
-                                textShadow: b.darkText ? 'none' : '0 1px 2px rgba(0,0,0,0.18)',
+                                color: b.darkText ? 'var(--cat-clay-ink)' : 'var(--on-primary)',
+                                textShadow: b.darkText ? 'none' : 'var(--shadow-card)',
                             }}>{fmtRub(b.sum)}</span>
                         )}
                     </div>
@@ -135,7 +137,7 @@ function AgeStrip({ items }) {
                 {buckets.map((b) => (
                     <div key={b.label} style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12, color: 'var(--muted)', whiteSpace: 'nowrap' }}>
                         <span style={{ width: 10, height: 10, borderRadius: 3, background: b.color, flexShrink: 0 }} />
-                        <b style={{ fontWeight: 600, color: b.warn ? '#8a5a13' : 'var(--ink)' }}>{b.label}</b>
+                        <b style={{ fontWeight: 600, color: b.warn ? 'var(--warning-ink)' : 'var(--ink)' }}>{b.label}</b>
                         <span>— {b.count} {plural(b.count, 'возврат', 'возврата', 'возвратов')} · {fmtRub(b.sum)}</span>
                     </div>
                 ))}
@@ -181,7 +183,7 @@ function ReturnsTable({ items, warn }) {
                             <td style={td()}><span style={{ fontWeight: 600, color: 'var(--ink)' }}>{it.object}</span></td>
                             <td style={td()}>{agentOf(it) || '—'}</td>
                             <td style={td()}>{momentOf(it)}</td>
-                            <td style={{ ...td(), textAlign: 'right', whiteSpace: 'nowrap', color: warn ? '#8a5a13' : 'var(--body)', fontWeight: warn ? 600 : 400 }}>
+                            <td style={{ ...td(), textAlign: 'right', whiteSpace: 'nowrap', color: warn ? 'var(--warning-ink)' : 'var(--body)', fontWeight: warn ? 600 : 400 }}>
                                 {it.age_days} {plural(it.age_days ?? 0, 'день', 'дня', 'дней')}
                             </td>
                             <td style={{ ...td(), textAlign: 'right', whiteSpace: 'nowrap' }}>{fmtRub(it.sum_rub)}</td>
@@ -201,12 +203,10 @@ function ReturnsTable({ items, warn }) {
                 </tbody>
             </table>
             {items.length > shown && (
-                <button onClick={() => setShown((n) => n + PAGE)} style={{
-                    width: '100%', padding: '9px 12px', border: 'none', borderTop: '1px solid var(--hairline-soft)',
-                    background: 'var(--surface-soft)', color: 'var(--primary)', fontSize: 12.5, fontWeight: 600, cursor: 'pointer',
-                }}>
+                <Button variant="subtle" tone="accent" block onClick={() => setShown((n) => n + PAGE)}
+                    style={{ borderTop: '1px solid var(--hairline-soft)', borderRadius: 0 }}>
                     Показать ещё {Math.min(PAGE, items.length - shown)} из {items.length - shown} оставшихся
-                </button>
+                </Button>
             )}
         </div>
     );
@@ -269,12 +269,9 @@ export default function PendingReturnsDetail({ onBack }) {
 
     return (
         <div style={{ maxWidth: 1100, margin: '0 auto' }}>
-            <button onClick={onBack} style={{
-                display: 'inline-flex', alignItems: 'center', gap: 6, marginBottom: 16,
-                background: 'none', border: 'none', color: 'var(--muted)', fontSize: 13, fontWeight: 600, cursor: 'pointer', padding: 0,
-            }}>
-                <ArrowLeft size={15} /> Все проверки
-            </button>
+            <Button variant="quiet" icon={ArrowLeft} onClick={onBack} style={{ marginBottom: 16 }}>
+                Все проверки
+            </Button>
 
             {/* Шапка — как строка на главной */}
             <div style={{ display: 'flex', alignItems: 'flex-start', gap: 12, marginBottom: 4 }}>
@@ -325,7 +322,7 @@ export default function PendingReturnsDetail({ onBack }) {
                         />
                         {atPickup.length > 0 && (
                             <Kpi
-                                label="Забрать в ПВЗ" value={atPickup.length} color="#c96a1e" jumpTo="grp-pickup"
+                                label="Забрать в ПВЗ" value={atPickup.length} color="var(--cat-orange-ink)" jumpTo="grp-pickup"
                                 sub={<div style={kpiSub()}>{fmtRub(atPickupRub)} · ждут в пункте выдачи</div>}
                             />
                         )}
@@ -352,7 +349,7 @@ export default function PendingReturnsDetail({ onBack }) {
                     ) : (
                         <>
                             <Group
-                                id="grp-pickup" dot="#c96a1e" items={atPickup} openByDefault
+                                id="grp-pickup" dot="var(--cat-orange-ink)" items={atPickup} openByDefault
                                 title="Лежат в пункте выдачи — съездить забрать"
                                 note="Коробка доехала до пункта выдачи и ждёт. Срок хранения ограничен — если не забрать, товар пропадёт. Это к тому, кто ездит за возвратами."
                             />
@@ -434,8 +431,8 @@ function Group({ id, title, note, items, dot, openByDefault }) {
                 <span style={{ width: 9, height: 9, borderRadius: 999, background: dot, flexShrink: 0 }} />
                 {title}
                 <span style={{
-                    marginLeft: 'auto', fontSize: 12, fontWeight: 700, color: '#8a5a13',
-                    background: 'rgba(176,138,31,0.12)', padding: '1px 9px', borderRadius: 999,
+                    marginLeft: 'auto', fontSize: 12, fontWeight: 700, color: 'var(--warning-ink)',
+                    background: 'var(--warning-bg)', padding: '1px 9px', borderRadius: 999,
                 }}>{items.length}</span>
             </button>
             {open && (

@@ -1,8 +1,7 @@
 import { useState, useCallback, useRef, useEffect, Fragment } from 'react';
 import PropTypes from 'prop-types';
-import { Factory, Search, Trash2, Calculator, Download, Loader2, ChevronDown, ChevronUp, FileSpreadsheet } from 'lucide-react';
-import { m } from 'motion/react';
-import SectionLabel from '../ui/SectionLabel';
+import { Factory, Trash2, Calculator, Download, Loader2, ChevronDown, ChevronUp, FileSpreadsheet } from 'lucide-react';
+import { Button, Page, PageHeader, SearchInput, SectionLabel, Segmented } from '../ui';
 import { FadeRise } from '../ui/motion';
 import { productionApi } from '../../api/productionApi';
 
@@ -15,16 +14,6 @@ const useDebounce = (callback, delay) => {
     }, [callback, delay]);
 };
 
-const btn = (primary, disabled = false) => ({
-    display: 'inline-flex', alignItems: 'center', gap: '6px',
-    padding: '6px 14px', borderRadius: '8px', border: 'none',
-    fontFamily: 'var(--sans)', fontSize: '13px', fontWeight: 500,
-    cursor: disabled ? 'not-allowed' : 'pointer',
-    opacity: disabled ? 0.6 : 1,
-    backgroundColor: primary ? 'var(--primary)' : 'var(--surface-card)',
-    color: primary ? '#fff' : 'var(--ink)',
-    transition: 'background-color 150ms ease',
-});
 
 const thStyle = {
     padding: '8px 12px',
@@ -49,15 +38,15 @@ const Badge = ({ text, color, bg }) => (
 Badge.propTypes = { text: PropTypes.string.isRequired, color: PropTypes.string.isRequired, bg: PropTypes.string.isRequired };
 
 const TechCardBadge = ({ has }) => has
-    ? <Badge text="Есть" color="#059669" bg="rgba(5,150,105,0.1)" />
-    : <Badge text="Нет" color="#d4a017" bg="rgba(212,160,23,0.1)" />;
+    ? <Badge text="Есть" color="var(--success-ink)" bg="var(--success-bg)" />
+    : <Badge text="Нет" color="var(--warning)" bg="var(--warning-bg)" />;
 
 TechCardBadge.propTypes = { has: PropTypes.bool };
 
 const StatusBadge = ({ record }) => {
-    if (record.has_processing_plan) return <Badge text="Рассчитан" color="#059669" bg="rgba(5,150,105,0.1)" />;
-    if (record.found) return <Badge text="Нет техкарты" color="#d4a017" bg="rgba(212,160,23,0.1)" />;
-    return <Badge text="Не найден" color="#dc2626" bg="rgba(220,38,38,0.1)" />;
+    if (record.has_processing_plan) return <Badge text="Рассчитан" color="var(--success-ink)" bg="var(--success-bg)" />;
+    if (record.found) return <Badge text="Нет техкарты" color="var(--warning)" bg="var(--warning-bg)" />;
+    return <Badge text="Не найден" color="var(--error-ink)" bg="var(--error-bg)" />;
 };
 
 StatusBadge.propTypes = { record: PropTypes.shape({ has_processing_plan: PropTypes.bool, found: PropTypes.bool }).isRequired };
@@ -222,91 +211,52 @@ const ProductionCalculator = () => {
         return next;
     });
 
-    const noticeColors = { error: '#dc2626', success: '#059669', warning: '#d4a017', loading: 'var(--surface-dark)' };
+    const noticeColors = { error: 'var(--error-ink)', success: 'var(--success-ink)', warning: 'var(--warning)', loading: 'var(--surface-dark)' };
 
     return (
-        <div style={{ display: 'flex', flexDirection: 'column', gap: '32px', color: 'var(--ink)' }}>
-
-            {/* Header */}
-            <div style={{ borderBottom: '1px solid var(--hairline)', paddingBottom: '16px', display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', flexWrap: 'wrap', gap: '12px' }}>
-                <div>
-                    <h1 style={{ fontFamily: 'var(--serif)', fontSize: '32px', fontWeight: 400, letterSpacing: '-0.025em', lineHeight: 1.1, color: 'var(--ink)', margin: 0, marginBottom: '4px' }}>
-                        Расчёт компонентов производства
-                    </h1>
-                    <p style={{ fontFamily: 'var(--sans)', fontSize: '13px', color: 'var(--muted)', margin: 0 }}>
-                        Материалы для производства товаров по техкартам
-                    </p>
-                </div>
-                {result && (
-                    <div style={{ display: 'flex', gap: '8px', flexShrink: 0 }}>
-                        <button onClick={handleClear} style={btn(false)}>Очистить всё</button>
-                        <button onClick={handleExport} disabled={exporting} style={btn(true, exporting)}>
-                            {exporting
-                                ? <><Loader2 style={{ width: 13, height: 13 }} className="animate-spin" />Экспорт...</>
-                                : <><Download style={{ width: 13, height: 13 }} />Экспорт</>
-                            }
-                        </button>
-                    </div>
+        <Page>
+            <PageHeader
+                title="Расчёт производства"
+                subtitle="Материалы для производства товаров по техкартам"
+                actions={result && (
+                    <>
+                        <Button variant="soft" onClick={handleClear}>Очистить всё</Button>
+                        <Button variant="primary" icon={Download} loading={exporting} onClick={handleExport}>
+                            {exporting ? 'Экспорт...' : 'Экспорт'}
+                        </Button>
+                    </>
                 )}
-            </div>
+            />
 
             {/* Input section */}
             <section>
                 <SectionLabel>Ввод данных</SectionLabel>
 
-                {/* Tabs */}
-                <div style={{ display: 'flex', gap: '4px', borderBottom: '1px solid var(--hairline)', marginBottom: '20px' }}>
-                    {[{ key: 'manual', label: 'Ручной ввод' }, { key: 'upload', label: 'Загрузить Excel' }].map(tab => (
-                        <button
-                            key={tab.key}
-                            onClick={() => setActiveTab(tab.key)}
-                            style={{
-                                position: 'relative',
-                                padding: '8px 16px', border: 'none', cursor: 'pointer',
-                                fontFamily: 'var(--sans)', fontSize: '13px',
-                                fontWeight: activeTab === tab.key ? 500 : 400,
-                                backgroundColor: 'transparent',
-                                color: activeTab === tab.key ? 'var(--ink)' : 'var(--muted)',
-                                marginBottom: '-1px',
-                                transition: 'color 150ms',
-                            }}
-                        >
-                            {tab.label}
-                            {activeTab === tab.key && (
-                                <m.span
-                                    layoutId="production-tabs-underline"
-                                    transition={{ type: 'spring', stiffness: 500, damping: 40 }}
-                                    style={{ position: 'absolute', left: 0, right: 0, bottom: 0, height: 2, background: 'var(--primary)' }}
-                                />
-                            )}
-                        </button>
-                    ))}
-                </div>
+                {/* Вкладки — общий переключатель, как на остальных экранах */}
+                <Segmented
+                    layoutId="production-tabs"
+                    value={activeTab}
+                    onChange={setActiveTab}
+                    options={[
+                        { value: 'manual', label: 'Ручной ввод' },
+                        { value: 'upload', label: 'Загрузить Excel' },
+                    ]}
+                />
 
                 {/* Manual input */}
                 {activeTab === 'manual' && (
                     <FadeRise style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
-                        <div ref={searchContainerRef} style={{ position: 'relative' }}>
-                            <Search style={{ position: 'absolute', left: '12px', top: '50%', transform: 'translateY(-50%)', width: 14, height: 14, color: 'var(--muted)', pointerEvents: 'none' }} />
-                            <input
+                        <div ref={searchContainerRef} style={{ position: 'relative', display: 'flex' }}>
+                            <SearchInput
                                 value={searchValue}
-                                onChange={(e) => { setSearchValue(e.target.value); searchProducts(e.target.value); }}
+                                onChange={(v) => { setSearchValue(v); searchProducts(v); }}
                                 placeholder="Поиск по артикулу или названию..."
-                                style={{
-                                    width: '100%', boxSizing: 'border-box',
-                                    padding: '9px 36px 9px 36px',
-                                    fontFamily: 'var(--sans)', fontSize: '13px', color: 'var(--ink)',
-                                    backgroundColor: 'var(--canvas)',
-                                    border: '1px solid var(--hairline)', borderRadius: '8px', outline: 'none',
-                                    transition: 'border-color 150ms',
-                                }}
-                                onFocus={(e) => { e.target.style.borderColor = 'var(--primary)'; if (searchResults.length > 0) setShowDropdown(true); }}
-                                onBlur={(e) => { e.target.style.borderColor = 'var(--hairline)'; }}
+                                onFocus={() => { if (searchResults.length > 0) setShowDropdown(true); }}
                             />
                             {searchLoading && <Loader2 style={{ position: 'absolute', right: '12px', top: '50%', transform: 'translateY(-50%)', width: 14, height: 14, color: 'var(--muted)' }} className="animate-spin" />}
 
                             {showDropdown && searchResults.length > 0 && (
-                                <div style={{ position: 'absolute', top: '100%', left: 0, right: 0, zIndex: 50, backgroundColor: 'var(--canvas)', border: '1px solid var(--hairline)', borderRadius: '8px', marginTop: '4px', boxShadow: '0 4px 12px rgba(20,20,19,0.12)', overflow: 'hidden' }}>
+                                <div style={{ position: 'absolute', top: '100%', left: 0, right: 0, zIndex: 50, backgroundColor: 'var(--canvas)', border: '1px solid var(--hairline)', borderRadius: '8px', marginTop: '4px', boxShadow: 'var(--shadow-soft)', overflow: 'hidden' }}>
                                     {searchResults.map(product => (
                                         <div
                                             key={product.article}
@@ -363,7 +313,7 @@ const ProductionCalculator = () => {
                                                         <button
                                                             onClick={() => handleRemoveProduct(item.article)}
                                                             style={{ background: 'none', border: 'none', cursor: 'pointer', padding: '4px', color: 'var(--muted)', display: 'flex', alignItems: 'center', transition: 'color 150ms' }}
-                                                            onMouseEnter={e => e.currentTarget.style.color = '#dc2626'}
+                                                            onMouseEnter={e => e.currentTarget.style.color = 'var(--error-ink)'}
                                                             onMouseLeave={e => e.currentTarget.style.color = 'var(--muted)'}
                                                         >
                                                             <Trash2 style={{ width: 14, height: 14 }} />
@@ -375,12 +325,9 @@ const ProductionCalculator = () => {
                                     </table>
                                 </div>
                                 <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
-                                    <button onClick={handleCalculateManual} disabled={calculating} style={btn(true, calculating)}>
-                                        {calculating
-                                            ? <><Loader2 style={{ width: 13, height: 13 }} className="animate-spin" />Расчёт...</>
-                                            : <><Calculator style={{ width: 13, height: 13 }} />Рассчитать компоненты</>
-                                        }
-                                    </button>
+                                    <Button variant="primary" icon={Calculator} loading={calculating} onClick={handleCalculateManual}>
+                                        {calculating ? 'Расчёт...' : 'Рассчитать компоненты'}
+                                    </Button>
                                 </div>
                             </>
                         ) : (
@@ -406,7 +353,7 @@ const ProductionCalculator = () => {
                                 borderRadius: '12px', padding: '48px 24px',
                                 display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '12px',
                                 cursor: calculating ? 'default' : 'pointer',
-                                backgroundColor: dragOver ? 'rgba(204,120,92,0.04)' : 'transparent',
+                                backgroundColor: dragOver ? 'var(--accent-wash)' : 'transparent',
                                 transition: 'border-color 150ms, background-color 150ms',
                                 userSelect: 'none',
                             }}
@@ -529,12 +476,12 @@ const ProductionCalculator = () => {
 
             {/* Toast notification */}
             {notice && (
-                <div style={{ position: 'fixed', bottom: '24px', right: '24px', zIndex: 100, backgroundColor: noticeColors[notice.type] || 'var(--surface-dark)', color: '#fff', borderRadius: '8px', padding: '10px 16px', fontFamily: 'var(--sans)', fontSize: '13px', display: 'flex', alignItems: 'center', gap: '8px', boxShadow: '0 4px 12px rgba(20,20,19,0.2)' }}>
+                <div style={{ position: 'fixed', bottom: '24px', right: '24px', zIndex: 100, backgroundColor: noticeColors[notice.type] || 'var(--surface-dark)', color: 'var(--on-primary)', borderRadius: '8px', padding: '10px 16px', fontFamily: 'var(--sans)', fontSize: '13px', display: 'flex', alignItems: 'center', gap: '8px', boxShadow: 'var(--shadow-soft)' }}>
                     {notice.type === 'loading' && <Loader2 style={{ width: 14, height: 14 }} className="animate-spin" />}
                     {notice.text}
                 </div>
             )}
-        </div>
+        </Page>
     );
 };
 

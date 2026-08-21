@@ -1,25 +1,15 @@
 import { useState, useCallback } from 'react';
+import { num } from '../../utils/formatters';
 import PropTypes from 'prop-types';
-import { TrendingUp, TrendingDown, Download, Loader2, AlertCircle, Calendar, Info, X, ExternalLink } from 'lucide-react';
-import SectionLabel from '../ui/SectionLabel';
+import { TrendingUp, TrendingDown, Download, AlertCircle, Calendar, Info, X, ExternalLink } from 'lucide-react';
+import { Button, DataTable, Page, PageHeader, SectionLabel, StatCard, StatGrid } from '../ui';
 import { analysisApi } from '../../api/analysisApi';
 
-const fmtDate = (s) => s ? s.split('-').reverse().join('.') : '';
-const fmtMoney = (v) => v == null ? '0' : Math.round(v).toLocaleString('ru-RU');
 
 const rowShape = PropTypes.shape({ name: PropTypes.string.isRequired, amount: PropTypes.number.isRequired, moysklad_link: PropTypes.string });
 
 
 
-const btn = (primary, disabled = false) => ({
-    display: 'inline-flex', alignItems: 'center', gap: '6px',
-    padding: '7px 16px', borderRadius: '8px', border: 'none', height: '36px',
-    fontFamily: 'var(--sans)', fontSize: '13px', fontWeight: 500,
-    cursor: disabled ? 'not-allowed' : 'pointer', opacity: disabled ? 0.5 : 1,
-    backgroundColor: primary ? 'var(--primary)' : 'var(--surface-card)',
-    color: primary ? '#fff' : 'var(--ink)',
-    flexShrink: 0,
-});
 
 const dateInput = {
     height: '36px', padding: '0 10px',
@@ -28,39 +18,33 @@ const dateInput = {
     borderRadius: '8px', outline: 'none', transition: 'border-color 150ms',
 };
 
-const thStyle = {
-    padding: '8px 12px',
-    fontFamily: 'var(--sans)', fontSize: '11px', fontWeight: 500,
-    letterSpacing: '0.07em', textTransform: 'uppercase', color: 'var(--muted)',
-    textAlign: 'left', borderBottom: '1px solid var(--hairline)',
-    backgroundColor: 'var(--canvas)', whiteSpace: 'nowrap',
-};
-
-const StatCard = ({ label, value, trend, accent }) => {
+/**
+ * Показатель отчёта: сумма в рублях, при наличии `trend` — стрелка и цвет
+ * по знаку. `accent` задаёт роль суммы: приход зелёный, расход красный,
+ * остаток акцентный.
+ */
+const MoneyStat = ({ label, value, trend, accent }) => {
     const color = accent === 'blue' ? 'var(--primary)'
-        : accent === 'green' ? '#059669'
-        : accent === 'red' ? '#dc2626'
-        : trend != null ? (trend >= 0 ? '#059669' : '#dc2626')
-        : 'var(--on-dark)';
+        : accent === 'green' ? 'var(--success-ink)'
+        : accent === 'red' ? 'var(--error-ink)'
+        : trend != null ? (trend >= 0 ? 'var(--success-ink)' : 'var(--error-ink)')
+        : undefined;
     const Icon = trend == null ? null : trend >= 0 ? TrendingUp : TrendingDown;
 
     return (
-        <div style={{ backgroundColor: 'var(--surface-dark)', borderRadius: '12px', padding: '20px', display: 'flex', flexDirection: 'column', gap: '6px' }}>
-            <p style={{ fontFamily: 'var(--sans)', fontSize: '11px', letterSpacing: '0.08em', textTransform: 'uppercase', color: 'var(--on-dark-soft)', margin: 0 }}>
-                {label}
-            </p>
-            <div style={{ display: 'flex', alignItems: 'baseline', gap: '6px' }}>
-                {Icon && <Icon style={{ width: 14, height: 14, color, flexShrink: 0, marginBottom: '2px', alignSelf: 'center' }} />}
-                <p style={{ fontFamily: 'var(--serif)', fontSize: '26px', fontWeight: 400, letterSpacing: '-0.02em', lineHeight: 1, color, margin: 0, fontVariantNumeric: 'lining-nums', fontFeatureSettings: '"lnum" 1' }}>
-                    {fmtMoney(value)}
-                </p>
-                <span style={{ fontFamily: 'var(--sans)', fontSize: '13px', color: 'var(--on-dark-soft)' }}>₽</span>
-            </div>
-        </div>
+        <StatCard
+            tone="dark"
+            icon={Icon || undefined}
+            title={label}
+            value={num(value)}
+            suffix="₽"
+           
+            accent={color}
+        />
     );
 };
 
-StatCard.propTypes = {
+MoneyStat.propTypes = {
     label: PropTypes.string.isRequired,
     value: PropTypes.number,
     trend: PropTypes.number,
@@ -74,40 +58,31 @@ const SimpleTable = ({ rows, isExpense = false }) => {
         </p>
     );
     return (
-        <div style={{ overflowX: 'auto' }}>
-            <table style={{ width: '100%', borderCollapse: 'collapse' }}>
-                <thead>
-                    <tr>
-                        <th style={thStyle}>{isExpense ? 'Статья расходов' : 'Канал поступления'}</th>
-                        <th style={{ ...thStyle, textAlign: 'right', width: 160 }}>Сумма, ₽</th>
-                    </tr>
-                </thead>
-                <tbody>
-                    {rows.map((row, i) => (
-                        <tr key={i} style={{ borderBottom: '1px solid var(--hairline)' }}
-                            onMouseEnter={e => e.currentTarget.style.backgroundColor = 'var(--surface-card)'}
-                            onMouseLeave={e => e.currentTarget.style.backgroundColor = 'transparent'}
-                        >
-                            <td style={{ padding: '9px 12px', fontFamily: 'var(--sans)', fontSize: '13px', color: 'var(--ink)' }}>
-                                {row.moysklad_link ? (
-                                    <a href={row.moysklad_link} target="_blank" rel="noopener noreferrer"
-                                        style={{ color: 'var(--primary)', textDecoration: 'none', display: 'inline-flex', alignItems: 'center', gap: '4px' }}
-                                        onMouseEnter={e => e.currentTarget.style.textDecoration = 'underline'}
-                                        onMouseLeave={e => e.currentTarget.style.textDecoration = 'none'}
-                                    >
-                                        {row.name}
-                                        <ExternalLink style={{ width: 11, height: 11, flexShrink: 0 }} />
-                                    </a>
-                                ) : row.name}
-                            </td>
-                            <td style={{ padding: '9px 12px', fontFamily: 'var(--mono)', fontSize: '12px', color: 'var(--ink)', textAlign: 'right' }}>
-                                {fmtMoney(row.amount)}
-                            </td>
-                        </tr>
-                    ))}
-                </tbody>
-            </table>
-        </div>
+        <DataTable
+            columns={[
+                {
+                    key: 'name',
+                    label: isExpense ? 'Статья расходов' : 'Канал поступления',
+                    sortable: false,
+                    render: (row) => row.moysklad_link ? (
+                        <Button as="a" variant="link" size="sm" icon={ExternalLink}
+                            href={row.moysklad_link} target="_blank" rel="noopener noreferrer">
+                            {row.name}
+                        </Button>
+                    ) : row.name,
+                },
+                {
+                    key: 'amount',
+                    label: 'Сумма, ₽',
+                    numeric: true,
+                    sortable: false,
+                    render: (row) => num(row.amount),
+                },
+            ]}
+            rows={rows}
+            rowKey={(row) => `${row.name}-${row.amount}`}
+            emptyText="Нет движений за период"
+        />
     );
 };
 
@@ -189,17 +164,11 @@ const CashFlowReport = () => {
     const canFetch = dateFrom && dateTo && !loading;
 
     return (
-        <div style={{ display: 'flex', flexDirection: 'column', gap: '32px', color: 'var(--ink)' }}>
-
-            {/* Header */}
-            <div style={{ borderBottom: '1px solid var(--hairline)', paddingBottom: '16px' }}>
-                <h1 style={{ fontFamily: 'var(--serif)', fontSize: '32px', fontWeight: 400, letterSpacing: '-0.025em', lineHeight: 1.1, color: 'var(--ink)', margin: 0, marginBottom: '4px' }}>
-                    Движение денежных средств
-                </h1>
-                <p style={{ fontFamily: 'var(--sans)', fontSize: '13px', color: 'var(--muted)', margin: 0 }}>
-                    Анализ доходов и расходов за выбранный период
-                </p>
-            </div>
+        <Page>
+            <PageHeader
+                title="Движение денежных средств"
+                subtitle="Анализ доходов и расходов за выбранный период"
+            />
 
             {/* Controls */}
             <section>
@@ -214,19 +183,13 @@ const CashFlowReport = () => {
                             onFocus={e => e.target.style.borderColor = 'var(--primary)'}
                             onBlur={e => e.target.style.borderColor = 'var(--hairline)'} />
                     </div>
-                    <button onClick={fetchReport} disabled={!canFetch} style={btn(true, !canFetch)}>
-                        {loading
-                            ? <><Loader2 style={{ width: 13, height: 13 }} className="animate-spin" />Формируется...</>
-                            : <><Calendar style={{ width: 13, height: 13 }} />Сформировать отчёт</>
-                        }
-                    </button>
+                    <Button variant="primary" icon={Calendar} loading={loading} disabled={!canFetch} onClick={fetchReport}>
+                        {loading ? 'Формируется...' : 'Сформировать отчёт'}
+                    </Button>
                     {data && (
-                        <button onClick={exportToExcel} disabled={exporting || loading} style={btn(false, exporting || loading)}>
-                            {exporting
-                                ? <><Loader2 style={{ width: 13, height: 13 }} className="animate-spin" />Экспорт...</>
-                                : <><Download style={{ width: 13, height: 13 }} />Скачать Excel</>
-                            }
-                        </button>
+                        <Button variant="soft" icon={Download} loading={exporting} disabled={loading} onClick={exportToExcel}>
+                            {exporting ? 'Экспорт...' : 'Скачать Excel'}
+                        </Button>
                     )}
                 </div>
 
@@ -281,10 +244,10 @@ const CashFlowReport = () => {
 
             {/* Error */}
             {error && (
-                <div style={{ display: 'flex', alignItems: 'flex-start', gap: '10px', backgroundColor: 'rgba(198,69,69,0.08)', border: '1px solid rgba(198,69,69,0.22)', borderRadius: '10px', padding: '14px 16px' }}>
-                    <AlertCircle style={{ width: 16, height: 16, color: '#c64545', flexShrink: 0, marginTop: '1px' }} />
-                    <span style={{ fontFamily: 'var(--sans)', fontSize: '13px', color: '#c64545', flex: 1 }}>{error}</span>
-                    <button onClick={() => setError(null)} style={{ background: 'none', border: 'none', cursor: 'pointer', padding: '2px', color: '#c64545', display: 'flex', flexShrink: 0 }}>
+                <div style={{ display: 'flex', alignItems: 'flex-start', gap: '10px', backgroundColor: 'var(--error-bg)', border: '1px solid var(--error-border)', borderRadius: '10px', padding: '14px 16px' }}>
+                    <AlertCircle style={{ width: 16, height: 16, color: 'var(--error)', flexShrink: 0, marginTop: '1px' }} />
+                    <span style={{ fontFamily: 'var(--sans)', fontSize: '13px', color: 'var(--error)', flex: 1 }}>{error}</span>
+                    <button onClick={() => setError(null)} style={{ background: 'none', border: 'none', cursor: 'pointer', padding: '2px', color: 'var(--error)', display: 'flex', flexShrink: 0 }}>
                         <X style={{ width: 14, height: 14 }} />
                     </button>
                 </div>
@@ -302,15 +265,12 @@ const CashFlowReport = () => {
             {/* Stats */}
             {data && (
                 <section>
-                    <SectionLabel>
-                        {fmtDate(dateFrom)} — {fmtDate(dateTo)}
-                    </SectionLabel>
-                    <div className="grid grid-cols-1 lg:grid-cols-4 gap-3">
-                        <StatCard label="Начальный остаток" value={data.initial_balance} accent="blue" />
-                        <StatCard label="Общий приход" value={data.income?.total} accent="green" />
-                        <StatCard label="Общий расход" value={data.expense?.total} accent="red" />
-                        <StatCard label="Чистый поток" value={data.net_cash_flow} trend={data.net_cash_flow} />
-                    </div>
+                    <StatGrid>
+                        <MoneyStat label="Начальный остаток" value={data.initial_balance} accent="blue" />
+                        <MoneyStat label="Общий приход" value={data.income?.total} accent="green" />
+                        <MoneyStat label="Общий расход" value={data.expense?.total} accent="red" />
+                        <MoneyStat label="Чистый поток" value={data.net_cash_flow} trend={data.net_cash_flow} />
+                    </StatGrid>
                 </section>
             )}
 
@@ -320,10 +280,10 @@ const CashFlowReport = () => {
                     <section>
                         <SectionLabel>
                             <span style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                                <TrendingUp style={{ width: 12, height: 12, color: '#059669' }} />
+                                <TrendingUp style={{ width: 12, height: 12, color: 'var(--success-ink)' }} />
                                 Приходы по каналам
                                 <span style={{ fontFamily: 'var(--mono)', fontSize: '11px', color: 'var(--muted)', marginLeft: '4px' }}>
-                                    {fmtMoney(data.income?.total)} ₽
+                                    {num(data.income?.total)} ₽
                                 </span>
                             </span>
                         </SectionLabel>
@@ -333,10 +293,10 @@ const CashFlowReport = () => {
                     <section>
                         <SectionLabel>
                             <span style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                                <TrendingDown style={{ width: 12, height: 12, color: '#dc2626' }} />
+                                <TrendingDown style={{ width: 12, height: 12, color: 'var(--error-ink)' }} />
                                 Расходы по статьям
                                 <span style={{ fontFamily: 'var(--mono)', fontSize: '11px', color: 'var(--muted)', marginLeft: '4px' }}>
-                                    {fmtMoney(data.expense?.total)} ₽
+                                    {num(data.expense?.total)} ₽
                                 </span>
                             </span>
                         </SectionLabel>
@@ -357,13 +317,13 @@ const CashFlowReport = () => {
             {data && (
                 <section>
                     <SectionLabel>Итог периода</SectionLabel>
-                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                        <StatCard label="Прибыль (приход − расход)" value={data.profit} trend={data.profit} />
-                        <StatCard label="Конечный остаток" value={data.final_balance} trend={data.final_balance - data.initial_balance} />
-                    </div>
+                    <StatGrid>
+                        <MoneyStat label="Прибыль (приход − расход)" value={data.profit} trend={data.profit} />
+                        <MoneyStat label="Конечный остаток" value={data.final_balance} trend={data.final_balance - data.initial_balance} />
+                    </StatGrid>
                 </section>
             )}
-        </div>
+        </Page>
     );
 };
 

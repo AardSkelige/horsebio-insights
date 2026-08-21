@@ -2,21 +2,9 @@
 .cfv2-root { display: flex; flex-direction: column; gap: 20px; color: var(--ink); }
 
 /* ── top bar ── */
-.cfv2-topbar { display: flex; align-items: flex-start; justify-content: space-between; gap: 16px; flex-wrap: wrap;
-    border-bottom: 1px solid var(--hairline); padding-bottom: 16px; }
-.cfv2-title { font-family: var(--serif); font-size: 30px; font-weight: 400; letter-spacing: -0.025em; line-height: 1.1; margin: 0 0 4px; }
-.cfv2-sub { font-family: var(--sans); font-size: 13px; color: var(--muted); margin: 0; }
-.cfv2-ctr { display: flex; flex-direction: column; align-items: flex-start; gap: 10px; }
-.cfv2-ctr-row { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.cfv2-ctr { display: flex; flex-direction: column; align-items: flex-end; gap: 10px; }
+.cfv2-ctr-row { display: flex; align-items: center; justify-content: flex-end; gap: 8px; flex-wrap: wrap; }
 .cfv2-dates { display: flex; align-items: center; gap: 8px; }
-.cfv2-date { height: 36px; padding: 0 10px; font-family: var(--sans); font-size: 13px; color: var(--ink);
-    background: var(--canvas); border: 1px solid var(--hairline); border-radius: 8px; outline: none; transition: border-color 150ms; }
-.cfv2-date:focus { border-color: var(--primary); }
-.cfv2-btn { display: inline-flex; align-items: center; gap: 6px; height: 36px; padding: 0 16px; border-radius: 8px;
-    border: none; font-family: var(--sans); font-size: 13px; font-weight: 500; cursor: pointer; flex-shrink: 0; transition: opacity 150ms; }
-.cfv2-btn:disabled { opacity: 0.5; cursor: not-allowed; }
-.cfv2-btn.p { background: var(--primary); color: #fff; }
-.cfv2-btn.s { background: var(--surface-card); color: var(--ink); }
 .cfv2-ic { width: 14px; height: 14px; flex-shrink: 0; }
 .cfv2-ic.up { color: var(--success); } .cfv2-ic.down { color: var(--error); }
 .spin { animation: cfv2-spin 0.9s linear infinite; }
@@ -38,8 +26,8 @@
 @keyframes cfv2-phrase-in { from { opacity: 0; transform: translateY(-3px); } to { opacity: 1; transform: translateY(0); } }
 @media (prefers-reduced-motion: reduce) { .cfv2-phrase { animation: none; } }
 
-.cfv2-error { display: flex; align-items: center; gap: 10px; background: rgba(198,69,69,0.08);
-    border: 1px solid rgba(198,69,69,0.22); border-radius: 10px; padding: 12px 14px; font-size: 13px; color: var(--error); }
+.cfv2-error { display: flex; align-items: center; gap: 10px; background: var(--error-bg);
+    border: 1px solid var(--error-border); border-radius: 10px; padding: 12px 14px; font-size: 13px; color: var(--error); }
 .cfv2-error span { flex: 1; }
 .cfv2-error button { background: none; border: none; cursor: pointer; color: var(--error); display: flex; padding: 2px; }
 
@@ -65,7 +53,7 @@
 .cfv2-info:hover, .cfv2-info:focus { color: var(--ink); border-color: var(--ink); outline: none; }
 /* KPI-подсказка рендерится порталом в body (см. .cfv2-hint) */
 .cfv2-hint { position: fixed; z-index: 9999; box-sizing: border-box; background: var(--surface-dark); border: 1px solid var(--surface-dark-elevated);
-    border-radius: 10px; padding: 11px 13px; box-shadow: 0 14px 34px -12px rgba(0,0,0,0.55); font-style: normal;
+    border-radius: 10px; padding: 11px 13px; box-shadow: 0 14px 34px -12px var(--scrim); font-style: normal;
     animation: cfv2-phrase-in 0.13s ease; }
 .cfv2-hint b { display: block; font-family: var(--sans); font-size: 11.5px; font-style: normal; color: var(--on-dark); margin-bottom: 4px; }
 .cfv2-hint span { display: block; font-family: var(--sans); font-size: 11.5px; font-style: normal; color: var(--on-dark-soft); line-height: 1.5; }
@@ -80,7 +68,7 @@
 .cfv2-seg-ctl { display: inline-flex; background: var(--surface-card); border: 1px solid var(--hairline); border-radius: 8px; padding: 2px; gap: 2px; }
 .cfv2-seg-ctl button { font-family: var(--sans); font-size: 11.5px; font-weight: 500; color: var(--muted); background: transparent;
     border: none; border-radius: 6px; padding: 5px 12px; cursor: pointer; transition: all 120ms; }
-.cfv2-seg-ctl button[aria-selected="true"] { background: var(--canvas); color: var(--ink); box-shadow: 0 1px 2px rgba(0,0,0,0.06); }
+.cfv2-seg-ctl button[aria-selected="true"] { background: var(--canvas); color: var(--ink); box-shadow: 0 1px 2px var(--shadow-soft); }
 
 .cfv2-cbody { display: flex; flex-direction: column; min-height: 0; }
 
@@ -90,8 +78,8 @@
     animation: cfv2-grow 0.55s cubic-bezier(.22,.61,.36,1) backwards; transition: filter 120ms; }
 .cfv2-seg:hover { filter: brightness(1.08); }
 .cfv2-sl { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; padding: 0 4px;
-    font-family: var(--sans); font-size: 10.5px; font-weight: 600; color: #fff; white-space: nowrap;
-    text-shadow: 0 1px 2px rgba(0,0,0,0.35); overflow: hidden; }
+    font-family: var(--sans); font-size: 10.5px; font-weight: 600; color: var(--on-primary); white-space: nowrap;
+    text-shadow: 0 1px 2px var(--scrim); overflow: hidden; }
 @keyframes cfv2-grow { from { transform: scaleX(0); } to { transform: scaleX(1); } }
 
 /* list with bars */
@@ -132,7 +120,7 @@
 
 /* floating tooltip */
 .cfv2-tip { position: fixed; z-index: 100; pointer-events: none; background: var(--surface-dark); border: 1px solid var(--surface-dark-elevated);
-    border-radius: 11px; padding: 12px 14px; min-width: 190px; box-shadow: 0 16px 40px -14px rgba(0,0,0,0.55); transition: opacity 100ms; }
+    border-radius: 11px; padding: 12px 14px; min-width: 190px; box-shadow: 0 16px 40px -14px var(--scrim); transition: opacity 100ms; }
 .cfv2-tip.pinned { pointer-events: auto; } /* тап-режим: ссылка внутри кликабельна */
 a.cfv2-tip-l { text-decoration: none; cursor: pointer; }
 .cfv2-tip-h { display: flex; align-items: center; gap: 7px; font-family: var(--sans); font-size: 12.5px; font-weight: 600; color: var(--on-dark); margin-bottom: 8px; }
@@ -147,12 +135,9 @@ a.cfv2-tip-l { text-decoration: none; cursor: pointer; }
     .cfv2-kpi { grid-template-columns: repeat(3, 1fr); }
 }
 @media (max-width: 860px) {
-    .cfv2-topbar { flex-direction: column; }
     .cfv2-ctr { width: 100%; align-items: stretch; }
     .cfv2-ctr-row { width: 100%; flex-direction: column; align-items: stretch; }
     .cfv2-dates { width: 100%; }
-    .cfv2-date { flex: 1; }
-    .cfv2-btn { width: 100%; justify-content: center; }
     .cfv2-main { grid-template-columns: 1fr; gap: 28px; }
     .cfv2-blist, .cfv2-scroll { max-height: none; }
 }
@@ -160,13 +145,12 @@ a.cfv2-tip-l { text-decoration: none; cursor: pointer; }
    ломает их в столбец при ≤600px — переопределяем с большей специфичностью) */
 @media (max-width: 600px) {
     .cfv2-ctr .cfv2-dates { flex-direction: row; align-items: center; gap: 8px; }
-    .cfv2-ctr .cfv2-dates .cfv2-date { flex: 1 1 0; min-width: 0; }
+    .cfv2-ctr .cfv2-dates .ui-input { flex: 1 1 0; min-width: 0; }
     .cfv2-ctr .cfv2-dates .filter-date-sep { display: inline; color: var(--muted-soft); flex-shrink: 0; }
 }
 
 @media (max-width: 560px) {
-    .cfv2-title { font-size: 24px; }
-    .cfv2-kpi { grid-template-columns: repeat(2, 1fr); }
+        .cfv2-kpi { grid-template-columns: repeat(2, 1fr); }
     .cfv2-kc-v { font-size: 20px; }
     .cfv2-brow { grid-template-columns: 110px 1fr auto; gap: 8px; }
     .cfv2-fg em { display: none; }

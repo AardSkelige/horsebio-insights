@@ -1,17 +1,13 @@
 import { ChartBar, PackageSearch } from 'lucide-react';
+import { Page, PageHeader } from '../ui';
 import ReportSection from './components/ReportSection';
 import CompetitorsSection from './components/CompetitorsSection';
 import StockAvailabilitySection from './components/StockAvailabilitySection';
 import './OzonAnalytics.css';
 
 const OzonAnalytics = () => (
-    <div className="ozon-page">
-        <section className="ozon-hero">
-            <div className="ozon-hero__copy">
-                <h1>Аналитика OZON</h1>
-                <p>4 инструмента для отчётов и обработки файлов</p>
-            </div>
-        </section>
+    <Page className="ozon-page">
+        <PageHeader title="Ozon" subtitle="4 инструмента для отчётов и обработки файлов" />
 
         <ReportSection />
 
@@ -38,7 +34,7 @@ const OzonAnalytics = () => (
                 <StockAvailabilitySection />
             </section>
         </div>
-    </div>
+    </Page>
 );
 
 export default OzonAnalytics;

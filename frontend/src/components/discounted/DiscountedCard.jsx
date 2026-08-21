@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import PropTypes from 'prop-types';
 import { ExternalLink, EyeOff, Package } from 'lucide-react';
+import { Button } from '../ui';
 import { discountedApi } from '../../api/discountedApi';
 
 const money = (value) => `${Math.round(value).toLocaleString('ru-RU')} ₽`;
@@ -66,37 +67,28 @@ export default function DiscountedCard({ position, siteAdminUrl, onDelisted }) {
 
             <div className="uc-actions">
                 {canDelist && (
-                    <button
-                        type="button"
-                        className="uc-btn solid"
+                    <Button
+                        variant="primary"
+                        size="sm"
+                        icon={EyeOff}
+                        loading={busy}
+                        disabled={done}
                         onClick={handleDelist}
-                        disabled={busy || done}
                     >
-                        <EyeOff size={13} aria-hidden="true" />
                         {done ? 'Снят с продажи' : busy ? 'Снимаю…' : 'Снять с продажи'}
-                    </button>
+                    </Button>
                 )}
-                <a
-                    className="uc-btn ghost"
-                    href={position.ms_url}
-                    target="_blank"
-                    rel="noreferrer"
-                >
-                    <Package size={13} aria-hidden="true" />
+                <Button as="a" variant="ghost" size="sm" icon={Package}
+                    href={position.ms_url} target="_blank" rel="noreferrer">
                     МойСклад
-                </a>
-                <a
-                    className="uc-btn ghost"
-                    href={siteAdminUrl}
-                    target="_blank"
-                    rel="noreferrer"
-                >
-                    <ExternalLink size={13} aria-hidden="true" />
+                </Button>
+                <Button as="a" variant="ghost" size="sm" icon={ExternalLink}
+                    href={siteAdminUrl} target="_blank" rel="noreferrer">
                     Админка
-                </a>
+                </Button>
             </div>
 
-            {error && <div className="uc-error">{error}</div>}
+            {error && <div className="uc-error" role="alert">{error}</div>}
         </div>
     );
 }

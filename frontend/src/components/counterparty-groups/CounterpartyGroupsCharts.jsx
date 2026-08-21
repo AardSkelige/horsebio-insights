@@ -8,10 +8,10 @@ import { formatCurrency } from '../../utils/formatters';
 import { CHART_ANIMATION } from '../../utils/chartAnimation';
 
 const COLORS = {
-    large:      '#cc785c',
-    medium:     '#5c8acc',
-    small:      '#5cac6a',
-    rare_large: '#8c8a84',
+    large:      'var(--primary)',
+    medium:     'var(--info)',
+    small:      'var(--success)',
+    rare_large: 'var(--cat-clay)',
 };
 
 const CATEGORY_NAMES = {
@@ -32,7 +32,7 @@ const tooltipStyle = {
     backgroundColor: 'var(--canvas)', border: '1px solid var(--hairline)',
     borderRadius: '8px', padding: '12px 14px',
     fontFamily: 'var(--sans)', fontSize: '13px', color: 'var(--ink)',
-    boxShadow: '0 4px 12px rgba(0,0,0,0.08)',
+    boxShadow: 'var(--shadow-soft)',
 };
 
 const ChartTooltip = ({ active, payload }) => {

@@ -1,19 +1,19 @@
 import PropTypes from 'prop-types';
+import { money } from '../../utils/formatters';
 import { PieChart, Pie, Cell, ResponsiveContainer, Tooltip, Legend } from 'recharts';
 import { CHART_ANIMATION } from '../../utils/chartAnimation';
 
-const COLORS = { A: '#cc785c', B: '#5c8acc', C: '#cc9c3a' };
+const COLORS = { A: 'var(--primary)', B: 'var(--info)', C: 'var(--warning)' };
 
-const fmtCurrency = (v) => new Intl.NumberFormat('ru-RU', { style: 'currency', currency: 'RUB', maximumFractionDigits: 0 }).format(v);
 
 const CustomTooltip = ({ active, payload }) => {
     if (!(active && payload?.length)) return null;
     const d = payload[0].payload;
     return (
-        <div style={{ backgroundColor: 'var(--canvas)', border: '1px solid var(--hairline)', borderRadius: '8px', padding: '12px 14px', fontFamily: 'var(--sans)', fontSize: 12, boxShadow: '0 4px 12px rgba(0,0,0,0.08)' }}>
+        <div style={{ backgroundColor: 'var(--canvas)', border: '1px solid var(--hairline)', borderRadius: '8px', padding: '12px 14px', fontFamily: 'var(--sans)', fontSize: 12, boxShadow: 'var(--shadow-card)' }}>
             <div style={{ fontWeight: 600, marginBottom: 6 }}>{d.name}</div>
             <div style={{ display: 'flex', flexDirection: 'column', gap: 3, color: 'var(--body)' }}>
-                <span>Выручка: <b>{fmtCurrency(d.value)}</b></span>
+                <span>Выручка: <b>{money(d.value)}</b></span>
                 <span>Доля: <b>{d.percent.toFixed(1)}%</b></span>
                 <span>Продуктов: <b>{d.products}</b></span>
             </div>

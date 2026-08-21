@@ -1,22 +1,17 @@
 import PropTypes from 'prop-types';
+import { Badge, DataTable } from '../ui';
+import { money } from '../../utils/formatters';
 
 const COLORS = {
-    A: { color: '#a0583e', bg: 'rgba(204,120,92,0.1)',  border: 'rgba(204,120,92,0.3)',  bar: '#cc785c' },
-    B: { color: '#3a68a0', bg: 'rgba(92,138,204,0.1)',  border: 'rgba(92,138,204,0.3)',  bar: '#5c8acc' },
-    C: { color: '#7a6010', bg: 'rgba(204,156,58,0.1)',  border: 'rgba(204,156,58,0.3)',  bar: '#cc9c3a' },
+    A: { color: 'var(--primary-active)', bg: 'var(--accent-bg)',  border: 'var(--accent-border)',  bar: 'var(--primary)' },
+    B: { color: 'var(--info-ink)', bg: 'var(--info-bg)',  border: 'var(--info-border)',  bar: 'var(--info)' },
+    C: { color: 'var(--warning-ink)', bg: 'var(--warning-bg)',  border: 'var(--warning-border)',  bar: 'var(--warning)' },
 };
 
-const fmtCurrency = (v) => new Intl.NumberFormat('ru-RU', { style: 'currency', currency: 'RUB', maximumFractionDigits: 0 }).format(v);
 
-const thStyle = {
-    fontFamily: 'var(--sans)', fontSize: '11px', fontWeight: 600,
-    letterSpacing: '0.06em', textTransform: 'uppercase', color: 'var(--muted)',
-    padding: '10px 14px', textAlign: 'left', borderBottom: '1px solid var(--hairline)',
-};
-const tdStyle = {
-    fontFamily: 'var(--sans)', fontSize: '13px', color: 'var(--body)',
-    padding: '14px', borderBottom: '1px solid var(--hairline-soft)', verticalAlign: 'middle',
-};
+
+export // Категория A — лучшая, C — хвост; тон бейджа берётся из общей семантики
+const CATEGORY_TONE = { A: 'accent', B: 'info', C: 'warning' };
 
 export const ABCStatistics = ({ data }) => {
     if (!data?.categories) return null;
@@ -29,42 +24,50 @@ export const ABCStatistics = ({ data }) => {
 
     return (
         <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
-            <div style={{ overflowX: 'auto' }}>
-            <table style={{ width: '100%', minWidth: 340, borderCollapse: 'collapse' }}>
-                <thead>
-                    <tr>
-                        <th style={thStyle}>Категория</th>
-                        <th style={thStyle}>Продукты</th>
-                        <th style={{ ...thStyle, minWidth: '200px' }}>Выручка</th>
-                    </tr>
-                </thead>
-                <tbody>
-                    {rows.map(r => {
-                        const c = COLORS[r.category] || COLORS.C;
-                        return (
-                            <tr key={r.category}>
-                                <td style={tdStyle}>
-                                    <span style={{ display: 'inline-block', padding: '3px 10px', borderRadius: '20px', fontSize: '13px', fontWeight: 700, backgroundColor: c.bg, color: c.color, border: `1px solid ${c.border}` }}>
-                                        {r.category}
-                                    </span>
-                                </td>
-                                <td style={tdStyle}>
-                                    <div style={{ fontWeight: 500 }}>{r.products} SKU</div>
-                                    <div style={{ fontSize: '11px', color: 'var(--muted)' }}>{r.productsShare}% от общего</div>
-                                </td>
-                                <td style={tdStyle}>
-                                    <div style={{ fontWeight: 500, marginBottom: 6 }}>{fmtCurrency(r.revenue)}</div>
-                                    <div style={{ height: 4, borderRadius: 2, backgroundColor: 'var(--surface-cream-strong)', overflow: 'hidden', marginBottom: 4 }}>
-                                        <div style={{ height: '100%', borderRadius: 2, backgroundColor: c.bar, width: `${(r.revenueShare * 100).toFixed(1)}%`, transition: 'width 400ms ease' }} />
-                                    </div>
-                                    <div style={{ fontSize: '11px', color: 'var(--muted)' }}>{(r.revenueShare * 100).toFixed(1)}% от общей выручки</div>
-                                </td>
-                            </tr>
-                        );
-                    })}
-                </tbody>
-            </table>
-            </div>
+            <DataTable
+                columns={[
+                    {
+                        key: 'category',
+                        label: 'Категория',
+                        sortable: false,
+                        render: (r) => <Badge tone={CATEGORY_TONE[r.category] || 'neutral'}>{r.category}</Badge>,
+                    },
+                    {
+                        key: 'products',
+                        label: 'Продукты',
+                        sortable: false,
+                        render: (r) => (
+                            <>
+                                <div style={{ fontWeight: 500 }}>{r.products} SKU</div>
+                                <div style={{ fontSize: 'var(--size-xs)', color: 'var(--muted)' }}>{r.productsShare}% от общего</div>
+                            </>
+                        ),
+                    },
+                    {
+                        key: 'revenue',
+                        label: 'Выручка',
+                        sortable: false,
+                        render: (r) => (
+                            <div style={{ minWidth: 200 }}>
+                                <div style={{ fontWeight: 500, marginBottom: 6 }}>{money(r.revenue)}</div>
+                                <div style={{ height: 4, borderRadius: 2, backgroundColor: 'var(--surface-cream-strong)', overflow: 'hidden', marginBottom: 4 }}>
+                                    <div style={{
+                                        height: '100%', borderRadius: 2,
+                                        backgroundColor: (COLORS[r.category] || COLORS.C).bar,
+                                        width: `${(r.revenueShare * 100).toFixed(1)}%`,
+                                        transition: 'width 400ms ease',
+                                    }} />
+                                </div>
+                                <div style={{ fontSize: 'var(--size-xs)', color: 'var(--muted)' }}>
+                                    {(r.revenueShare * 100).toFixed(1)}% от общей выручки
+                                </div>
+                            </div>
+                        ),
+                    },
+                ]}
+                rows={rows}
+                rowKey="category"
+            />
             <div style={{ fontFamily: 'var(--sans)', fontSize: '12px', color: 'var(--muted)', backgroundColor: 'var(--surface-soft)', padding: '10px 14px', borderRadius: '8px', lineHeight: 1.7 }}>
                 SKU — уникальные товарные позиции · Прогресс-бар — вклад категории в общую выручку
             </div>

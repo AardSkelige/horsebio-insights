@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react';
+import { Page, PageHeader, Skeleton } from '../ui';
 import { Package, AlertTriangle } from 'lucide-react';
 import SupplierAnalysisCard from './components/SupplierAnalysisCard';
 import PurchaseRecommendations from './components/PurchaseRecommendations';
@@ -7,7 +8,6 @@ import RelatedMaterialsTable from './components/RelatedMaterialsTable';
 import MaterialSearchPanel from './components/MaterialSearchPanel';
 import QuickInsightsCard from './components/QuickInsightsCard';
 import { FadeRise, Stagger, StaggerItem } from '../ui/motion';
-import { Skeleton } from '../ui/Skeleton';
 import { materialsApi } from '../../api/materialsApi';
 import { analysisApi } from '../../api/analysisApi';
 
@@ -49,15 +49,8 @@ const PurchaseAnalysis = () => {
     useEffect(() => { if (selectedMaterial) fetchAnalysis(selectedMaterial.id); }, [selectedMaterial]);
 
     return (
-        <div style={{ display: 'flex', flexDirection: 'column', gap: '32px', color: 'var(--ink)' }}>
-            <div style={{ borderBottom: '1px solid var(--hairline)', paddingBottom: '16px' }}>
-                <h1 style={{ fontFamily: 'var(--serif)', fontSize: '32px', fontWeight: 400, letterSpacing: '-0.025em', lineHeight: 1.1, color: 'var(--ink)', margin: 0, marginBottom: '4px' }}>
-                    Анализ закупок
-                </h1>
-                <p style={{ fontFamily: 'var(--sans)', fontSize: '13px', color: 'var(--muted)', margin: 0 }}>
-                    Оптимизация и рекомендации по материалам
-                </p>
-            </div>
+        <Page>
+            <PageHeader title="Помощник закупок" subtitle="Оптимизация и рекомендации по материалам" />
 
             <FadeRise>
                 <MaterialSearchPanel materials={materials} onSearch={fetchMaterials} onSelect={setSelectedMaterial} />
@@ -106,7 +99,7 @@ const PurchaseAnalysis = () => {
                     </StaggerItem>
                 </Stagger>
             )}
-        </div>
+        </Page>
     );
 };
 

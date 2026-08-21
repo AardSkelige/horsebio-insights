@@ -1,12 +1,13 @@
 import { useState, useCallback, useEffect, useRef } from 'react';
+import { num } from '../../utils/formatters';
 import { createPortal } from 'react-dom';
 import PropTypes from 'prop-types';
-import { TrendingUp, TrendingDown, Download, Loader2, AlertCircle, Calendar, X, ExternalLink } from 'lucide-react';
+import { TrendingUp, TrendingDown, Download, AlertCircle, Calendar, X, ExternalLink } from 'lucide-react';
+import { Button, Input, Page, PageHeader, Segmented } from '../ui';
 import { FadeRise, Stagger, StaggerItem, AnimatedNumber } from '../ui/motion';
 import { analysisApi } from '../../api/analysisApi';
 import './CashFlowReportV2.css';
 
-const fmtMoney = (v) => (v == null ? '0' : Math.round(v).toLocaleString('ru-RU'));
 
 // Локальная дата → 'YYYY-MM-DD' для input[type=date] (без сдвига по таймзоне)
 const isoDate = (d) => {
@@ -38,7 +39,17 @@ const LOADING_PHRASES = [
 ];
 
 // Терракотовый тональный ряд — сегменты подписаны напрямую, доли одной метрики.
-const GROUP_COLORS = ['#cc785c', '#d6987f', '#b5654c', '#e3b9a6', '#8f4a37', '#c98f6b', '#a85a44'];
+// Оттенки одной шкалы, а не разные категории: считаются от акцента темы,
+// поэтому при смене --primary диаграмма перекрашивается целиком
+const GROUP_COLORS = [
+    'var(--primary)',
+    'color-mix(in srgb, var(--primary) 70%, var(--canvas))',
+    'var(--primary-active)',
+    'color-mix(in srgb, var(--primary) 45%, var(--canvas))',
+    'color-mix(in srgb, var(--primary-active) 75%, var(--ink))',
+    'color-mix(in srgb, var(--primary) 85%, var(--canvas))',
+    'color-mix(in srgb, var(--primary-active) 88%, var(--canvas))',
+];
 
 // Пояснения к KPI — простыми словами, что показано и как считается.
 const KPI_HINTS = {
@@ -82,7 +93,7 @@ const StatCard = ({ label, value, hint, accent, onHint }) => {
                 onMouseEnter={show} onMouseLeave={hide} onFocus={show} onBlur={hide}>i</span>
             <p className="cfv2-kc-l">{label}</p>
             <p className={cls}>
-                <AnimatedNumber value={value || 0} format={fmtMoney} /><small> ₽</small>
+                <AnimatedNumber value={value || 0} format={num} /><small> ₽</small>
             </p>
         </StaggerItem>
     );
@@ -265,7 +276,7 @@ const CashFlowReportV2 = () => {
                                         {link && <ExternalLink className="cfv2-ext" />}
                                     </span>
                                     <span className="cfv2-trk"><i style={{ width: `${Math.max((g.amount / max) * 100, 1.5)}%`, background: g.color }} /></span>
-                                    <span className="cfv2-fg">{fmtMoney(g.amount)} ₽<em>{((g.amount / total) * 100).toFixed(1)}%</em></span>
+                                    <span className="cfv2-fg">{num(g.amount)} ₽<em>{((g.amount / total) * 100).toFixed(1)}%</em></span>
                                 </div>
                             </StaggerItem>
                             );
@@ -292,7 +303,7 @@ const CashFlowReportV2 = () => {
                                         onMouseEnter={(e) => showTip(e, { name: r.name, color: isInc ? 'var(--success)' : 'var(--error)', amount: r.amount, total, link })}
                                         onMouseMove={moveTip} onMouseLeave={hideTip}>
                                         <td><span className="cfv2-cell">{r.name}{link && <ExternalLink className="cfv2-ext" />}</span></td>
-                                        <td className="num">{fmtMoney(r.amount)}</td>
+                                        <td className="num">{num(r.amount)}</td>
                                     </tr>
                                 );
                             })}
@@ -306,39 +317,38 @@ const CashFlowReportV2 = () => {
     const net = data?.net_cash_flow || 0;
 
     return (
-        <div className="cfv2-root">
-            {/* Top bar */}
-            <div className="cfv2-topbar">
-                <div>
-                    <h1 className="cfv2-title">Движение денежных средств</h1>
-                    <p className="cfv2-sub">Приходы и расходы за период — по источникам и по группам контрагента</p>
-                </div>
-                <div className="cfv2-ctr">
-                    <div className="cfv2-ctr-row">
-                        <div className="filter-date-range cfv2-dates">
-                            <input type="date" value={dateFrom} onChange={onDateFrom} disabled={loading} className="cfv2-date" />
-                            <span className="filter-date-sep">—</span>
-                            <input type="date" value={dateTo} onChange={onDateTo} disabled={loading} className="cfv2-date" />
+        <Page className="cfv2-root">
+            <PageHeader
+                title="Движение денежных средств"
+                subtitle="Приходы и расходы за период — по источникам и по группам контрагента"
+                actions={
+                    <div className="cfv2-ctr">
+                        <div className="cfv2-ctr-row">
+                            <div className="filter-date-range cfv2-dates">
+                                <Input type="date" value={dateFrom} onChange={onDateFrom} disabled={loading} aria-label="Дата начала" />
+                                <span className="filter-date-sep ui-date-sep">—</span>
+                                <Input type="date" value={dateTo} onChange={onDateTo} disabled={loading} aria-label="Дата окончания" />
+                            </div>
+                            {data && (
+                                <Button variant="quiet" icon={Download} loading={exporting} disabled={loading} onClick={exportToExcel}>
+                                    Excel
+                                </Button>
+                            )}
+                            <Button variant="link" icon={Calendar} loading={loading} disabled={!canFetch} onClick={fetchReport}>
+                                {loading ? 'Формируется…' : 'Сформировать'}
+                            </Button>
                         </div>
-                        {data && (
-                            <button onClick={exportToExcel} disabled={exporting || loading} className="cfv2-btn s">
-                                {exporting ? <Loader2 className="cfv2-ic spin" /> : <Download className="cfv2-ic" />} Excel
-                            </button>
-                        )}
-                        <button onClick={fetchReport} disabled={!canFetch} className="cfv2-btn p">
-                            {loading ? <><Loader2 className="cfv2-ic spin" />Формируется…</> : <><Calendar className="cfv2-ic" />Сформировать</>}
-                        </button>
+                        <Segmented
+                            tone="plain"
+                            pill={false}
+                            layoutId="cfv2-preset"
+                            value={activePreset}
+                            onChange={(label) => applyPreset(DATE_PRESETS.find((p) => p.label === label))}
+                            options={DATE_PRESETS.map((p) => ({ value: p.label, label: p.label }))}
+                        />
                     </div>
-                    <div className="cfv2-presets">
-                        {DATE_PRESETS.map((p) => (
-                            <button key={p.label} type="button" className="cfv2-chip"
-                                aria-pressed={activePreset === p.label} onClick={() => applyPreset(p)}>
-                                {p.label}
-                            </button>
-                        ))}
-                    </div>
-                </div>
-            </div>
+                }
+            />
 
             {(loading || progress > 0) && (
                 <div className="cfv2-loadbar">
@@ -349,7 +359,7 @@ const CashFlowReportV2 = () => {
 
             {error && (
                 <div className="cfv2-error">
-                    <AlertCircle className="cfv2-ic" style={{ color: '#c64545' }} />
+                    <AlertCircle className="cfv2-ic" style={{ color: 'var(--error)' }} />
                     <span>{error}</span>
                     <button onClick={() => setError(null)}><X className="cfv2-ic" /></button>
                 </div>
@@ -379,7 +389,7 @@ const CashFlowReportV2 = () => {
                     <div className="cfv2-main">
                         <FadeRise className="cfv2-panel">
                             <div className="cfv2-phead">
-                                <span className="cfv2-plabel"><TrendingUp className="cfv2-ic up" /> Приходы <span className="cfv2-amt">{fmtMoney(totalIncome)} ₽</span></span>
+                                <span className="cfv2-plabel"><TrendingUp className="cfv2-ic up" /> Приходы <span className="cfv2-amt">{num(totalIncome)} ₽</span></span>
                                 <div className="cfv2-seg-ctl">
                                     <button aria-selected={incMode === 'grp'} onClick={() => setIncMode('grp')}>Группы</button>
                                     <button aria-selected={incMode === 'src'} onClick={() => setIncMode('src')}>Каналы</button>
@@ -390,7 +400,7 @@ const CashFlowReportV2 = () => {
 
                         <FadeRise className="cfv2-panel" delay={0.06}>
                             <div className="cfv2-phead">
-                                <span className="cfv2-plabel"><TrendingDown className="cfv2-ic down" /> Расходы <span className="cfv2-amt">{fmtMoney(totalExpense)} ₽</span></span>
+                                <span className="cfv2-plabel"><TrendingDown className="cfv2-ic down" /> Расходы <span className="cfv2-amt">{num(totalExpense)} ₽</span></span>
                                 <div className="cfv2-seg-ctl">
                                     <button aria-selected={expMode === 'grp'} onClick={() => setExpMode('grp')}>Группы</button>
                                     <button aria-selected={expMode === 'src'} onClick={() => setExpMode('src')}>Статьи</button>
@@ -404,11 +414,11 @@ const CashFlowReportV2 = () => {
                     <div className="cfv2-foot">
                         <div className="cfv2-fc">
                             <span className="l">Прибыль (приход − расход)</span>
-                            <span className="v" style={{ color: (data.profit || 0) >= 0 ? 'var(--success)' : 'var(--error)' }}>{data.profit >= 0 ? '+' : ''}{fmtMoney(data.profit)} ₽</span>
+                            <span className="v" style={{ color: (data.profit || 0) >= 0 ? 'var(--success)' : 'var(--error)' }}>{data.profit >= 0 ? '+' : ''}{num(data.profit)} ₽</span>
                         </div>
                         <div className="cfv2-fc">
                             <span className="l">Конечный остаток</span>
-                            <span className="v">{fmtMoney(data.final_balance)} ₽</span>
+                            <span className="v">{num(data.final_balance)} ₽</span>
                         </div>
                     </div>
                 </>
@@ -419,8 +429,8 @@ const CashFlowReportV2 = () => {
             {tip && createPortal(
                 <div ref={tipRef} className={`cfv2-tip${tip.pinned ? ' pinned' : ''}`} style={tipStyle()}>
                     <div className="cfv2-tip-h"><span className="cfv2-dot" style={{ background: tip.color }} />{tip.name}</div>
-                    <div className="cfv2-tip-v">{fmtMoney(tip.amount)} ₽</div>
-                    <div className="cfv2-tip-s">{((tip.amount / tip.total) * 100).toFixed(1)}% от итога · {fmtMoney(tip.total)} ₽</div>
+                    <div className="cfv2-tip-v">{num(tip.amount)} ₽</div>
+                    <div className="cfv2-tip-s">{((tip.amount / tip.total) * 100).toFixed(1)}% от итога · {num(tip.total)} ₽</div>
                     {tip.link && (tip.pinned
                         ? <a className="cfv2-tip-l" href={tip.link} target="_blank" rel="noopener noreferrer"><ExternalLink className="cfv2-ic" /> Открыть в МойСклад</a>
                         : <div className="cfv2-tip-l"><ExternalLink className="cfv2-ic" /> Открыть в МойСклад</div>)}
@@ -435,7 +445,7 @@ const CashFlowReportV2 = () => {
                 </div>,
                 document.body
             )}
-        </div>
+        </Page>
     );
 };
 

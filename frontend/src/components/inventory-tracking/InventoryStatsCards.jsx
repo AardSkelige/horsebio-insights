@@ -48,7 +48,7 @@ export default function InventoryStatsCards({ data, isMobile, onScrollTo }) {
     const fontSize = isMobile ? 32 : 40;
 
     return (
-        <div style={{ display: 'flex', flexDirection: isMobile ? 'column' : 'row', gap: 12, marginBottom: 28 }}>
+        <div style={{ display: 'flex', flexDirection: isMobile ? 'column' : 'row', gap: 12 }}>
             <div style={{ ...cardBase }}>
                 <div style={{ ...numStyle, fontSize }}><AnimatedNumber value={total} /></div>
                 <div style={{ display: 'flex', alignItems: 'center' }}>

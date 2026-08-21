@@ -3,8 +3,8 @@ import PropTypes from 'prop-types';
 import { ChevronDown, ChevronUp } from 'lucide-react';
 
 const FreqBadge = ({ value = 0 }) => {
-    const color = value >= 50 ? '#059669' : value >= 25 ? '#5c8acc' : value >= 10 ? '#a07010' : 'var(--muted)';
-    const bg = value >= 50 ? 'rgba(5,150,105,0.1)' : value >= 25 ? 'rgba(92,138,204,0.1)' : value >= 10 ? 'rgba(160,112,16,0.1)' : 'var(--surface-card)';
+    const color = value >= 50 ? 'var(--success-ink)' : value >= 25 ? 'var(--info)' : value >= 10 ? 'var(--warning-ink)' : 'var(--muted)';
+    const bg = value >= 50 ? 'var(--success-bg)' : value >= 25 ? 'var(--info-bg)' : value >= 10 ? 'var(--warning-bg)' : 'var(--surface-card)';
     return (
         <span style={{ display: 'inline-block', padding: '2px 8px', borderRadius: '20px', fontSize: '11px', fontWeight: 600, fontFamily: 'var(--sans)', backgroundColor: bg, color }}>
             {value.toFixed(1)}%
@@ -12,16 +12,6 @@ const FreqBadge = ({ value = 0 }) => {
     );
 };
 
-const thStyle = {
-    fontFamily: 'var(--sans)', fontSize: '11px', fontWeight: 600,
-    letterSpacing: '0.06em', textTransform: 'uppercase', color: 'var(--muted)',
-    padding: '8px 12px', textAlign: 'left', borderBottom: '1px solid var(--hairline)',
-};
-const tdStyle = {
-    fontFamily: 'var(--sans)', fontSize: '13px', color: 'var(--body)',
-    padding: '10px 12px', borderBottom: '1px solid var(--hairline-soft)',
-    verticalAlign: 'top',
-};
 
 FreqBadge.propTypes = { value: PropTypes.number };
 
@@ -36,25 +26,25 @@ const SupplierBlock = ({ supplier, data }) => (
             <div style={{ fontFamily: 'var(--sans)', fontSize: '13px', color: 'var(--muted)' }}>Нет данных о совместных заказах</div>
         ) : (
             <>
-                <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+                <table className="ui-table">
                     <thead>
                         <tr>
-                            <th style={{ ...thStyle, width: '35%' }}>Материал</th>
-                            <th style={thStyle}>Частота</th>
-                            <th style={thStyle}>Совм. заказов</th>
-                            <th style={thStyle}>Среднее кол-во</th>
+                            <th style={{ width: '35%' }}>Материал</th>
+                            <th>Частота</th>
+                            <th>Совм. заказов</th>
+                            <th>Среднее кол-во</th>
                         </tr>
                     </thead>
                     <tbody>
                         {data.related.map((r, i) => (
                             <tr key={`${r.code}-${i}`}>
-                                <td style={tdStyle}>
+                                <td>
                                     <div style={{ fontWeight: 500, color: 'var(--ink)' }}>{r.name}</div>
                                     <div style={{ fontSize: '12px', color: 'var(--muted)' }}>Код: {r.code}</div>
                                 </td>
-                                <td style={tdStyle}><FreqBadge value={r.frequency || 0} /></td>
-                                <td style={tdStyle}>{r.total_joint_orders}</td>
-                                <td style={tdStyle}>{(r.avg_quantity || 0).toLocaleString('ru')} {r.uom}</td>
+                                <td><FreqBadge value={r.frequency || 0} /></td>
+                                <td>{r.total_joint_orders}</td>
+                                <td>{(r.avg_quantity || 0).toLocaleString('ru')} {r.uom}</td>
                             </tr>
                         ))}
                     </tbody>

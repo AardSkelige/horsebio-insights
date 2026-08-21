@@ -4,13 +4,13 @@ import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, Responsi
 import { CHART_ANIMATION } from '../../../../utils/chartAnimation';
 import PropTypes from 'prop-types';
 
+import { chartColors } from '../../../../theme/tokens';
+
 const formatNumber = (value) => value.toLocaleString('ru-RU');
 
-// Массив цветов для разных линий графика
-const CHART_COLORS = [
-    '#2563eb', '#dc2626', '#059669', '#7c3aed', '#ea580c',
-    '#0891b2', '#be185d', '#4f46e5', '#b45309', '#065f46'
-];
+// Цвета линий берутся из общей категориальной палитры по кругу: материалов
+// на графике может быть больше, чем цветов, и повтор лучше случайного оттенка
+const colorAt = (index) => chartColors[index % chartColors.length];
 
 const PriceChart = ({ materialsData }) => {
     if (!materialsData || materialsData.length === 0) {
@@ -69,7 +69,7 @@ const PriceChart = ({ materialsData }) => {
                             type="monotone"
                             dataKey={`price_${material.id}`}
                             name={`price_${material.id}`}
-                            stroke={CHART_COLORS[index % CHART_COLORS.length]}
+                            stroke={colorAt(index)}
                             dot={{ r: 4 }}
                             activeDot={{ r: 6 }}
                         />

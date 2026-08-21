@@ -13,8 +13,8 @@ const useDebounce = (fn, delay) => {
 const pillStyle = (accent) => ({
     fontFamily: 'var(--sans)', fontSize: '12px',
     color: accent ? 'var(--primary)' : 'var(--body)',
-    backgroundColor: accent ? 'rgba(204,120,92,0.08)' : 'var(--surface-card)',
-    border: `1px solid ${accent ? 'rgba(204,120,92,0.3)' : 'var(--hairline)'}`,
+    backgroundColor: accent ? 'var(--accent-bg)' : 'var(--surface-card)',
+    border: `1px solid ${accent ? 'var(--accent-border)' : 'var(--hairline)'}`,
     borderRadius: '20px', padding: '3px 10px',
     cursor: 'pointer', transition: 'opacity 150ms',
 });
@@ -94,7 +94,7 @@ const MaterialSearchPanel = ({ materials, onSearch, onSelect }) => {
             </div>
 
             {open && materials.length > 0 && (
-                <div style={{ position: 'absolute', top: 'calc(100% + 4px)', left: 0, right: 0, backgroundColor: 'var(--canvas)', border: '1px solid var(--hairline)', borderRadius: '8px', boxShadow: '0 4px 16px rgba(0,0,0,0.1)', zIndex: 100, maxHeight: '280px', overflowY: 'auto' }}>
+                <div style={{ position: 'absolute', top: 'calc(100% + 4px)', left: 0, right: 0, backgroundColor: 'var(--canvas)', border: '1px solid var(--hairline)', borderRadius: '8px', boxShadow: 'var(--shadow-soft)', zIndex: 100, maxHeight: '280px', overflowY: 'auto' }}>
                     {materials.map((mat, i) => (
                         <div
                             key={mat.id}
@@ -111,7 +111,7 @@ const MaterialSearchPanel = ({ materials, onSearch, onSelect }) => {
                             </div>
                             <button
                                 onMouseDown={e => toggleFav(mat, e)}
-                                style={{ background: 'none', border: 'none', cursor: 'pointer', padding: '4px', color: favs.some(f => f.id === mat.id) ? '#e6a817' : 'var(--muted)', flexShrink: 0 }}
+                                style={{ background: 'none', border: 'none', cursor: 'pointer', padding: '4px', color: favs.some(f => f.id === mat.id) ? 'var(--warning)' : 'var(--muted)', flexShrink: 0 }}
                             >
                                 <Star style={{ width: 14, height: 14, fill: favs.some(f => f.id === mat.id) ? 'currentColor' : 'none' }} />
                             </button>

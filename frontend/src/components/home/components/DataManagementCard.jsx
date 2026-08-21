@@ -1,4 +1,5 @@
 import { useState, useCallback, useRef, useEffect } from 'react';
+import { Button, Segmented } from '../../ui';
 import { Calendar, DatabaseIcon, AlertTriangle } from 'lucide-react';
 import { useLoading } from '../../../contexts/LoadingContext';
 import { statsApi } from '../../../api/statsApi';
@@ -102,16 +103,6 @@ const DataManagementCard = () => {
         await startLoading(params);
     };
 
-    const btnStyle = (active) => ({
-        padding: '6px 12px',
-        fontSize: '12px',
-        borderRadius: '8px',
-        border: 'none',
-        cursor: isLoading ? 'not-allowed' : 'pointer',
-        transition: 'all 150ms ease',
-        backgroundColor: isLoading ? 'var(--surface-dark-elevated)' : (active ? 'var(--primary)' : 'var(--surface-dark-elevated)'),
-        color: isLoading ? 'var(--muted-soft)' : (active ? '#fff' : 'var(--on-dark-soft)'),
-    });
 
     return (
         <div style={{ backgroundColor: 'var(--surface-dark)', borderRadius: '12px', padding: '24px' }}>
@@ -127,16 +118,21 @@ const DataManagementCard = () => {
                         Период загрузки данных
                     </div>
                     <div className="flex flex-wrap gap-2 mb-3">
-                        {PRESET_RANGES.map(({ label, months }) => (
-                            <button key={months} onClick={() => handlePresetClick(months)} type="button" disabled={isLoading}
-                                style={btnStyle(!isCustomRange && months === activeMonths)}>
-                                {label}
-                            </button>
-                        ))}
-                        <button type="button" onClick={() => { setIsCustomRange(true); setActiveMonths(null); }}
-                            disabled={isLoading} style={btnStyle(isCustomRange)}>
-                            Произвольный период
-                        </button>
+                        <Segmented
+                            tone="dark"
+                            pill={false}
+                            disabled={isLoading}
+                            layoutId="data-management-range"
+                            value={isCustomRange ? 'custom' : activeMonths}
+                            onChange={(v) => {
+                                if (v === 'custom') { setIsCustomRange(true); setActiveMonths(null); }
+                                else handlePresetClick(v);
+                            }}
+                            options={[
+                                ...PRESET_RANGES.map(({ label, months }) => ({ value: months, label })),
+                                { value: 'custom', label: 'Произвольный период' },
+                            ]}
+                        />
                     </div>
 
                     {isCustomRange && (
@@ -211,24 +207,15 @@ const DataManagementCard = () => {
                                     </div>
                                 )}
                             </div>
-                            <button onClick={cancelLoading} className="w-full flex items-center justify-center text-xs"
-                                style={{ padding: '6px 12px', borderRadius: '8px', border: 'none', cursor: 'pointer', backgroundColor: darkTone('--error', 16), color: onDarkTone('--error', 62) }}>
+                            <Button variant="danger" size="sm" block onClick={cancelLoading}>
                                 Остановить
-                            </button>
+                            </Button>
                         </div>
                     ) : (
-                        <button onClick={handleLoadData} disabled={isLoading} className="w-full flex items-center justify-center text-xs"
-                            style={{
-                                padding: '8px 16px', borderRadius: '8px', border: 'none',
-                                cursor: isLoading ? 'not-allowed' : 'pointer',
-                                backgroundColor: 'var(--primary)', color: '#fff', fontWeight: 500,
-                                transition: 'background-color 150ms ease',
-                            }}
-                            onMouseEnter={e => !isLoading && (e.target.style.backgroundColor = 'var(--primary-active)')}
-                            onMouseLeave={e => !isLoading && (e.target.style.backgroundColor = 'var(--primary)')}>
-                            <DatabaseIcon className="w-3 h-3 mr-1.5" />
+                        <Button variant="primary" size="sm" block icon={DatabaseIcon}
+                            loading={isLoading} onClick={handleLoadData}>
                             Загрузить данные
-                        </button>
+                        </Button>
                     )}
                 </div>
             </div>

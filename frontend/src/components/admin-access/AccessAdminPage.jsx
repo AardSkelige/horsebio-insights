@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { KeyRound, Loader2, Check, AlertCircle, Users } from 'lucide-react';
 import { authApi } from '../../api/authApi';
+import { Page, PageHeader } from '../ui';
 import './AccessAdminPage.css';
 
 const arraysEqual = (a, b) => a.length === b.length && a.every((x) => b.includes(x));
@@ -75,11 +76,11 @@ const AccessAdminPage = () => {
     };
 
     return (
-        <div className="acc-root">
-            <div className="acc-head">
-                <h1 className="acc-title">Доступы</h1>
-                <p className="acc-sub">Кто из пользователей какие разделы видит и может открывать. Суперпользователи видят всё и здесь не показаны.</p>
-            </div>
+        <Page className="acc-root">
+            <PageHeader
+                title="Права доступа"
+                subtitle="Кто из пользователей какие разделы видит и может открывать. Суперпользователи видят всё и здесь не показаны."
+            />
 
             {error && (
                 <div className="acc-error">
@@ -138,7 +139,7 @@ const AccessAdminPage = () => {
                     })}
                 </div>
             )}
-        </div>
+        </Page>
     );
 };
 

@@ -76,7 +76,7 @@
 /* Классы иконок-действий раскоуплены из-под .site-orders-table: мобильные
    карточки (OrderCard) рендерятся вне таблицы, а раньше стили висели на
    .site-orders-table и до карточек не доезжали — иконки на телефоне ломались. */
-.actions-cell { display: inline-flex; align-items: center; gap: 6px; white-space: nowrap; }
+.actions-cell { display: inline-flex; align-items: center; gap: var(--space-1); white-space: nowrap; }
 /* В десктопной таблице последний столбец прижимаем вправо */
 .site-orders-table tbody td:last-child { text-align: right; }
 
@@ -84,17 +84,19 @@
     display: inline-flex;
     align-items: center;
     justify-content: center;
-    width: 32px;
-    height: 32px;
-    border-radius: 8px;
-    border: 1px solid var(--hairline);
-    background: var(--canvas);
+    width: 30px;
+    height: 30px;
+    border-radius: var(--radius-sm);
+    border: none;
+    background: none;
     color: var(--muted);
     text-decoration: none;
     flex-shrink: 0;
-    transition: color 120ms ease, border-color 120ms ease;
+    cursor: pointer;
+    transition: color 120ms ease, background-color 120ms ease;
 }
-.icon-btn:hover { color: var(--primary); border-color: var(--primary); }
+.icon-btn:hover { color: var(--ink); background: var(--surface-soft); }
+.icon-btn.danger:hover { color: var(--error-ink); background: var(--error-bg); }
 .icon-btn:focus-visible { outline: 2px solid var(--primary); outline-offset: 2px; }
 .icon-btn.disabled { opacity: .3; pointer-events: none; }
 .icon-btn.danger { cursor: pointer; }
@@ -136,8 +138,8 @@
     bottom: calc(100% + 10px);
     top: auto;
     left: 0;
-    background: #211f1c;
-    color: #f2efe9;
+    background: var(--surface-dark);
+    color: var(--on-dark);
     font-family: var(--sans);
     font-size: 12.5px;
     line-height: 1.6;
@@ -146,14 +148,14 @@
     white-space: normal;
     width: max-content;
     max-width: 300px;
-    border: 1px solid rgba(255, 255, 255, .08);
+    border: 1px solid var(--on-dark-hover);
     opacity: 0;
     visibility: hidden;
     transition: opacity 140ms ease, transform 140ms ease;
     transform: translateY(3px);
     pointer-events: none;
     z-index: 40;
-    box-shadow: 0 12px 28px rgba(0, 0, 0, .35), 0 2px 8px rgba(0, 0, 0, .25);
+    box-shadow: var(--shadow-menu);
 }
 .status-wrap:hover .tip, .status-wrap:focus-within .tip { transform: translateY(0); }
 .tip::before {
@@ -163,14 +165,14 @@
     bottom: auto;
     left: 16px;
     border: 6px solid transparent;
-    border-top-color: #211f1c;
+    border-top-color: var(--surface-dark);
 }
 .tip .step-line { display: flex; gap: 9px; padding: 3px 0; }
-.tip .step-line + .step-line { border-top: 1px solid rgba(255, 255, 255, .07); }
+.tip .step-line + .step-line { border-top: 1px solid var(--on-dark-wash); }
 .tip .step-line .m {
     font-family: var(--mono);
     font-size: 10.5px;
-    color: #8f8b83;
+    color: var(--muted-soft);
     flex-shrink: 0;
     min-width: 40px;
     padding-top: 1px;

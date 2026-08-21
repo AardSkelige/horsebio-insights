@@ -1,17 +1,12 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
-import { Search, X } from 'lucide-react';
+import { useIsMobile } from '../../hooks/useIsMobile';
+import { Card, DateRange, Page, PageHeader, ResetFilters, SearchInput, Toolbar } from '../ui';
 import { FadeRise } from '../ui/motion';
 import { siteOrdersApi } from '../../api/siteOrdersApi';
 import { useSuperuser } from '../../hooks/useAuthStatus';
 import SiteOrdersTable from './SiteOrdersTable';
 
 const PAGE_SIZE = 20;
-
-const inputStyle = {
-    fontFamily: 'var(--sans)', fontSize: 13, color: 'var(--ink)',
-    background: 'var(--canvas)', border: '1px solid var(--hairline)',
-    borderRadius: 8, padding: '7px 12px', outline: 'none',
-};
 
 function timeAgo(iso) {
     if (!iso) return null;
@@ -30,18 +25,12 @@ export default function SiteOrdersPage() {
     const [data, setData] = useState(null);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState(null);
-    const [isMobile, setIsMobile] = useState(() => window.innerWidth < 768);
+    const isMobile = useIsMobile();
     // Удалять заказ из журнала может только суперпользователь (бэкенд site_order_delete
     // под @scripts_auth); смотреть список — любой залогиненный. Кнопку удаления
     // прячем у обычных пользователей, чтобы не показывать заведомо 403-действие.
     const isSuperuser = useSuperuser();
     const abortRef = useRef(null);
-
-    useEffect(() => {
-        const handler = () => setIsMobile(window.innerWidth < 768);
-        window.addEventListener('resize', handler);
-        return () => window.removeEventListener('resize', handler);
-    }, []);
 
     useEffect(() => {
         const t = setTimeout(() => setDebouncedSearch(filters.search.trim()), 300);
@@ -100,18 +89,11 @@ export default function SiteOrdersPage() {
     const total = data?.data?.total ?? 0;
 
     return (
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 20, color: 'var(--ink)' }}>
-            <div>
-                <h1 style={{
-                    fontFamily: 'var(--serif)', fontWeight: 400, fontSize: isMobile ? 24 : 30,
-                    letterSpacing: '-0.02em', color: 'var(--ink)', margin: '0 0 4px',
-                }}>
-                    Заказы сайта
-                </h1>
-                <p style={{ fontFamily: 'var(--sans)', fontSize: 13, color: 'var(--muted)', margin: 0 }}>
-                    Заказы с horse-bio.ru, разобранные из писем, и их путь в МойСклад
-                </p>
-            </div>
+        <Page>
+            <PageHeader
+                title="Заказы сайта"
+                subtitle="Заказы с horse-bio.ru, разобранные из писем, и их путь в МойСклад"
+            />
 
             <div style={{
                 display: 'flex', alignItems: 'center', gap: 8,
@@ -131,40 +113,23 @@ export default function SiteOrdersPage() {
                 )}
             </div>
 
-            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 10, alignItems: 'center' }}>
-                <div style={{ position: 'relative', flex: '1 1 220px' }}>
-                    <Search size={13} style={{ position: 'absolute', left: 10, top: '50%', transform: 'translateY(-50%)', color: 'var(--muted)', pointerEvents: 'none' }} />
-                    <input
-                        style={{ ...inputStyle, paddingLeft: 30, width: '100%', boxSizing: 'border-box' }}
-                        placeholder="Поиск по имени, телефону, №заказа"
-                        value={filters.search}
-                        onChange={e => setFilters(f => ({ ...f, search: e.target.value }))}
-                    />
-                    {filters.search && (
-                        <button
-                            onClick={() => setFilters(f => ({ ...f, search: '' }))}
-                            style={{ position: 'absolute', right: 8, top: '50%', transform: 'translateY(-50%)', background: 'none', border: 'none', cursor: 'pointer', color: 'var(--muted)', padding: 0 }}
-                        >
-                            <X size={13} />
-                        </button>
-                    )}
-                </div>
-                <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                    <input type="date" style={inputStyle} value={filters.dateFrom}
-                        onChange={e => setFilters(f => ({ ...f, dateFrom: e.target.value }))} />
-                    <span style={{ fontSize: 12, color: 'var(--muted)' }}>—</span>
-                    <input type="date" style={inputStyle} value={filters.dateTo} min={filters.dateFrom || undefined}
-                        onChange={e => setFilters(f => ({ ...f, dateTo: e.target.value }))} />
-                </div>
+            <Toolbar>
+                <SearchInput
+                    value={filters.search}
+                    onChange={(search) => setFilters(f => ({ ...f, search }))}
+                    placeholder="Поиск по имени, телефону, №заказа"
+                />
+
+                <DateRange
+                    from={filters.dateFrom}
+                    to={filters.dateTo}
+                    onChange={({ from, to }) => setFilters(f => ({ ...f, dateFrom: from || '', dateTo: to || '' }))}
+                />
+
                 {hasFilters && (
-                    <button
-                        onClick={() => setFilters({ search: '', dateFrom: '', dateTo: '' })}
-                        style={{ ...inputStyle, display: 'flex', alignItems: 'center', gap: 5, cursor: 'pointer', color: 'var(--muted)' }}
-                    >
-                        <X size={12} /> Сбросить
-                    </button>
+                    <ResetFilters onReset={() => setFilters({ search: '', dateFrom: '', dateTo: '' })} />
                 )}
-            </div>
+            </Toolbar>
 
             {error && (
                 <div style={{
@@ -224,14 +189,11 @@ export default function SiteOrdersPage() {
                 </FadeRise>
             )}
 
-            <div style={{
-                padding: '12px 16px', borderRadius: 8, background: 'var(--surface-soft)',
-                border: '1px solid var(--hairline)', fontSize: 12, color: 'var(--muted)', lineHeight: 1.5,
-            }}>
+            <Card tone="quiet" style={{ padding: '12px 16px', fontSize: 'var(--size-sm)', color: 'var(--muted)', lineHeight: 1.5 }}>
                 <b style={{ color: 'var(--ink)' }}>Про ручное вмешательство сотрудников:</b> если сотрудник сам доработал
                 заказ в МойСклад (принял оплату, изменил комментарий) раньше автоматики — скрипт это увидит и не
                 перезапишет, статус на этой странице всё равно покажет актуальное состояние.
-            </div>
-        </div>
+            </Card>
+        </Page>
     );
 }

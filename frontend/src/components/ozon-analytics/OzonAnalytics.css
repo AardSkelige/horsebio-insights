@@ -1,39 +1,7 @@
-.ozon-page {
-  color: var(--ink);
-  display: flex;
-  flex-direction: column;
-  gap: 20px;
-  text-align: left;
-}
 
-.ozon-hero {
-  border-bottom: 1px solid var(--hairline);
-  padding: 0 0 16px;
-}
 
-.ozon-hero__copy {
-  display: flex;
-  flex-direction: column;
-  justify-content: center;
-  max-width: 760px;
-}
 
-.ozon-hero h1 {
-  color: var(--ink);
-  font-family: var(--serif);
-  font-size: 32px;
-  font-weight: 400;
-  letter-spacing: -0.025em;
-  line-height: 1.1;
-  margin: 0;
-}
 
-.ozon-hero p {
-  color: var(--muted);
-  font-size: 13px;
-  line-height: 1.4;
-  margin: 4px 0 0;
-}
 
 .ozon-section {
   background: var(--canvas);

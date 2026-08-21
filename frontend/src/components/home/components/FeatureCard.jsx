@@ -10,13 +10,14 @@ const FeatureCard = ({ icon: Icon, title, description, link, compact = false }) 
             to={link}
             onMouseEnter={() => setHovered(true)}
             onMouseLeave={() => setHovered(false)}
-            title={compact ? `${title}: ${description}` : undefined}
+            // Отклик на наведение — только смена поверхности и лёгкий подъём.
+            // Тень на карточках главной в тёмной теме читалась как грязное пятно:
+            // она рассчитана на светлый фон, а здесь под ней такой же тёмный.
             style={{
                 backgroundColor: hovered ? 'var(--surface-cream-strong)' : 'var(--surface-card)',
                 borderRadius: '12px',
                 transform: hovered ? 'translateY(-2px)' : 'translateY(0)',
-                boxShadow: hovered ? '0 6px 20px rgba(20,20,19,0.08)' : '0 0 0 rgba(20,20,19,0)',
-                transition: 'background-color 150ms ease, transform 180ms ease-out, box-shadow 180ms ease-out',
+                transition: 'background-color 150ms ease, transform 180ms ease-out',
                 display: compact ? 'grid' : 'block',
                 gridTemplateColumns: compact ? '28px minmax(0, 1fr)' : undefined,
                 alignItems: compact ? 'center' : undefined,

@@ -1,7 +1,7 @@
 import PropTypes from 'prop-types';
+import { num } from '../../../utils/formatters';
 import { Target } from 'lucide-react';
 
-const fmt = (n) => Number(n || 0).toLocaleString('ru', { maximumFractionDigits: 0 });
 
 /**
  * Выбирает поставщика для итоговой рекомендации.
@@ -29,22 +29,22 @@ const PurchaseVerdict = ({ analysisData, material }) => {
     const optimal = supplier?.optimal_batch || calc.optimal_order_quantity?.value || 0;
 
     return (
-        <div style={{ backgroundColor: 'rgba(204,120,92,0.06)', border: '1px solid rgba(204,120,92,0.3)', borderRadius: '10px', padding: '20px 24px', display: 'flex', gap: '16px', alignItems: 'flex-start' }}>
-            <div style={{ flexShrink: 0, width: 36, height: 36, borderRadius: '50%', backgroundColor: 'rgba(204,120,92,0.12)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+        <div style={{ backgroundColor: 'var(--accent-wash)', border: '1px solid var(--accent-border)', borderRadius: '10px', padding: '20px 24px', display: 'flex', gap: '16px', alignItems: 'flex-start' }}>
+            <div style={{ flexShrink: 0, width: 36, height: 36, borderRadius: '50%', backgroundColor: 'var(--accent-bg)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
                 <Target style={{ width: 18, height: 18, color: 'var(--primary)' }} />
             </div>
             <div>
                 <div style={{ fontFamily: 'var(--sans)', fontSize: '11px', fontWeight: 600, letterSpacing: '0.08em', textTransform: 'uppercase', color: 'var(--primary)', marginBottom: '6px' }}>Рекомендация</div>
                 <p style={{ fontFamily: 'var(--serif)', fontSize: '18px', color: 'var(--ink)', margin: 0, lineHeight: 1.45, fontVariantNumeric: 'lining-nums', fontFeatureSettings: '"lnum" 1' }}>
-                    Заказывайте, когда остаток упадёт до <b>{fmt(reorder)} {uom}</b>.
+                    Заказывайте, когда остаток упадёт до <b>{num(reorder)} {uom}</b>.
                     {supplier ? (
                         <>
                             {' '}Выгоднее — <b>{supplier.supplier_name}</b>
                             {supplier.reliability ? `: надёжность ${(supplier.reliability * 100).toFixed(0)}%` : ''}
-                            {optimal > 0 ? <>, партия <b>{fmt(optimal)} {uom}</b></> : null}.
+                            {optimal > 0 ? <>, партия <b>{num(optimal)} {uom}</b></> : null}.
                         </>
                     ) : optimal > 0 ? (
-                        <>{' '}Оптимальная партия — <b>{fmt(optimal)} {uom}</b>.</>
+                        <>{' '}Оптимальная партия — <b>{num(optimal)} {uom}</b>.</>
                     ) : null}
                 </p>
             </div>

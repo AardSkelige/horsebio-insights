@@ -1,16 +1,8 @@
 import { useState, useRef, useEffect } from 'react';
-import { FileSpreadsheet, Calculator, Percent, ShoppingBasket, MousePointerClick, X, Loader2 } from 'lucide-react';
+import { FileSpreadsheet, Calculator, Percent, ShoppingBasket, MousePointerClick, X } from 'lucide-react';
+import { Button, Notice } from '../../ui';
 import { processCompetitorsInfo } from '../api/ozonApi';
 
-const btn = (primary, disabled = false) => ({
-    display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: '6px',
-    width: '100%', height: '42px', borderRadius: '8px', border: 'none',
-    fontFamily: 'var(--sans)', fontSize: '13px', fontWeight: 500,
-    cursor: disabled ? 'not-allowed' : 'pointer', opacity: disabled ? 0.5 : 1,
-    backgroundColor: primary ? 'var(--primary)' : 'var(--surface-card)',
-    color: primary ? '#fff' : 'var(--ink)',
-    transition: 'background-color 150ms ease',
-});
 
 const CompetitorsSection = () => {
     const [file, setFile] = useState(null);
@@ -46,9 +38,6 @@ const CompetitorsSection = () => {
         }
     };
 
-    const noticeColors = { error: '#c64545', success: '#059669', warning: '#d4a017', loading: 'var(--muted)' };
-    const noticeBgs = { error: 'rgba(198,69,69,0.08)', success: 'rgba(5,150,105,0.08)', warning: 'rgba(212,160,23,0.08)', loading: 'var(--surface-card)' };
-
     return (
         <div className="ozon-compact-flow">
             <div className="ozon-metric-list">
@@ -74,7 +63,7 @@ const CompetitorsSection = () => {
                     onDragOver={e => { e.preventDefault(); setDragOver(true); }}
                     onDragLeave={() => setDragOver(false)}
                     onDrop={handleDrop}
-                    style={{ border: `1px dashed ${dragOver ? 'var(--primary)' : 'var(--hairline)'}`, borderRadius: '8px', padding: '20px 12px', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '6px', cursor: 'pointer', backgroundColor: dragOver ? 'rgba(204,120,92,0.04)' : 'transparent', transition: 'border-color 150ms, background-color 150ms', userSelect: 'none' }}
+                    style={{ border: `1px dashed ${dragOver ? 'var(--primary)' : 'var(--hairline)'}`, borderRadius: '8px', padding: '20px 12px', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '6px', cursor: 'pointer', backgroundColor: dragOver ? 'var(--accent-wash)' : 'transparent', transition: 'border-color 150ms, background-color 150ms', userSelect: 'none' }}
                 >
                     <FileSpreadsheet style={{ width: 22, height: 22, color: dragOver ? 'var(--primary)' : 'var(--muted)' }} />
                     <span style={{ fontFamily: 'var(--sans)', fontSize: '13px', fontWeight: 500, color: 'var(--ink)' }}>analytics_report_*.xlsx</span>
@@ -82,16 +71,11 @@ const CompetitorsSection = () => {
                 </div>
             )}
 
-            <button onClick={handleProcessFile} disabled={loading || !file} style={btn(true, loading || !file)}>
-                {loading ? <><Loader2 style={{ width: 14, height: 14 }} className="animate-spin" />Обработка...</> : 'Обработать файл'}
-            </button>
+            <Button variant="primary" loading={loading} disabled={!file} onClick={handleProcessFile}>
+                {loading ? 'Обработка...' : 'Обработать файл'}
+            </Button>
 
-            {notice && (
-                <div style={{ display: 'flex', alignItems: 'center', gap: '8px', padding: '9px 12px', borderRadius: '8px', border: `1px solid ${noticeColors[notice.type]}40`, backgroundColor: noticeBgs[notice.type], fontFamily: 'var(--sans)', fontSize: '12px', color: noticeColors[notice.type] }}>
-                    {notice.type === 'loading' && <Loader2 style={{ width: 13, height: 13 }} className="animate-spin" />}
-                    {notice.text}
-                </div>
-            )}
+            {notice && <Notice tone={notice.type}>{notice.text}</Notice>}
         </div>
     );
 };

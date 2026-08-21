@@ -16,7 +16,7 @@
     border-radius: 9px;
     color: var(--on-dark);
     background: var(--surface-dark);
-    box-shadow: 0 14px 34px -12px rgba(0, 0, 0, .62);
+    box-shadow: 0 14px 34px -12px color-mix(in srgb, var(--surface-dark) 90%, transparent);
     font: 500 11px/1.45 var(--sans);
     pointer-events: none;
     animation: ui-tooltip-in 120ms ease both;

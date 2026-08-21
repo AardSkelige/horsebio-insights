@@ -141,7 +141,7 @@ export const Sidebar = ({ expanded, onToggle, isMobile, mobileOpen, onMobileClos
                 paddingTop: isMobile ? 'env(safe-area-inset-top, 0px)' : 0,
                 justifyContent: showExpanded ? 'space-between' : 'center',
                 flexShrink: 0,
-                borderBottom: '1px solid rgba(255,255,255,0.06)',
+                borderBottom: '1px solid var(--on-dark-wash)',
                 transition: 'padding 220ms ease',
                 boxSizing: 'border-box',
             }}>
@@ -172,7 +172,7 @@ export const Sidebar = ({ expanded, onToggle, isMobile, mobileOpen, onMobileClos
                         cursor: 'pointer', flexShrink: 0,
                         transition: 'background 150ms ease, color 150ms ease',
                     }}
-                    onMouseEnter={e => { e.currentTarget.style.background = 'rgba(255,255,255,0.08)'; e.currentTarget.style.color = 'var(--on-dark)'; }}
+                    onMouseEnter={e => { e.currentTarget.style.background = 'var(--on-dark-hover)'; e.currentTarget.style.color = 'var(--on-dark)'; }}
                     onMouseLeave={e => { e.currentTarget.style.background = 'transparent'; e.currentTarget.style.color = 'var(--on-dark-soft)'; }}
                 >
                     {isMobile ? <X size={15} /> : showExpanded ? <PanelLeftClose size={15} /> : <PanelLeftOpen size={15} />}
@@ -207,7 +207,7 @@ export const Sidebar = ({ expanded, onToggle, isMobile, mobileOpen, onMobileClos
                     return (
                         <div key={gi}>
                             {gi > 0 && !showExpanded && (
-                                <div style={{ height: 1, margin: '6px 10px', backgroundColor: 'rgba(255,255,255,0.07)' }} />
+                                <div style={{ height: 1, margin: '6px 10px', backgroundColor: 'var(--on-dark-wash)' }} />
                             )}
                             {group.label && (
                                 <div style={{
@@ -268,7 +268,7 @@ export const Sidebar = ({ expanded, onToggle, isMobile, mobileOpen, onMobileClos
             </nav>
 
             {/* Bottom utilities */}
-            <div style={{ borderTop: '1px solid rgba(255,255,255,0.06)', padding: '8px 0', flexShrink: 0 }}>
+            <div style={{ borderTop: '1px solid var(--on-dark-wash)', padding: '8px 0', flexShrink: 0 }}>
                 <UtilBtn
                     icon={RefreshCw}
                     label="Обновить данные"

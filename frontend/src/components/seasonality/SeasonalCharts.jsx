@@ -63,7 +63,7 @@ export const SeasonalCharts = ({ data }) => {
                             <Legend wrapperStyle={{ fontFamily: 'var(--sans)', fontSize: 12 }} />
                             <Bar {...CHART_ANIMATION} dataKey="factor" name="Сезонный коэффициент" maxBarSize={50}>
                                 {seasonalData.map((e, i) => (
-                                    <Cell key={i} fill={e.factor >= 1.2 ? '#5cac6a' : e.factor <= 0.8 ? '#c64545' : '#5c8acc'} />
+                                    <Cell key={i} fill={e.factor >= 1.2 ? 'var(--success)' : e.factor <= 0.8 ? 'var(--error)' : 'var(--info)'} />
                                 ))}
                             </Bar>
                         </BarChart>
@@ -72,7 +72,7 @@ export const SeasonalCharts = ({ data }) => {
             </div>
 
             <div style={{ fontFamily: 'var(--sans)', fontSize: '12px', color: 'var(--muted)', backgroundColor: 'var(--surface-soft)', padding: '12px 14px', borderRadius: '8px', lineHeight: 1.7 }}>
-                <b style={{ color: 'var(--body)' }}>Как читать:</b> Коэффициент 1.0 = средний уровень · <span style={{ color: '#3a7c4a' }}>Зелёный ≥ 1.2</span> = пик · <span style={{ color: '#a03a3a' }}>Красный ≤ 0.8</span> = спад
+                <b style={{ color: 'var(--body)' }}>Как читать:</b> Коэффициент 1.0 = средний уровень · <span style={{ color: 'var(--success-ink)' }}>Зелёный ≥ 1.2</span> = пик · <span style={{ color: 'var(--error-ink)' }}>Красный ≤ 0.8</span> = спад
             </div>
         </div>
     );

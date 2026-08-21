@@ -1,8 +1,8 @@
 import { useState } from 'react';
+import { SkeletonRows } from '../ui';
 import PropTypes from 'prop-types';
 import { AnimatePresence, m } from 'motion/react';
 import { ChevronDown, ChevronUp, ChevronsUpDown, ChevronRight } from 'lucide-react';
-import { SkeletonRows } from '../ui/Skeleton';
 
 const COL_WIDTHS = {
     code: 80,
@@ -124,7 +124,7 @@ export default function InventoryTable({ title, products, type, loading, isMobil
                         background: 'none', border: 'none', cursor: 'pointer', textAlign: 'left',
                     }}
                 >
-                    <ChevronRight size={14} style={{ color: 'var(--muted)', transform: open ? 'rotate(90deg)' : 'none', transition: 'transform 180ms ease', flexShrink: 0 }} />
+                    <ChevronRight size={14} className={`ui-disclosure__chevron${open ? ' is-open' : ''}`} aria-hidden="true" />
                     <span style={{
                         fontFamily: 'var(--sans)',
                         fontSize: 11,
@@ -136,7 +136,7 @@ export default function InventoryTable({ title, products, type, loading, isMobil
                         {title}
                     </span>
                     <span style={{
-                        background: isNotInventoried ? 'rgba(198,69,69,0.12)' : 'rgba(93,184,114,0.12)',
+                        background: isNotInventoried ? 'var(--error-bg)' : 'var(--success-bg)',
                         color: isNotInventoried ? 'var(--error)' : 'var(--success)',
                         borderRadius: 12,
                         padding: '1px 8px',
@@ -179,7 +179,7 @@ export default function InventoryTable({ title, products, type, loading, isMobil
                                         <div key={p.external_id || i} style={{
                                             padding: '12px 16px',
                                             borderTop: i > 0 ? '1px solid var(--hairline-soft)' : 'none',
-                                            background: isNotInventoried ? 'rgba(198,69,69,0.04)' : 'transparent',
+                                            background: isNotInventoried ? 'var(--error-bg)' : 'transparent',
                                         }}>
                                             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 8, marginBottom: 5 }}>
                                                 <span style={{ fontSize: 13, color: 'var(--ink)', fontWeight: 500, flex: 1, minWidth: 0 }}>
@@ -235,7 +235,7 @@ export default function InventoryTable({ title, products, type, loading, isMobil
                                         <tbody>
                                             {sorted.map((p, i) => (
                                                 <tr key={p.external_id || i}
-                                                    style={isNotInventoried ? { background: 'rgba(198,69,69,0.04)' } : {}}>
+                                                    style={isNotInventoried ? { background: 'var(--error-bg)' } : {}}>
                                                     <td style={{ ...bodyCell, color: 'var(--muted)', fontFamily: 'var(--mono)', fontSize: 12 }}>
                                                         {p.code || '—'}
                                                     </td>

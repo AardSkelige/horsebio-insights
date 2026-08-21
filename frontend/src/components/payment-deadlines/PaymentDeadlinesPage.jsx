@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef } from 'react';
-import { AlertCircle, Clock, CheckCircle, Loader2, RefreshCw, ExternalLink } from 'lucide-react';
+import { AlertCircle, Clock, CheckCircle, ExternalLink } from 'lucide-react';
 import PropTypes from 'prop-types';
+import { Button, DataTable, EmptyState, IconButton, Page, PageHeader, Skeleton, StatCard, StatGrid } from '../ui';
 import { deadlinesApi } from '../../api/deadlinesApi';
 
 const MS_DEMAND_URL = (id) => `https://online.moysklad.ru/app/#demand/edit?id=${id}`;
@@ -10,6 +11,7 @@ const docLabel = (r) => r.doc_type === 'отчёт комиссионера' ? `
 
 // ─── helpers ────────────────────────────────────────────────────────────────
 
+/** Суммы в этом отчёте приходят в копейках, поэтому общий `money` не подходит. */
 function formatRub(kopecks) {
     if (!kopecks && kopecks !== 0) return '—';
     return (kopecks / 100).toLocaleString('ru-RU', {
@@ -52,40 +54,6 @@ function DaysChip({ daysLeft }) {
 }
 DaysChip.propTypes = { daysLeft: PropTypes.number.isRequired };
 
-// ─── SummaryChip ─────────────────────────────────────────────────────────────
-
-function SummaryChip({ label, count, colorVar, icon: Icon }) {
-    return (
-        <div style={{
-            display: 'flex',
-            alignItems: 'center',
-            gap: '10px',
-            padding: '14px 18px',
-            backgroundColor: 'var(--canvas)',
-            border: '1px solid var(--hairline)',
-            borderRadius: '10px',
-        }}>
-            <Icon style={{ width: 16, height: 16, color: `var(${colorVar})`, flexShrink: 0 }} />
-            <div>
-                <div style={{
-                    fontFamily: 'var(--serif)',
-                    fontSize: '24px',
-                    fontWeight: 400,
-                    letterSpacing: '-0.02em',
-                    color: 'var(--ink)',
-                    lineHeight: 1,
-                    fontVariantNumeric: 'lining-nums',
-                }}>
-                    {count}
-                </div>
-                <div style={{ fontFamily: 'var(--sans)', fontSize: '11px', color: 'var(--muted)', marginTop: '2px' }}>
-                    {label}
-                </div>
-            </div>
-        </div>
-    );
-}
-SummaryChip.propTypes = { label: PropTypes.string.isRequired, count: PropTypes.number.isRequired, colorVar: PropTypes.string.isRequired, icon: PropTypes.elementType.isRequired };
 
 // ─── DeadlineCard (mobile) ───────────────────────────────────────────────────
 
@@ -138,27 +106,6 @@ DeadlineCard.propTypes = { r: PropTypes.object.isRequired };
 
 // ─── DeadlineTable ───────────────────────────────────────────────────────────
 
-const colStyle = {
-    padding: '8px 12px',
-    fontFamily: 'var(--sans)',
-    fontSize: '13px',
-    color: 'var(--ink)',
-    verticalAlign: 'middle',
-};
-
-const headStyle = {
-    padding: '8px 12px',
-    fontFamily: 'var(--sans)',
-    fontSize: '11px',
-    fontWeight: 500,
-    letterSpacing: '0.05em',
-    textTransform: 'uppercase',
-    color: 'var(--muted)',
-    textAlign: 'left',
-    borderBottom: '1px solid var(--hairline)',
-    whiteSpace: 'nowrap',
-};
-
 function DeadlineTable({ rows, isMobile }) {
     if (!rows || rows.length === 0) return null;
 
@@ -171,79 +118,55 @@ function DeadlineTable({ rows, isMobile }) {
     }
 
     return (
-        <div style={{ overflowX: 'auto' }}>
-            <table style={{ width: '100%', borderCollapse: 'collapse' }}>
-                <thead>
-                    <tr>
-                        <th style={headStyle}>Контрагент</th>
-                        <th style={headStyle}>Документ</th>
-                        <th style={headStyle}>Дата</th>
-                        <th style={headStyle}>Дедлайн</th>
-                        <th style={headStyle}>Срок</th>
-                        <th style={{ ...headStyle, textAlign: 'right' }}>Сумма</th>
-                        <th style={{ ...headStyle, textAlign: 'right' }}>Оплачено</th>
-                        <th style={{ ...headStyle, textAlign: 'right' }}>Долг</th>
-                        <th style={{ ...headStyle, width: '32px' }} />
-                    </tr>
-                </thead>
-                <tbody>
-                    {rows.map((r, i) => (
-                        <tr key={i} style={{ borderBottom: '1px solid var(--hairline)' }}>
-                            <td style={{ ...colStyle, fontWeight: 500 }}>{r.agent_name}</td>
-                            <td style={{ ...colStyle, fontFamily: 'var(--mono)', fontSize: '12px' }}>
-                                {r.doc_id ? (
-                                    <a
-                                        href={msUrl(r)}
-                                        target="_blank"
-                                        rel="noopener noreferrer"
-                                        style={{ color: 'var(--primary)', textDecoration: 'none' }}
-                                        onMouseEnter={e => (e.currentTarget.style.textDecoration = 'underline')}
-                                        onMouseLeave={e => (e.currentTarget.style.textDecoration = 'none')}
-                                    >
-                                        {docLabel(r)}
-                                    </a>
-                                ) : (
-                                    <span style={{ color: 'var(--muted)' }}>{docLabel(r)}</span>
-                                )}
-                            </td>
-                            <td style={{ ...colStyle, fontFamily: 'var(--mono)', fontSize: '12px', whiteSpace: 'nowrap' }}>
-                                {r.moment}
-                            </td>
-                            <td style={{ ...colStyle, fontFamily: 'var(--mono)', fontSize: '12px', whiteSpace: 'nowrap' }}>
-                                {r.deadline}
-                            </td>
-                            <td style={colStyle}>
-                                <DaysChip daysLeft={r.days_left} />
-                            </td>
-                            <td style={{ ...colStyle, textAlign: 'right', fontFamily: 'var(--mono)', fontSize: '12px', whiteSpace: 'nowrap' }}>
-                                {formatRub(r.sum)}
-                            </td>
-                            <td style={{ ...colStyle, textAlign: 'right', fontFamily: 'var(--mono)', fontSize: '12px', color: 'var(--success)', whiteSpace: 'nowrap' }}>
-                                {formatRub(r.payed)}
-                            </td>
-                            <td style={{ ...colStyle, textAlign: 'right', fontFamily: 'var(--mono)', fontSize: '12px', fontWeight: 500, color: r.debt > 0 ? 'var(--error)' : 'var(--muted)', whiteSpace: 'nowrap' }}>
-                                {formatRub(r.debt)}
-                            </td>
-                            <td style={{ ...colStyle, padding: '8px 12px 8px 4px' }}>
-                                {r.doc_id && (
-                                    <a
-                                        href={msUrl(r)}
-                                        target="_blank"
-                                        rel="noopener noreferrer"
-                                        title="Открыть в МойСклад"
-                                        style={{ display: 'flex', alignItems: 'center', color: 'var(--muted)', transition: 'color 120ms ease' }}
-                                        onMouseEnter={e => (e.currentTarget.style.color = 'var(--primary)')}
-                                        onMouseLeave={e => (e.currentTarget.style.color = 'var(--muted)')}
-                                    >
-                                        <ExternalLink style={{ width: 12, height: 12 }} />
-                                    </a>
-                                )}
-                            </td>
-                        </tr>
-                    ))}
-                </tbody>
-            </table>
-        </div>
+        <DataTable
+            columns={[
+                { key: 'agent_name', label: 'Контрагент', strong: true, sortable: false },
+                {
+                    key: 'doc',
+                    label: 'Документ',
+                    sortable: false,
+                    render: (r) => r.doc_id ? (
+                        <Button as="a" variant="link" size="sm" href={msUrl(r)} target="_blank" rel="noopener noreferrer">
+                            {docLabel(r)}
+                        </Button>
+                    ) : <span style={{ color: 'var(--muted)' }}>{docLabel(r)}</span>,
+                },
+                { key: 'moment', label: 'Дата', sortable: false, render: (r) => <span style={{ fontFamily: 'var(--mono)', fontSize: 'var(--size-sm)', whiteSpace: 'nowrap' }}>{r.moment}</span> },
+                { key: 'deadline', label: 'Дедлайн', sortable: false, render: (r) => <span style={{ fontFamily: 'var(--mono)', fontSize: 'var(--size-sm)', whiteSpace: 'nowrap' }}>{r.deadline}</span> },
+                { key: 'days_left', label: 'Срок', sortable: false, render: (r) => <DaysChip daysLeft={r.days_left} /> },
+                { key: 'sum', label: 'Сумма', numeric: true, sortable: false, render: (r) => formatRub(r.sum) },
+                {
+                    key: 'payed',
+                    label: 'Оплачено',
+                    numeric: true,
+                    sortable: false,
+                    render: (r) => <span style={{ color: 'var(--success-ink)' }}>{formatRub(r.payed)}</span>,
+                },
+                {
+                    key: 'debt',
+                    label: 'Долг',
+                    numeric: true,
+                    sortable: false,
+                    render: (r) => (
+                        <span style={{ color: r.debt > 0 ? 'var(--error-ink)' : 'var(--muted)', fontWeight: 500 }}>
+                            {formatRub(r.debt)}
+                        </span>
+                    ),
+                },
+                {
+                    key: 'link',
+                    label: '',
+                    sortable: false,
+                    render: (r) => r.doc_id && (
+                        <IconButton as="a" icon={ExternalLink} label="Открыть в МойСклад" size={12}
+                            href={msUrl(r)} target="_blank" rel="noopener noreferrer" />
+                    ),
+                },
+            ]}
+            rows={rows}
+            rowKey={(r) => `${r.doc_id || r.agent_name}-${r.deadline}`}
+            emptyText="Нет документов"
+        />
     );
 }
 DeadlineTable.propTypes = { rows: PropTypes.array, isMobile: PropTypes.bool };
@@ -251,9 +174,9 @@ DeadlineTable.propTypes = { rows: PropTypes.array, isMobile: PropTypes.bool };
 // ─── Section ─────────────────────────────────────────────────────────────────
 
 const SECTIONS = [
-    { key: 'overdue', label: 'Просрочено',      dot: '#c64545' },
-    { key: 'warning', label: 'Скоро истекает',  dot: '#c4900a' },
-    { key: 'ok',      label: 'В норме',          dot: '#3a7a3a' },
+    { key: 'overdue', label: 'Просрочено',      dot: 'var(--error)' },
+    { key: 'warning', label: 'Скоро истекает',  dot: 'var(--warning-ink)' },
+    { key: 'ok',      label: 'В норме',          dot: 'var(--success-ink)' },
 ];
 
 function Section({ config, rows, isMobile }) {
@@ -321,61 +244,20 @@ export default function PaymentDeadlinesPage() {
     );
 
     return (
-        <div style={{ display: 'flex', flexDirection: 'column', gap: '24px', color: 'var(--ink)' }}>
-            {/* Заголовок */}
-            <div style={{ borderBottom: '1px solid var(--hairline)', paddingBottom: '16px' }}>
-                <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: '12px', flexWrap: 'wrap' }}>
-                    <div>
-                        <h1 style={{
-                            fontFamily: 'var(--serif)',
-                            fontSize: isMobile ? '24px' : '32px',
-                            fontWeight: 400,
-                            letterSpacing: '-0.025em',
-                            lineHeight: 1.1,
-                            color: 'var(--ink)',
-                            margin: 0,
-                            marginBottom: '4px',
-                        }}>
-                            Сроки оплаты
-                        </h1>
-                        <p style={{ fontFamily: 'var(--sans)', fontSize: '13px', color: 'var(--muted)', margin: 0 }}>
-                            Дебиторская задолженность с отсрочкой платежа
-                            {data?.generated_at && (
-                                <span style={{ marginLeft: '8px', color: 'var(--muted-soft)' }}>
-                                    · обновлено {data.generated_at}
-                                </span>
-                            )}
-                        </p>
-                    </div>
-                    <button
-                        onClick={load}
-                        disabled={loading}
-                        style={{
-                            display: 'inline-flex',
-                            alignItems: 'center',
-                            gap: '6px',
-                            padding: '7px 14px',
-                            borderRadius: '8px',
-                            border: '1px solid var(--hairline)',
-                            backgroundColor: 'var(--canvas)',
-                            color: loading ? 'var(--muted)' : 'var(--ink)',
-                            fontSize: '13px',
-                            fontFamily: 'var(--sans)',
-                            fontWeight: 500,
-                            cursor: loading ? 'not-allowed' : 'pointer',
-                            flexShrink: 0,
-                        }}
-                    >
-                        <RefreshCw style={{ width: 13, height: 13 }} className={loading ? 'animate-spin' : ''} />
-                        Обновить
-                    </button>
-                </div>
-            </div>
+        <Page>
+            <PageHeader
+                title="Сроки оплаты"
+                subtitle="Дебиторская задолженность с отсрочкой платежа"
+                updatedAt={data?.generated_at}
+                onRefresh={load}
+                refreshing={loading}
+            />
 
             {/* Loading */}
-            {loading && (
-                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '80px 0' }}>
-                    <Loader2 style={{ width: 20, height: 20, color: 'var(--muted)' }} className="animate-spin" />
+            {loading && !data && (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+                    <Skeleton height={72} />
+                    <Skeleton height={220} />
                 </div>
             )}
 
@@ -428,12 +310,13 @@ export default function PaymentDeadlinesPage() {
             {/* Контент */}
             {!loading && !error && data?.available && (
                 <>
-                    {/* Счётчики */}
-                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(300px, 1fr))', gap: '8px' }}>
-                        <SummaryChip label="Просрочено"     count={data.summary.overdue}  colorVar="--error"   icon={AlertCircle} />
-                        <SummaryChip label="Скоро истекает" count={data.summary.warning}  colorVar="--warning" icon={Clock} />
-                        <SummaryChip label="В норме"        count={data.summary.ok}       colorVar="--success" icon={CheckCircle} />
-                        <SummaryChip label="Оплачено"       count={data.summary.paid}     colorVar="--muted"   icon={CheckCircle} />
+                    <div>
+                        <StatGrid>
+                            <StatCard icon={AlertCircle}  title="Просрочено"     value={data.summary.overdue} />
+                            <StatCard icon={Clock}        title="Скоро истекает" value={data.summary.warning} />
+                            <StatCard icon={CheckCircle}  title="В норме"        value={data.summary.ok} />
+                            <StatCard icon={CheckCircle}  title="Оплачено"       value={data.summary.paid} />
+                        </StatGrid>
                     </div>
 
                     {/* Секции */}
@@ -444,21 +327,10 @@ export default function PaymentDeadlinesPage() {
                             ))}
                         </div>
                     ) : (
-                        <div style={{
-                            padding: '32px',
-                            textAlign: 'center',
-                            fontFamily: 'var(--sans)',
-                            fontSize: '13px',
-                            color: 'var(--muted)',
-                            backgroundColor: 'var(--canvas)',
-                            border: '1px solid var(--hairline)',
-                            borderRadius: '10px',
-                        }}>
-                            Нет активных отсрочек платежа
-                        </div>
+                        <EmptyState title="Нет активных отсрочек платежа" />
                     )}
                 </>
             )}
-        </div>
+        </Page>
     );
 }

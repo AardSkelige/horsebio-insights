@@ -67,7 +67,7 @@ export default function InfoTip({ text, width = 270 }) {
                     // сбрасываем наследование от заголовков (капс/разрядка)
                     textTransform: 'none', letterSpacing: 'normal',
                     borderRadius: 8, textAlign: 'left', whiteSpace: 'normal', boxSizing: 'border-box',
-                    boxShadow: '0 6px 20px rgba(0,0,0,0.28)',
+                    boxShadow: 'var(--shadow-on-dark)',
                 }}>{text}</span>,
                 document.body
             )}

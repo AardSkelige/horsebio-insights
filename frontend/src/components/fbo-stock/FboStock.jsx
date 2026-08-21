@@ -1,15 +1,12 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { Download, RefreshCw, Search, X } from 'lucide-react';
+import { formatDateTimeShort } from '../../utils/formatters';
+import { useIsMobile } from '../../hooks/useIsMobile';
+import { Download } from 'lucide-react';
+import { Button, Card, EmptyState, ErrorState, Page, PageHeader, SearchInput, Toolbar } from '../ui';
 import { FadeRise } from '../ui/motion';
 import { analysisApi } from '../../api/analysisApi';
 import FboStockTable from './FboStockTable';
 import { matchesQuery, parseQuery, searchIndex } from './search';
-
-const controlStyle = {
-    fontFamily: 'var(--sans)', fontSize: 13, color: 'var(--ink)',
-    background: 'var(--canvas)', border: '1px solid var(--hairline)',
-    borderRadius: 8, padding: '7px 12px', outline: 'none',
-};
 
 const compare = (a, b, key) => {
     const av = a[key];
@@ -17,13 +14,6 @@ const compare = (a, b, key) => {
     if (typeof av === 'number' && typeof bv === 'number') return av - bv;
     return String(av ?? '').localeCompare(String(bv ?? ''), 'ru');
 };
-
-function formatTime(iso) {
-    if (!iso) return null;
-    return new Date(iso).toLocaleString('ru-RU', {
-        day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit',
-    });
-}
 
 export default function FboStock() {
     const [data, setData] = useState(null);
@@ -34,14 +24,8 @@ export default function FboStock() {
     const [search, setSearch] = useState('');
     const [showEmpty, setShowEmpty] = useState(false);
     const [sort, setSort] = useState({ key: 'name', dir: 'asc' });
-    const [isMobile, setIsMobile] = useState(() => window.innerWidth < 768);
+    const isMobile = useIsMobile();
     const abortRef = useRef(null);
-
-    useEffect(() => {
-        const handler = () => setIsMobile(window.innerWidth < 768);
-        window.addEventListener('resize', handler);
-        return () => window.removeEventListener('resize', handler);
-    }, []);
 
     const load = useCallback((force = false) => {
         const controller = new AbortController();
@@ -112,82 +96,41 @@ export default function FboStock() {
     };
 
     return (
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 18, color: 'var(--ink)' }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 16, flexWrap: 'wrap' }}>
-                <div>
-                    <h1 style={{
-                        fontFamily: 'var(--serif)', fontWeight: 400, fontSize: isMobile ? 24 : 30,
-                        letterSpacing: '-0.02em', margin: '0 0 4px',
-                    }}>
-                        Остатки для FBO
-                    </h1>
-                    <p style={{ fontFamily: 'var(--sans)', fontSize: 13, color: 'var(--muted)', margin: 0 }}>
-                        Сколько товара можно увезти на маркетплейс сегодня — по складу готовой продукции
-                        {data?.generated_at && (
-                            <>
-                                {' · '}
-                                {/* Ответ кешируется на 5 минут, поэтому время данных важнее любой другой сводки */}
-                                <span style={{ fontFamily: 'var(--mono)', fontSize: 12, color: 'var(--muted-soft)' }}>
-                                    данные на {formatTime(data.generated_at)}
-                                </span>
-                            </>
-                        )}
-                    </p>
-                </div>
-                <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
-                    <button
-                        onClick={() => load(true)}
-                        disabled={refreshing || loading}
-                        style={{ ...controlStyle, display: 'flex', alignItems: 'center', gap: 6, cursor: refreshing ? 'default' : 'pointer', color: 'var(--muted)' }}
-                    >
-                        <RefreshCw size={13} style={refreshing ? { animation: 'spin 1s linear infinite' } : undefined} />
-                        Обновить
-                    </button>
-                    <button
+        <Page>
+            <PageHeader
+                title="Остатки для FBO"
+                subtitle="Сколько товара можно увезти на маркетплейс сегодня — по складу готовой продукции"
+                updatedAt={data?.generated_at ? formatDateTimeShort(data.generated_at) : undefined}
+                onRefresh={() => load(true)}
+                refreshing={refreshing || loading}
+                actions={
+                    <Button
+                        variant="primary"
+                        icon={Download}
+                        loading={exporting}
+                        disabled={loading || !data}
                         onClick={handleExport}
-                        disabled={exporting || loading || !data}
-                        style={{
-                            ...controlStyle, display: 'flex', alignItems: 'center', gap: 6,
-                            background: 'var(--primary)', borderColor: 'var(--primary)', color: 'var(--on-primary)',
-                            fontWeight: 500, cursor: exporting ? 'default' : 'pointer',
-                        }}
                     >
-                        <Download size={13} />
                         {exporting ? 'Готовим…' : 'Скачать Excel'}
-                    </button>
-                </div>
-            </div>
+                    </Button>
+                }
+            />
 
             {/* Главное недоразумение, ради которого страница и сделана: «Доступно» в
                 МойСклад прибавляет ожидание, поэтому показывает больше, чем есть */}
-            <div style={{
-                padding: '11px 14px', borderRadius: 8, background: 'var(--surface-soft)',
-                border: '1px solid var(--hairline)', fontSize: 12.5, color: 'var(--muted)', lineHeight: 1.55,
-            }}>
+            <Card tone="quiet" style={{ padding: '11px 14px', fontSize: 'var(--size-sm)', color: 'var(--muted)', lineHeight: 1.55 }}>
                 <b style={{ color: 'var(--ink)', fontWeight: 500 }}>Можно взять = На складе − В резерве.</b>{' '}
                 В МойСклад колонка «Доступно» прибавляет сюда ещё и ожидание — товар, который только запланирован
                 к выпуску и физически на складе не лежит. Здесь ожидание вынесено отдельной колонкой и в расчёт не входит.
-            </div>
+            </Card>
 
-            <div style={{ display: 'flex', gap: 10, alignItems: 'center', flexWrap: 'wrap' }}>
-                <div style={{ position: 'relative', flex: '1 1 240px' }}>
-                    <Search size={13} style={{ position: 'absolute', left: 10, top: '50%', transform: 'translateY(-50%)', color: 'var(--muted)', pointerEvents: 'none' }} />
-                    <input
-                        style={{ ...controlStyle, paddingLeft: 30, width: '100%', boxSizing: 'border-box' }}
-                        placeholder="Поиск: хондрофит 500, псил 150, 11-41"
-                        value={search}
-                        onChange={(e) => setSearch(e.target.value)}
-                    />
-                    {search && (
-                        <button
-                            onClick={() => setSearch('')}
-                            style={{ position: 'absolute', right: 8, top: '50%', transform: 'translateY(-50%)', background: 'none', border: 'none', cursor: 'pointer', color: 'var(--muted)', padding: 0 }}
-                        >
-                            <X size={13} />
-                        </button>
-                    )}
-                </div>
-                <label style={{ display: 'flex', alignItems: 'center', gap: 7, fontSize: 12.5, color: 'var(--muted)', cursor: 'pointer', userSelect: 'none' }}>
+            <Toolbar>
+                <SearchInput
+                    value={search}
+                    onChange={setSearch}
+                    placeholder="Поиск: хондрофит 500, псил 150, 11-41"
+                />
+                <label style={{ display: 'flex', alignItems: 'center', gap: 7, fontSize: 'var(--size-sm)', color: 'var(--muted)', cursor: 'pointer', userSelect: 'none' }}>
                     <input
                         type="checkbox"
                         checked={showEmpty}
@@ -196,17 +139,9 @@ export default function FboStock() {
                     />
                     Показывать позиции без остатка
                 </label>
-            </div>
+            </Toolbar>
 
-            {error && (
-                <div style={{
-                    padding: 16, borderRadius: 10, fontFamily: 'var(--sans)', fontSize: 13, color: 'var(--error)',
-                    background: 'color-mix(in srgb, var(--error) 8%, transparent)',
-                    border: '1px solid color-mix(in srgb, var(--error) 25%, transparent)',
-                }}>
-                    {error}
-                </div>
-            )}
+            {error && <ErrorState hint={error} onRetry={() => load(true)} />}
 
             {!error && (
                 <FadeRise>
@@ -218,16 +153,13 @@ export default function FboStock() {
                         isMobile={isMobile}
                     />
                     {!loading && items.length === 0 && (
-                        <div style={{
-                            padding: 32, textAlign: 'center', fontFamily: 'var(--sans)', fontSize: 13,
-                            color: 'var(--muted)', background: 'var(--canvas)', border: '1px solid var(--hairline)',
-                            borderRadius: 10, marginTop: 12,
-                        }}>
-                            {search ? 'Ничего не найдено' : 'Нет позиций с остатком'}
-                        </div>
+                        <EmptyState
+                            title={search ? 'Ничего не найдено' : 'Нет позиций с остатком'}
+                            hint={search ? 'Попробуйте другой запрос — поиск ищет по всем частям названия и артикулу' : undefined}
+                        />
                     )}
                 </FadeRise>
             )}
-        </div>
+        </Page>
     );
 }
