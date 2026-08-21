@@ -209,3 +209,50 @@ class DelistTest(TestCase):
             response = self.client.post('/api/discounted/p1/delist/')
 
         self.assertGreaterEqual(response.status_code, 400)
+
+
+class RequestShapeTest(SimpleTestCase):
+    """Форма запросов к МойСклад.
+
+    /entity/product не умеет фильтровать по productFolder — отвечает 412
+    «неизвестное поле фильтрации» (подтверждено документацией: у этого атрибута
+    колонка «Фильтрация» пустая). Карточки ищем по pathName, и это ровно та
+    ошибка, из-за которой страница один раз уже упала на проде.
+    """
+
+    def setUp(self):
+        cache.clear()
+
+    def tearDown(self):
+        cache.clear()
+
+    def test_products_are_filtered_by_path_not_by_folder(self):
+        calls = []
+
+        def remember(path, params=None):
+            calls.append((path, dict(params or {})))
+            return []
+
+        with patch('api.views.discounted._resolve_refs', return_value=(STORE_HREF, FOLDER_HREF, ATTR_ID)), \
+             patch('api.views.discounted._get_all_pages', side_effect=remember):
+            _build_data()
+
+        product_call = next(c for c in calls if c[0] == '/entity/product')
+        self.assertEqual(product_call[1]['filter'], 'pathName=Товары/Уценка')
+        self.assertNotIn('productFolder', product_call[1]['filter'])
+
+    def test_stock_report_asks_for_products_not_variants(self):
+        """Без groupBy=product отчёт вернёт ссылки на модификации, и id не сойдутся."""
+        calls = []
+
+        def remember(path, params=None):
+            calls.append((path, dict(params or {})))
+            return []
+
+        with patch('api.views.discounted._resolve_refs', return_value=(STORE_HREF, FOLDER_HREF, ATTR_ID)), \
+             patch('api.views.discounted._get_all_pages', side_effect=remember):
+            _build_data()
+
+        stock_call = next(c for c in calls if c[0] == '/report/stock/all')
+        self.assertEqual(stock_call[1]['groupBy'], 'product')
+        self.assertIn(f'store={STORE_HREF}', stock_call[1]['filter'])

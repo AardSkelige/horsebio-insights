@@ -168,14 +168,20 @@ def _build_data():
     store_href, folder_href, attribute_id = _resolve_refs()
     today = date.today()
 
-    products = _get_all_pages("/entity/product", {"filter": f"productFolder={folder_href}"})
+    # Карточки ищем по пути группы, а не по ссылке на неё: /entity/product не знает
+    # поля фильтрации productFolder и отвечает на него 412 «неизвестное поле».
+    products = _get_all_pages("/entity/product", {"filter": f"pathName={FOLDER_PARENT}/{FOLDER_NAME}"})
     by_id = {p["id"]: p for p in products}
 
-    # Остатки и себестоимость по складу «Уценка». Фильтр по группе оставляем:
-    # без него в отчёт попадёт весь каталог, а нам нужна одна папка.
+    # А вот отчёт по остаткам productFolder как раз понимает. groupBy=product нужен,
+    # чтобы в строке пришла ссылка на товар: по умолчанию отчёт группирует по
+    # модификациям, и тогда id из href не совпал бы с id карточки.
     stock_rows = _get_all_pages(
         "/report/stock/all",
-        {"filter": f"store={store_href};productFolder={folder_href}"},
+        {
+            "filter": f"store={store_href};productFolder={folder_href};withSubFolders=true",
+            "groupBy": "product",
+        },
     )
     stock = {}
     for row in stock_rows:
