@@ -132,35 +132,39 @@ export default function DiscountedPage() {
                             />
                         )}
 
-                        {stats && (
-                            <section className="uc-block">
-                                <StatGrid>
-                                    <StatCard title="Уценено" value={units(stats.marked.quantity)}
-                                        note={`себестоимость ${money(stats.marked.cost)}`} />
-                                    <StatCard title="Продано" value={units(stats.sold.quantity)}
-                                        note={`выручка ${money(stats.sold.revenue)}`} />
-                                    <StatCard title="Списано" value={units(stats.written_off.quantity)}
-                                        note={`потеряно ${money(stats.written_off.cost)}`} />
-                                </StatGrid>
-                                <p className="uc-note">
-                                    Выручка от уценки — это деньги, которых иначе не было бы вовсе:
-                                    товар с истекающим сроком ушёл бы в списание. «Списано» считается
-                                    как разница — всё, что ушло со склада, но не продалось.
-                                </p>
-                            </section>
-                        )}
+                        {/* Итоги и порядок работы стоят рядом: оба блока справочные
+                            и короткие, вместе помещаются в один экран */}
+                        <div className="uc-footer">
+                            {stats && (
+                                <section className="uc-block">
+                                    <StatGrid min={150}>
+                                        <StatCard title="Уценено" value={units(stats.marked.quantity)}
+                                            note={`себестоимость ${money(stats.marked.cost)}`} />
+                                        <StatCard title="Продано" value={units(stats.sold.quantity)}
+                                            note={`выручка ${money(stats.sold.revenue)}`} />
+                                        <StatCard title="Списано" value={units(stats.written_off.quantity)}
+                                            note={`потеряно ${money(stats.written_off.cost)}`} />
+                                    </StatGrid>
+                                    <p className="uc-note">
+                                        Выручка от уценки — это деньги, которых иначе не было бы вовсе:
+                                        товар с истекающим сроком ушёл бы в списание. «Списано» считается
+                                        как разница — всё, что ушло со склада, но не продалось.
+                                    </p>
+                                </section>
+                            )}
 
-                        <section className="uc-block">
-                            <h2 className="uc-h2">Как это работает</h2>
-                            <ol className="uc-flow">
-                                {FLOW.map(([who, what]) => (
-                                    <li key={what}>
-                                        <span className="who">{who}</span>
-                                        <span className="what">{what}</span>
-                                    </li>
-                                ))}
-                            </ol>
-                        </section>
+                            <section className="uc-block">
+                                <h2 className="uc-h2">Как это работает</h2>
+                                <ol className="uc-flow">
+                                    {FLOW.map(([who, what]) => (
+                                        <li key={what}>
+                                            <span className="who">{who}</span>
+                                            <span className="what">{what}</span>
+                                        </li>
+                                    ))}
+                                </ol>
+                            </section>
+                        </div>
                     </>
                 )}
             </Page>

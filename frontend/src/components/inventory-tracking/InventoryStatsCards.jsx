@@ -1,91 +1,45 @@
 import PropTypes from 'prop-types';
-import { AnimatedNumber } from '../ui/motion';
+import { StatCard, StatGrid } from '../ui';
+import { percent } from '../../utils/formatters';
 
-const numStyle = {
-    fontFamily: 'var(--serif)',
-    fontWeight: 400,
-    letterSpacing: '-0.025em',
-    lineHeight: 1,
-    color: 'var(--ink)',
-    marginBottom: 6,
-    fontVariantNumeric: 'lining-nums',
-    fontFeatureSettings: '"lnum" 1',
-};
-
-const labelStyle = {
-    fontFamily: 'var(--sans)',
-    fontSize: 11,
-    letterSpacing: '0.1em',
-    textTransform: 'uppercase',
-    color: 'var(--muted)',
-};
-
-const pctStyle = {
-    fontFamily: 'var(--sans)',
-    fontSize: 11,
-    marginLeft: 6,
-    color: 'var(--muted-soft)',
-};
-
+/**
+ * Сводка инвентаризации: сколько позиций всего, сколько прошло и сколько нет.
+ *
+ * Раньше карточки были собраны вручную — значение сверху, подпись снизу,
+ * шрифт 40px — и заметно отличались от сводок на остальных страницах.
+ *
+ * Две карточки кликабельны: ведут к соответствующему списку ниже.
+ */
 export default function InventoryStatsCards({ data, isMobile, onScrollTo }) {
-    const { total, inventoried, not_inventoried } = data;
-    const invPct = total > 0 ? Math.round((inventoried / total) * 100) : 0;
-    const notPct = total > 0 ? Math.round((not_inventoried / total) * 100) : 0;
+    const { total, inventoried, not_inventoried: notInventoried } = data;
+    const share = (n) => (total > 0 ? percent((n / total) * 100, 0) : null);
 
-    const cardBase = {
-        backgroundColor: 'var(--surface-card)',
-        borderRadius: 12,
-        padding: isMobile ? '14px 16px' : '20px',
-        flex: 1,
-        minWidth: 0,
-    };
-
-    const clickable = onScrollTo ? {
-        cursor: 'pointer',
-        transition: 'opacity 0.15s',
-    } : {};
-
-    const fontSize = isMobile ? 32 : 40;
+    const jumpProps = (target) => (onScrollTo ? {
+        onClick: () => onScrollTo(target),
+        style: { cursor: 'pointer' },
+        title: 'Перейти к списку',
+    } : {});
 
     return (
-        <div style={{ display: 'flex', flexDirection: isMobile ? 'column' : 'row', gap: 12 }}>
-            <div style={{ ...cardBase }}>
-                <div style={{ ...numStyle, fontSize }}><AnimatedNumber value={total} /></div>
-                <div style={{ display: 'flex', alignItems: 'center' }}>
-                    <span style={labelStyle}>Позиций всего</span>
-                </div>
-            </div>
+        <StatGrid min={isMobile ? 140 : 190}>
+            <StatCard title="Позиций всего" value={total} />
 
-            <div
-                style={{ ...cardBase, ...clickable }}
-                onClick={() => onScrollTo?.('inventoried')}
-                title={onScrollTo ? 'Перейти к списку' : undefined}
-            >
-                <div style={{ ...numStyle, fontSize, color: 'var(--success)' }}><AnimatedNumber value={inventoried} /></div>
-                <div style={{ display: 'flex', alignItems: 'center', flexWrap: 'wrap', gap: 4 }}>
-                    <span style={onScrollTo ? { ...labelStyle, textDecoration: 'underline', textDecorationColor: 'var(--muted-soft)', textUnderlineOffset: 3 } : labelStyle}>
-                        Были в инвентаризации
-                    </span>
-                    <span style={pctStyle}>· {invPct}%</span>
-                </div>
-            </div>
+            <StatCard
+                title="Были в инвентаризации"
+                value={inventoried}
+                note={share(inventoried)}
+                accent="var(--success-ink)"
+                {...jumpProps('inventoried')}
+            />
 
-            <div
-                style={{ ...cardBase, ...clickable }}
-                onClick={() => onScrollTo?.('not-inventoried')}
-                title={onScrollTo ? 'Перейти к списку' : undefined}
-            >
-                <div style={{ ...numStyle, fontSize, color: not_inventoried > 0 ? 'var(--error)' : 'var(--ink)' }}>
-                    <AnimatedNumber value={not_inventoried} />
-                </div>
-                <div style={{ display: 'flex', alignItems: 'center', flexWrap: 'wrap', gap: 4 }}>
-                    <span style={onScrollTo ? { ...labelStyle, textDecoration: 'underline', textDecorationColor: 'var(--muted-soft)', textUnderlineOffset: 3 } : labelStyle}>
-                        Не были
-                    </span>
-                    <span style={pctStyle}>· {notPct}%</span>
-                </div>
-            </div>
-        </div>
+            <StatCard
+                title="Не были"
+                value={notInventoried}
+                note={share(notInventoried)}
+                accent={notInventoried > 0 ? 'var(--error-ink)' : undefined}
+                {...jumpProps('not-inventoried')}
+            />
+        </StatGrid>
     );
 }
 

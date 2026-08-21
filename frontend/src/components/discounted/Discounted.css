@@ -210,3 +210,14 @@
     .uc-flow .what { grid-column: 2; }
 }
 
+
+/* ── подвал страницы: итоги и порядок работы ────────────── */
+
+/* Оба блока справочные и короткие — рядом они читаются как одна сводка
+   и не заставляют прокручивать страницу */
+.uc-footer {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(min(420px, 100%), 1fr));
+    gap: 24px;
+    align-items: start;
+}

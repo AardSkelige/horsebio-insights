@@ -15,7 +15,9 @@ import { FadeRise, Stagger, StaggerItem, AnimatedNumber } from '../ui/motion';
 
 const CARRIER_LABELS = { pec: 'ПЭК', cdek: 'СДЭК' };
 
-const money = (value) => (typeof value === 'number' ? value : null);
+// Не форматирование, а отбор: тариф приходит числом либо отсутствует.
+// Имя `money` путалось с общим форматтером из utils/formatters.
+const priceOrNull = (value) => (typeof value === 'number' ? value : null);
 
 const minDays = (days) => {
     if (!days) return Infinity;
@@ -24,7 +26,7 @@ const minDays = (days) => {
 };
 
 const basePrice = (carrier) => (
-    carrier && !carrier.error ? money(carrier.warehouse) ?? money(carrier.door) : null
+    carrier && !carrier.error ? priceOrNull(carrier.warehouse) ?? priceOrNull(carrier.door) : null
 );
 
 const Price = ({ value }) => (
@@ -68,12 +70,12 @@ const CarrierCard = ({ id, data, cheapest, fastest }) => {
 
             <div className="delivery-carrier__primary">
                 <small>До пункта / терминала</small>
-                <strong><Price value={money(data.warehouse)} /></strong>
+                <strong><Price value={priceOrNull(data.warehouse)} /></strong>
             </div>
 
             <div className="delivery-carrier__row">
                 <span>До двери</span>
-                <strong><Price value={money(data.door)} /></strong>
+                <strong><Price value={priceOrNull(data.door)} /></strong>
             </div>
             <div className="delivery-carrier__row">
                 <span><Clock aria-hidden="true" />Срок</span>
