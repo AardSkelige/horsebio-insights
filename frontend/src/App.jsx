@@ -37,6 +37,7 @@ const AccessAdminPage = lazy(() => import('./components/admin-access/AccessAdmin
 const InventoryTracking = lazy(() => import('./components/inventory-tracking/InventoryTracking'));
 const PaymentDeadlinesPage = lazy(() => import('./components/payment-deadlines/PaymentDeadlinesPage'));
 const SiteOrdersPage = lazy(() => import('./components/site-orders/SiteOrdersPage'));
+const DiscountedPage = lazy(() => import('./components/discounted/DiscountedPage'));
 const DeliveryCalculatorPage = lazy(() => import('./components/delivery/DeliveryCalculatorPage'));
 
 const RouteFallback = () => (
@@ -279,6 +280,16 @@ function AppRoutes() {
             <LayoutWrapper>
               <LazyPage>
                 <InventoryTracking />
+              </LazyPage>
+            </LayoutWrapper>
+          </ProtectedRoute>
+        } />
+
+        <Route path="/discounted" element={
+          <ProtectedRoute>
+            <LayoutWrapper>
+              <LazyPage>
+                <DiscountedPage />
               </LazyPage>
             </LayoutWrapper>
           </ProtectedRoute>

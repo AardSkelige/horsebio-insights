@@ -114,6 +114,14 @@ DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 # MoySklad settings
 MOYSKLAD_TOKEN = os.getenv('MOYSKLAD_TOKEN')
 
+# Сайт horse-bio.ru: обмен CommerceML и ссылка в админку.
+# Адрес админки держим без параметра access — это токен сессии, в коде ему не место;
+# у залогиненного сотрудника ссылка откроется по его собственной сессии.
+SITE_CML_URL = os.getenv('SITE_CML_URL', 'https://horse-bio.ru/-/api/cml/v2/')
+SITE_CML_LOGIN = os.getenv('SITE_CML_LOGIN', '')
+SITE_CML_PASSWORD = os.getenv('SITE_CML_PASSWORD', '')
+SITE_ADMIN_URL = os.getenv('SITE_ADMIN_URL', 'https://cp21.megagroup.ru/')
+
 # Scripts monitor settings
 SCRIPTS_LOGS_DIR = os.getenv('SCRIPTS_LOGS_DIR', '/app/scripts_logs')
 CRON_SECRET = os.getenv('CRON_SECRET', '')

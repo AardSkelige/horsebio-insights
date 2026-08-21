@@ -1,7 +1,7 @@
 import {
     Home, Package, Users, Layers, Archive, Truck,
     BarChart2, TrendingUp, PackageCheck, Boxes, PieChart, ShoppingCart, ShoppingBag,
-    DollarSign, Factory, FileSpreadsheet, ClipboardList, Activity, Clock, ShieldCheck, Mail, KeyRound,
+    DollarSign, Factory, FileSpreadsheet, ClipboardList, Activity, Clock, ShieldCheck, Mail, KeyRound, Tag,
 } from 'lucide-react';
 
 // pageKey — ключ страницы из бэкенд-реестра (api/access.py). По нему фильтруется
@@ -19,6 +19,12 @@ const NAV_GROUPS = [
             { path: '/shipments/counterparties', label: 'Покупатели',   icon: Users, description: 'Клиенты и их покупки', pageKey: 'shipments-counterparties' },
             { path: '/shipments/materials',      label: 'Материалы',    icon: Layers, description: 'Расход материалов в продажах', pageKey: 'shipments-materials' },
             { path: '/deadlines',                label: 'Сроки оплаты', icon: Clock, description: 'Дебиторка с отсрочкой платежа', pageKey: 'deadlines' },
+        ],
+    },
+    {
+        label: 'Уценка',
+        items: [
+            { path: '/discounted', label: 'Уценка', icon: Tag, description: 'Товар с подходящим сроком на складе уценки', pageKey: 'discounted' },
         ],
     },
     {

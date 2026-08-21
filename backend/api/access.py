@@ -24,6 +24,7 @@ PAGES = [
     {'key': 'deadlines',                'label': 'Сроки оплаты',    'group': 'Отгрузки',        'route': '/deadlines',                'api_prefixes': ['/api/deadlines/']},
     {'key': 'site-orders',              'label': 'Заказы сайта',    'group': 'Заказы сайта',    'route': '/site-orders',              'api_prefixes': ['/api/site-orders/']},
     {'key': 'delivery-calc',            'label': 'Расчёт доставки', 'group': 'Заказы сайта',    'route': '/delivery/calculator',      'api_prefixes': ['/api/delivery/']},
+    {'key': 'discounted',               'label': 'Уценка',          'group': 'Уценка',          'route': '/discounted',               'api_prefixes': ['/api/discounted/']},
     {'key': 'supplies-materials',       'label': 'Приёмки',         'group': 'Приёмки',         'route': '/supplies/materials',       'api_prefixes': ['/api/supplies/materials/', '/api/supplies/']},
     {'key': 'supplies-suppliers',       'label': 'Поставщики',      'group': 'Приёмки',         'route': '/supplies/suppliers',       'api_prefixes': ['/api/supplies/suppliers/']},
     {'key': 'production',               'label': 'Производство',    'group': 'Производство',    'route': '/production/calculator',    'api_prefixes': ['/api/production/']},
