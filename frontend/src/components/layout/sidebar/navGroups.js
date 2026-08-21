@@ -21,7 +21,7 @@ const NAV_GROUPS = [
             { path: '/deadlines',                 label: 'Сроки оплаты',            icon: Clock, description: 'Дебиторка с отсрочкой платежа', pageKey: 'deadlines' },
             { path: '/supplies/materials',        label: 'Материалы в приёмках',    icon: Archive, description: 'Поступления на склад', pageKey: 'supplies-materials' },
             { path: '/supplies/suppliers',        label: 'Поставщики',              icon: Truck, description: 'Контрагенты-поставщики', pageKey: 'supplies-suppliers' },
-            { path: '/production/calculator',     label: 'Калькулятор производства', icon: Factory, description: 'Расчёт сырья для производства', pageKey: 'production' },
+            { path: '/production/calculator',     label: 'Расчёт производства', icon: Factory, description: 'Расчёт сырья для производства', pageKey: 'production' },
             { path: '/inventory',                 label: 'Инвентаризация',          icon: ClipboardList, description: 'Контроль позиций с 1-го числа месяца', pageKey: 'inventory' },
         ],
     },

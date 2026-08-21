@@ -4,42 +4,6 @@
    к экрану — «есть ли что-то, что надо снять прямо сейчас». Пустая левая колонка
    отвечает на него без чтения. */
 
-.uc-summary {
-    display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
-    gap: 1px;
-    background: var(--hairline);
-    border: 1px solid var(--hairline);
-    border-radius: 10px;
-    overflow: hidden;
-    margin-bottom: 18px;
-}
-
-.uc-summary > div {
-    background: var(--surface-soft);
-    padding: 12px 15px;
-}
-
-.uc-summary .k {
-    font-family: var(--sans);
-    font-size: 10.5px;
-    font-weight: 600;
-    letter-spacing: 0.05em;
-    text-transform: uppercase;
-    color: var(--muted);
-}
-
-.uc-summary .v {
-    font-family: var(--serif);
-    font-size: 26px;
-    font-weight: 600;
-    font-variant-numeric: tabular-nums;
-    line-height: 1.15;
-    margin-top: 2px;
-}
-
-.uc-summary .v.alert { color: var(--error); }
-
 /* ── доска ─────────────────────────────────────────────── */
 .uc-board {
     display: grid;
@@ -182,14 +146,6 @@
     text-align: center;
 }
 
-.uc-title {
-    font-family: var(--serif);
-    font-size: 30px;
-    font-weight: 600;
-    margin: 0;
-    color: var(--ink);
-}
-
 /* ── мобильная версия ──────────────────────────────────── */
 
 /* Дорожки в столбик. Пустые прячем: на десктопе пустая колонка сама по себе
@@ -201,12 +157,128 @@
 }
 
 @media (max-width: 520px) {
-    .uc-title { font-size: 24px; }
-    .uc-summary { grid-template-columns: repeat(2, minmax(0, 1fr)); }
-    .uc-summary > div { padding: 10px 12px; }
-    .uc-summary .v { font-size: 21px; }
     /* Три кнопки в ряд не помещаются — раскладываем на всю ширину */
     .uc-actions .uc-btn { flex: 1 1 auto; justify-content: center; }
+}
+
+.uc-block {
+    border-top: 1px solid var(--hairline);
+    padding-top: 16px;
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+}
+
+.uc-h2 {
+    font-family: var(--serif);
+    font-weight: 400;
+    font-size: 19px;
+    letter-spacing: -0.01em;
+    margin: 0;
+    display: flex;
+    align-items: baseline;
+    gap: 8px;
+    flex-wrap: wrap;
+}
+
+.uc-h2-note {
+    font-family: var(--mono);
+    font-size: 11.5px;
+    color: var(--muted-soft);
+    letter-spacing: 0;
+}
+
+.uc-stats {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+    gap: 1px;
+    background: var(--hairline);
+    border: 1px solid var(--hairline);
+    border-radius: 10px;
+    overflow: hidden;
+}
+
+.uc-stats > div {
+    background: var(--surface-soft);
+    padding: 12px 15px;
+}
+
+.uc-stats .k {
+    font-family: var(--sans);
+    font-size: 10.5px;
+    font-weight: 600;
+    letter-spacing: 0.05em;
+    text-transform: uppercase;
+    color: var(--muted);
+}
+
+.uc-stats .v {
+    font-family: var(--serif);
+    font-size: 24px;
+    font-variant-numeric: tabular-nums;
+    line-height: 1.2;
+    margin-top: 2px;
+}
+
+.uc-stats .s {
+    font-size: 11.5px;
+    color: var(--muted);
+    font-variant-numeric: tabular-nums;
+    margin-top: 1px;
+}
+
+.uc-note {
+    font-size: 12px;
+    color: var(--muted);
+    line-height: 1.5;
+    margin: 0;
+    max-width: 78ch;
+}
+
+/* ── как это работает ──────────────────────────────────── */
+.uc-flow {
+    margin: 0;
+    padding: 0;
+    list-style: none;
+    counter-reset: step;
+    display: flex;
+    flex-direction: column;
+    gap: 7px;
+}
+
+.uc-flow li {
+    counter-increment: step;
+    display: grid;
+    grid-template-columns: 1.4rem 5.5rem 1fr;
+    gap: 0 10px;
+    align-items: baseline;
+    font-size: 12.5px;
+    line-height: 1.5;
+}
+
+.uc-flow li::before {
+    content: counter(step);
+    font-family: var(--mono);
+    font-size: 11px;
+    color: var(--muted-soft);
+    font-variant-numeric: tabular-nums;
+}
+
+.uc-flow .who {
+    font-family: var(--sans);
+    font-size: 11px;
+    font-weight: 600;
+    letter-spacing: 0.05em;
+    text-transform: uppercase;
+    color: var(--primary);
+}
+
+.uc-flow .what { color: var(--muted); }
+
+@media (max-width: 520px) {
+    .uc-flow li { grid-template-columns: 1.4rem 1fr; }
+    .uc-flow .who { grid-column: 2; }
+    .uc-flow .what { grid-column: 2; }
 }
 
 @media (prefers-reduced-motion: reduce) {

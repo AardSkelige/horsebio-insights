@@ -16,7 +16,7 @@
 """
 
 import logging
-from datetime import date, datetime
+from datetime import date, datetime, timedelta
 from functools import lru_cache
 
 from django.conf import settings
@@ -55,6 +55,9 @@ DATA_CACHE_KEY = "discounted_report"
 DATA_CACHE_TTL = 5 * 60
 
 PAGE_LIMIT = 1000
+
+# За какой период считаем итоги, если период не задан явно
+DEFAULT_PERIOD_DAYS = 365
 
 # Состояния позиции — порядок важен, он же порядок сортировки на странице
 STATE_EXPIRED = "expired"       # срок вышел
@@ -163,7 +166,52 @@ def _days_on_stock(product_id):
     return round(max(days)) if days else None
 
 
-def _build_data():
+def _build_analytics(store_href, days):
+    """Итоги по складу «Уценка» за период: уценено, продано, списано.
+
+    Два отчёта вместо разбора документов:
+      • «Обороты» дают приход (это и есть уценённое) и весь расход со склада;
+      • «Прибыль по товарам» — сколько из этого расхода ушло продажами, по какой
+        цене и с какой себестоимостью.
+
+    Списание считается как остаток: что ушло со склада, но не было продано.
+    Возвраты вычитаем из продаж, иначе вернувшийся товар посчитался бы проданным
+    дважды — один раз продажей, второй раз попал бы в «списано» с минусом.
+    """
+    moment_to = datetime.now()
+    moment_from = moment_to - timedelta(days=days)
+    period = {
+        "momentFrom": moment_from.strftime("%Y-%m-%d 00:00:00"),
+        "momentTo": moment_to.strftime("%Y-%m-%d %H:%M:%S"),
+        "filter": f"store={store_href}",
+    }
+
+    turnover = _get_all_pages("/report/turnover/all", period)
+    marked_qty = sum((r.get("income") or {}).get("quantity") or 0 for r in turnover)
+    marked_cost = sum((r.get("income") or {}).get("sum") or 0 for r in turnover) / 100
+    left_qty = sum((r.get("outcome") or {}).get("quantity") or 0 for r in turnover)
+    left_cost = sum((r.get("outcome") or {}).get("sum") or 0 for r in turnover) / 100
+
+    profit = _get_all_pages("/report/profit/byproduct", period)
+    sold_qty = sum((r.get("sellQuantity") or 0) - (r.get("returnQuantity") or 0) for r in profit)
+    revenue = sum((r.get("sellSum") or 0) - (r.get("returnSum") or 0) for r in profit) / 100
+    sold_cost = sum((r.get("sellCostSum") or 0) - (r.get("returnCostSum") or 0) for r in profit) / 100
+
+    # Отрицательным быть не должно, но округления двух разных отчётов лучше не
+    # выпускать на экран в виде «списано −0.3 шт»
+    written_off_qty = max(left_qty - sold_qty, 0)
+    written_off_cost = max(left_cost - sold_cost, 0)
+
+    return {
+        "period_days": days,
+        "period_from": moment_from.date().isoformat(),
+        "marked": {"quantity": round(marked_qty, 2), "cost": round(marked_cost, 2)},
+        "sold": {"quantity": round(sold_qty, 2), "revenue": round(revenue, 2), "cost": round(sold_cost, 2)},
+        "written_off": {"quantity": round(written_off_qty, 2), "cost": round(written_off_cost, 2)},
+    }
+
+
+def _build_data(period_days=DEFAULT_PERIOD_DAYS):
     """Собрать отчёт из МойСклад. Тяжёлая часть — кешируется вызывающим."""
     store_href, folder_href, attribute_id = _resolve_refs()
     today = date.today()
@@ -243,6 +291,7 @@ def _build_data():
     return {
         "positions": positions,
         "summary": summary,
+        "analytics": _build_analytics(store_href, period_days),
         "rules": {
             "discount_rate": DISCOUNT_RATE,
             "months_to_delist": MONTHS_TO_DELIST,

@@ -74,8 +74,11 @@ class BuildDataTest(SimpleTestCase):
         cache.clear()
 
     def _run(self, products, stock_rows, days_on_stock=None):
+        # Аналитика за период проверяется отдельно (AnalyticsTest) и ходит в свои
+        # отчёты — здесь она только мешала бы считать вызовы
         with patch('api.views.discounted._resolve_refs', return_value=(STORE_HREF, FOLDER_HREF, ATTR_ID)), \
              patch('api.views.discounted._get_all_pages', side_effect=[products, stock_rows]), \
+             patch('api.views.discounted._build_analytics', return_value={}), \
              patch('api.views.discounted._days_on_stock', return_value=days_on_stock):
             return _build_data()
 
@@ -135,6 +138,7 @@ class BuildDataTest(SimpleTestCase):
                  [_product('p1', 'A-UC', 'С остатком', soon), _product('p2', 'B-UC', 'Пустая', soon)],
                  [_stock('p1', 3.0, 10000)],
              ]), \
+             patch('api.views.discounted._build_analytics', return_value={}), \
              patch('api.views.discounted._days_on_stock', return_value=42) as days:
             data = _build_data()
 
@@ -234,6 +238,7 @@ class RequestShapeTest(SimpleTestCase):
             return []
 
         with patch('api.views.discounted._resolve_refs', return_value=(STORE_HREF, FOLDER_HREF, ATTR_ID)), \
+             patch('api.views.discounted._build_analytics', return_value={}), \
              patch('api.views.discounted._get_all_pages', side_effect=remember):
             _build_data()
 
@@ -250,9 +255,72 @@ class RequestShapeTest(SimpleTestCase):
             return []
 
         with patch('api.views.discounted._resolve_refs', return_value=(STORE_HREF, FOLDER_HREF, ATTR_ID)), \
+             patch('api.views.discounted._build_analytics', return_value={}), \
              patch('api.views.discounted._get_all_pages', side_effect=remember):
             _build_data()
 
         stock_call = next(c for c in calls if c[0] == '/report/stock/all')
         self.assertEqual(stock_call[1]['groupBy'], 'product')
         self.assertIn(f'store={STORE_HREF}', stock_call[1]['filter'])
+
+
+class AnalyticsTest(SimpleTestCase):
+    """Итоги за период: уценено, продано, списано.
+
+    Списание не берётся из документов, а считается как разница — всё, что ушло
+    со склада, но не продалось. Здесь проверяется, что арифметика сходится и
+    что возвраты не удваивают продажи.
+    """
+
+    def setUp(self):
+        cache.clear()
+
+    def tearDown(self):
+        cache.clear()
+
+    def _run(self, turnover, profit):
+        from api.views.discounted import _build_analytics
+        with patch('api.views.discounted._get_all_pages', side_effect=[turnover, profit]):
+            return _build_analytics(STORE_HREF, 365)
+
+    def test_written_off_is_what_left_but_was_not_sold(self):
+        data = self._run(
+            [{'income': {'quantity': 30.0, 'sum': 900000},
+              'outcome': {'quantity': 20.0, 'sum': 600000}}],
+            [{'sellQuantity': 12.0, 'sellSum': 2016000, 'sellCostSum': 360000,
+              'returnQuantity': 0.0, 'returnSum': 0, 'returnCostSum': 0}],
+        )
+        self.assertEqual(data['marked']['quantity'], 30.0)
+        self.assertEqual(data['marked']['cost'], 9000.0)
+        self.assertEqual(data['sold']['quantity'], 12.0)
+        self.assertEqual(data['sold']['revenue'], 20160.0)
+        self.assertEqual(data['written_off']['quantity'], 8.0)   # 20 ушло − 12 продано
+        self.assertEqual(data['written_off']['cost'], 2400.0)    # 6000 − 3600
+
+    def test_returns_do_not_inflate_sales(self):
+        """Вернувшийся товар не должен считаться проданным."""
+        data = self._run(
+            [{'income': {'quantity': 10.0, 'sum': 300000},
+              'outcome': {'quantity': 5.0, 'sum': 150000}}],
+            [{'sellQuantity': 5.0, 'sellSum': 840000, 'sellCostSum': 150000,
+              'returnQuantity': 2.0, 'returnSum': 336000, 'returnCostSum': 60000}],
+        )
+        self.assertEqual(data['sold']['quantity'], 3.0)
+        self.assertEqual(data['sold']['revenue'], 5040.0)
+
+    def test_rounding_never_shows_negative_write_off(self):
+        """Два отчёта округляют по-своему — «списано −0.3 шт» на экран не пускаем."""
+        data = self._run(
+            [{'income': {'quantity': 5.0, 'sum': 150000},
+              'outcome': {'quantity': 5.0, 'sum': 150000}}],
+            [{'sellQuantity': 5.3, 'sellSum': 890000, 'sellCostSum': 160000,
+              'returnQuantity': 0.0, 'returnSum': 0, 'returnCostSum': 0}],
+        )
+        self.assertEqual(data['written_off']['quantity'], 0)
+        self.assertEqual(data['written_off']['cost'], 0)
+
+    def test_empty_store_gives_zeros_not_errors(self):
+        data = self._run([], [])
+        self.assertEqual(data['marked']['quantity'], 0)
+        self.assertEqual(data['sold']['revenue'], 0)
+        self.assertEqual(data['written_off']['quantity'], 0)

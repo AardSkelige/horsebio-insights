@@ -6,46 +6,42 @@ import DiscountedCard from './DiscountedCard';
 import './Discounted.css';
 
 const money = (value) => `${Math.round(value || 0).toLocaleString('ru-RU')} ₽`;
+const units = (value) => `${Math.round(value || 0).toLocaleString('ru-RU')} шт`;
 
 // Три дорожки. Порядок — от срочного к спокойному: экран читается слева направо,
 // и пустая левая колонка сразу означает «делать нечего».
 const LANES = [
-    {
-        key: 'urgent',
-        title: 'Снять с продажи',
-        tone: 'urgent',
-        states: ['expired'],
-        empty: 'Просроченного нет',
-    },
-    {
-        key: 'soon',
-        title: 'Скоро снимать',
-        tone: 'warn',
-        states: ['delist', 'no_date'],
-        empty: 'Ничего не подходит к сроку',
-    },
-    {
-        key: 'selling',
-        title: 'В продаже',
-        tone: '',
-        states: ['ok'],
-        empty: 'Пусто',
-    },
+    { key: 'urgent',  title: 'Снять с продажи', tone: 'urgent', states: ['expired'],           empty: 'Просроченного нет' },
+    { key: 'soon',    title: 'Скоро снимать',   tone: 'warn',   states: ['delist', 'no_date'], empty: 'Ничего не подходит к сроку' },
+    { key: 'selling', title: 'В продаже',       tone: '',       states: ['ok'],                empty: 'Пусто' },
 ];
 
-function timeAgo(iso) {
+// Процесс живёт в трёх местах сразу, и без подсказки на экране приходится каждый
+// раз вспоминать, кто где нажимает.
+const FLOW = [
+    ['Лера', 'Находит товар с подходящим сроком и проводит техоперацию в МойСклад — товар переезжает на склад «Уценка»'],
+    ['Система', 'Позиция появляется здесь, а обмен отправляет карточку, цену и остаток на сайт'],
+    ['Сергей', 'Дописывает в карточке на сайте срок годности и текст про уценку'],
+    ['Система', 'Остаток на сайте едет за МойСклад сам; за два месяца до конца срока позиция снимается с продажи'],
+];
+
+function formatTime(iso) {
     if (!iso) return null;
-    const minutes = Math.max(0, Math.round((Date.now() - new Date(iso).getTime()) / 60000));
-    if (minutes < 1) return 'только что';
-    if (minutes < 60) return `${minutes} мин назад`;
-    return `${Math.round(minutes / 60)} ч назад`;
+    return new Date(iso).toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' });
 }
 
 export default function DiscountedPage() {
     const [data, setData] = useState(null);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState(null);
+    const [isMobile, setIsMobile] = useState(() => window.innerWidth < 768);
     const abortRef = useRef(null);
+
+    useEffect(() => {
+        const handler = () => setIsMobile(window.innerWidth < 768);
+        window.addEventListener('resize', handler);
+        return () => window.removeEventListener('resize', handler);
+    }, []);
 
     const load = useCallback(async (refresh = false) => {
         abortRef.current?.abort();
@@ -72,20 +68,36 @@ export default function DiscountedPage() {
         return () => abortRef.current?.abort();
     }, [load]);
 
-    const positions = data?.positions ?? [];
-    const inStock = positions.filter((p) => p.quantity > 0);
-    const summary = data?.summary ?? {};
+    const inStock = (data?.positions ?? []).filter((p) => p.quantity > 0);
+    const stats = data?.analytics;
 
     return (
         <FadeRise>
-            <div style={{ padding: '24px 0' }}>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 18, color: 'var(--ink)' }}>
                 <div style={{
-                    display: 'flex', alignItems: 'baseline', justifyContent: 'space-between',
-                    flexWrap: 'wrap', gap: 10, marginBottom: 4,
+                    display: 'flex', justifyContent: 'space-between',
+                    alignItems: 'flex-start', gap: 16, flexWrap: 'wrap',
                 }}>
-                    <h1 className="uc-title">
-                        Уценка
-                    </h1>
+                    <div>
+                        <h1 style={{
+                            fontFamily: 'var(--serif)', fontWeight: 400, fontSize: isMobile ? 24 : 30,
+                            letterSpacing: '-0.02em', margin: '0 0 4px',
+                        }}>
+                            Уценка
+                        </h1>
+                        <p style={{ fontFamily: 'var(--sans)', fontSize: 13, color: 'var(--muted)', margin: 0 }}>
+                            Товар с подходящим сроком годности на складе «Уценка»
+                            {data?.rules && ` — скидка ${Math.round(data.rules.discount_rate * 100)} %, снимаем с продажи за ${data.rules.months_to_delist} месяца до конца срока`}
+                            {data?.generated_at && (
+                                <>
+                                    {' · '}
+                                    <span style={{ fontFamily: 'var(--mono)', fontSize: 12, color: 'var(--muted-soft)' }}>
+                                        данные на {formatTime(data.generated_at)}
+                                    </span>
+                                </>
+                            )}
+                        </p>
+                    </div>
                     <button
                         type="button"
                         className="uc-btn ghost"
@@ -97,15 +109,7 @@ export default function DiscountedPage() {
                     </button>
                 </div>
 
-                <p style={{ fontSize: 12.5, color: 'var(--muted)', margin: '0 0 16px' }}>
-                    Склад «Уценка» в МойСклад
-                    {data?.generated_at && ` · обновлено ${timeAgo(data.generated_at)}`}
-                    {data?.rules && ` · скидка ${Math.round(data.rules.discount_rate * 100)} %, снимаем за ${data.rules.months_to_delist} мес до конца срока`}
-                </p>
-
-                {error && (
-                    <div className="uc-error" style={{ marginBottom: 14, fontSize: 13 }}>{error}</div>
-                )}
+                {error && <div className="uc-error" style={{ fontSize: 13 }}>{error}</div>}
 
                 {loading && !data && (
                     <p style={{ fontSize: 13, color: 'var(--muted)' }}>Загружаю…</p>
@@ -113,17 +117,6 @@ export default function DiscountedPage() {
 
                 {data && (
                     <>
-                        <div className="uc-summary">
-                            <div><div className="k">Позиций</div><div className="v">{summary.positions ?? 0}</div></div>
-                            <div><div className="k">Единиц</div><div className="v">{summary.units ?? 0}</div></div>
-                            <div><div className="k">Сумма</div><div className="v">{money(summary.sum)}</div></div>
-                            <div><div className="k">Себестоимость</div><div className="v">{money(summary.sum_cost)}</div></div>
-                            <div>
-                                <div className="k">Надо разобрать</div>
-                                <div className={`v${summary.needs_action ? ' alert' : ''}`}>{summary.needs_action ?? 0}</div>
-                            </div>
-                        </div>
-
                         <div className="uc-board">
                             {LANES.map((lane) => {
                                 const items = inStock.filter((p) => lane.states.includes(p.state));
@@ -156,11 +149,54 @@ export default function DiscountedPage() {
                         </div>
 
                         {inStock.length === 0 && (
-                            <p style={{ fontSize: 13, color: 'var(--muted)', marginTop: 18 }}>
+                            <p style={{ fontSize: 13, color: 'var(--muted)' }}>
                                 На складе «Уценка» сейчас пусто. Позиции появятся здесь после того,
                                 как Лера проведёт техоперацию в МойСклад.
                             </p>
                         )}
+
+                        {stats && (
+                            <section className="uc-block">
+                                <h2 className="uc-h2">
+                                    Итоги за год
+                                    <span className="uc-h2-note">с {stats.period_from}</span>
+                                </h2>
+                                <div className="uc-stats">
+                                    <div>
+                                        <div className="k">Уценено</div>
+                                        <div className="v">{units(stats.marked.quantity)}</div>
+                                        <div className="s">себестоимость {money(stats.marked.cost)}</div>
+                                    </div>
+                                    <div>
+                                        <div className="k">Продано</div>
+                                        <div className="v">{units(stats.sold.quantity)}</div>
+                                        <div className="s">выручка {money(stats.sold.revenue)}</div>
+                                    </div>
+                                    <div>
+                                        <div className="k">Списано</div>
+                                        <div className="v">{units(stats.written_off.quantity)}</div>
+                                        <div className="s">потеряно {money(stats.written_off.cost)}</div>
+                                    </div>
+                                </div>
+                                <p className="uc-note">
+                                    Выручка от уценки — это деньги, которых иначе не было бы вовсе:
+                                    товар с истекающим сроком ушёл бы в списание. «Списано» считается
+                                    как разница — всё, что ушло со склада, но не продалось.
+                                </p>
+                            </section>
+                        )}
+
+                        <section className="uc-block">
+                            <h2 className="uc-h2">Как это работает</h2>
+                            <ol className="uc-flow">
+                                {FLOW.map(([who, what]) => (
+                                    <li key={what}>
+                                        <span className="who">{who}</span>
+                                        <span className="what">{what}</span>
+                                    </li>
+                                ))}
+                            </ol>
+                        </section>
                     </>
                 )}
             </div>
