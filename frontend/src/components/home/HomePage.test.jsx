@@ -59,12 +59,10 @@ describe('HomePage', () => {
     it('сохраняет визуальное деление ссылок по рабочим разделам', async () => {
         renderPage();
 
-        expect(screen.getByRole('heading', { level: 2, name: 'Отгрузки' })).toBeInTheDocument();
-        expect(screen.getByRole('heading', { level: 2, name: 'Уценка' })).toBeInTheDocument();
-        expect(screen.getByRole('heading', { level: 2, name: 'Заказы сайта' })).toBeInTheDocument();
-        expect(screen.getByRole('heading', { level: 2, name: 'Приёмки' })).toBeInTheDocument();
-        expect(screen.getByRole('heading', { level: 2, name: 'Производство' })).toBeInTheDocument();
-        expect(screen.getByRole('heading', { level: 2, name: 'Инвентаризация' })).toBeInTheDocument();
+        // Разделы названы по источнику данных: всё из МойСклад в одном, всё
+        // связанное с horse-bio.ru — в другом, аналитика сквозная
+        expect(screen.getByRole('heading', { level: 2, name: 'МойСклад' })).toBeInTheDocument();
+        expect(screen.getByRole('heading', { level: 2, name: 'Сайт' })).toBeInTheDocument();
         expect(screen.getByRole('heading', { level: 2, name: 'Аналитика' })).toBeInTheDocument();
         expect(await screen.findByRole('heading', { level: 1, name: /Лиля/ })).toBeInTheDocument();
         expect(screen.getAllByRole('link')).toHaveLength(24);
@@ -93,7 +91,7 @@ describe('HomePage', () => {
         renderPage();
 
         // Главная рендерится, доступные разделы видны
-        expect(await screen.findByRole('heading', { level: 2, name: 'Отгрузки' })).toBeInTheDocument();
+        expect(await screen.findByRole('heading', { level: 2, name: 'МойСклад' })).toBeInTheDocument();
         // Секция «Аналитика» отсутствует — и это не роняет страницу
         expect(screen.queryByRole('heading', { level: 2, name: 'Аналитика' })).not.toBeInTheDocument();
         expect(screen.getAllByRole('link', { name: /Товары/ })[0]).toHaveAttribute('href', '/shipments/products');
@@ -102,11 +100,11 @@ describe('HomePage', () => {
     it('закрепляет раздел в персональной главной', async () => {
         renderPage();
 
-        fireEvent.click(await screen.findByRole('button', { name: 'Закрепить Мониторинг' }));
+        fireEvent.click(await screen.findByRole('button', { name: 'Закрепить Инвентаризация' }));
 
         await waitFor(() => {
             expect(authApi.updateHome).toHaveBeenCalledWith(['/inventory']);
         });
-        expect(screen.getByRole('button', { name: 'Открепить Мониторинг' })).toBeInTheDocument();
+        expect(screen.getByRole('button', { name: 'Открепить Инвентаризация' })).toBeInTheDocument();
     });
 });

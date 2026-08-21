@@ -56,11 +56,12 @@ export default function DiscountedPage() {
         setError(null);
         try {
             const params = refresh ? { refresh: 1 } : undefined;
-            const response = await discountedApi.getList(params, controller.signal);
-            setData(response.data);
+            // Интерцептор в utils/api.js уже разворачивает ответ до response.data,
+            // так что здесь приходит сам объект, а не axios-response.
+            setData(await discountedApi.getList(params, controller.signal));
         } catch (e) {
             if (e.name === 'CanceledError' || e.name === 'AbortError') return;
-            setError(e?.response?.data?.detail || e?.message || 'Не удалось загрузить данные');
+            setError(e?.message || 'Не удалось загрузить данные');
         } finally {
             if (!controller.signal.aborted) setLoading(false);
         }
@@ -82,10 +83,7 @@ export default function DiscountedPage() {
                     display: 'flex', alignItems: 'baseline', justifyContent: 'space-between',
                     flexWrap: 'wrap', gap: 10, marginBottom: 4,
                 }}>
-                    <h1 style={{
-                        fontFamily: 'var(--serif)', fontSize: 30, fontWeight: 600,
-                        margin: 0, color: 'var(--ink)',
-                    }}>
+                    <h1 className="uc-title">
                         Уценка
                     </h1>
                     <button
@@ -130,7 +128,10 @@ export default function DiscountedPage() {
                             {LANES.map((lane) => {
                                 const items = inStock.filter((p) => lane.states.includes(p.state));
                                 return (
-                                    <section key={lane.key} className={`uc-col ${lane.tone}`}>
+                                    <section
+                                        key={lane.key}
+                                        className={`uc-col ${lane.tone}${items.length === 0 ? ' empty' : ''}`}
+                                    >
                                         <div className="uc-col-head">
                                             <span>{lane.title}</span>
                                             <span className="uc-col-count">{items.length}</span>

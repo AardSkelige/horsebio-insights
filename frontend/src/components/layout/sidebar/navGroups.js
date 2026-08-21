@@ -13,44 +13,24 @@ const NAV_GROUPS = [
         ],
     },
     {
-        label: 'Отгрузки',
+        label: 'МойСклад',
         items: [
-            { path: '/shipments/products',       label: 'Товары',       icon: Package, description: 'Анализ проданных товаров', pageKey: 'shipments-products' },
-            { path: '/shipments/counterparties', label: 'Покупатели',   icon: Users, description: 'Клиенты и их покупки', pageKey: 'shipments-counterparties' },
-            { path: '/shipments/materials',      label: 'Материалы',    icon: Layers, description: 'Расход материалов в продажах', pageKey: 'shipments-materials' },
-            { path: '/deadlines',                label: 'Сроки оплаты', icon: Clock, description: 'Дебиторка с отсрочкой платежа', pageKey: 'deadlines' },
+            { path: '/shipments/products',        label: 'Товары в отгрузках',      icon: Package, description: 'Анализ проданных товаров', pageKey: 'shipments-products' },
+            { path: '/shipments/counterparties',  label: 'Покупатели',              icon: Users, description: 'Клиенты и их покупки', pageKey: 'shipments-counterparties' },
+            { path: '/shipments/materials',       label: 'Материалы в отгрузках',   icon: Layers, description: 'Расход материалов в продажах', pageKey: 'shipments-materials' },
+            { path: '/deadlines',                 label: 'Сроки оплаты',            icon: Clock, description: 'Дебиторка с отсрочкой платежа', pageKey: 'deadlines' },
+            { path: '/supplies/materials',        label: 'Материалы в приёмках',    icon: Archive, description: 'Поступления на склад', pageKey: 'supplies-materials' },
+            { path: '/supplies/suppliers',        label: 'Поставщики',              icon: Truck, description: 'Контрагенты-поставщики', pageKey: 'supplies-suppliers' },
+            { path: '/production/calculator',     label: 'Калькулятор производства', icon: Factory, description: 'Расчёт сырья для производства', pageKey: 'production' },
+            { path: '/inventory',                 label: 'Инвентаризация',          icon: ClipboardList, description: 'Контроль позиций с 1-го числа месяца', pageKey: 'inventory' },
         ],
     },
     {
-        label: 'Уценка',
+        label: 'Сайт',
         items: [
-            { path: '/discounted', label: 'Уценка', icon: Tag, description: 'Товар с подходящим сроком на складе уценки', pageKey: 'discounted' },
-        ],
-    },
-    {
-        label: 'Заказы сайта',
-        items: [
-            { path: '/site-orders', label: 'Заказы сайта', icon: Mail, description: 'Заказы с horse-bio.ru и их путь в МойСклад', pageKey: 'site-orders' },
-            { path: '/delivery/calculator', label: 'Расчёт доставки', icon: Truck, description: 'Раскладка по коробкам и цена ПЭК/СДЭК', pageKey: 'delivery-calc' },
-        ],
-    },
-    {
-        label: 'Приёмки',
-        items: [
-            { path: '/supplies/materials', label: 'Материалы',  icon: Archive, description: 'Поступления на склад', pageKey: 'supplies-materials' },
-            { path: '/supplies/suppliers', label: 'Поставщики', icon: Truck, description: 'Контрагенты-поставщики', pageKey: 'supplies-suppliers' },
-        ],
-    },
-    {
-        label: 'Производство',
-        items: [
-            { path: '/production/calculator', label: 'Производство', icon: Factory, description: 'Расчёт сырья для производства', pageKey: 'production' },
-        ],
-    },
-    {
-        label: 'Инвентаризация',
-        items: [
-            { path: '/inventory', label: 'Мониторинг', icon: ClipboardList, description: 'Контроль позиций с 1-го числа месяца', pageKey: 'inventory' },
+            { path: '/site-orders',               label: 'Заказы сайта',            icon: Mail, description: 'Заказы с horse-bio.ru и их путь в МойСклад', pageKey: 'site-orders' },
+            { path: '/discounted',                label: 'Уценка',                  icon: Tag, description: 'Товар с подходящим сроком на складе уценки', pageKey: 'discounted' },
+            { path: '/delivery/calculator',       label: 'Расчёт доставки',         icon: Truck, description: 'Раскладка по коробкам и цена ПЭК/СДЭК', pageKey: 'delivery-calc' },
         ],
     },
     {

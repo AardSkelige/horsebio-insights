@@ -18,35 +18,55 @@
 
 # superuser=True — страница только для суперпользователя (в UI доступов не выдаётся).
 PAGES = [
-    {'key': 'shipments-products',       'label': 'Товары',          'group': 'Отгрузки',        'route': '/shipments/products',       'api_prefixes': ['/api/products/', '/api/shipments/']},
-    {'key': 'shipments-counterparties', 'label': 'Покупатели',      'group': 'Отгрузки',        'route': '/shipments/counterparties', 'api_prefixes': ['/api/counterparties/']},
-    {'key': 'shipments-materials',      'label': 'Материалы',       'group': 'Отгрузки',        'route': '/shipments/materials',      'api_prefixes': ['/api/materials/']},
-    {'key': 'deadlines',                'label': 'Сроки оплаты',    'group': 'Отгрузки',        'route': '/deadlines',                'api_prefixes': ['/api/deadlines/']},
-    {'key': 'site-orders',              'label': 'Заказы сайта',    'group': 'Заказы сайта',    'route': '/site-orders',              'api_prefixes': ['/api/site-orders/']},
-    {'key': 'delivery-calc',            'label': 'Расчёт доставки', 'group': 'Заказы сайта',    'route': '/delivery/calculator',      'api_prefixes': ['/api/delivery/']},
-    {'key': 'discounted',               'label': 'Уценка',          'group': 'Уценка',          'route': '/discounted',               'api_prefixes': ['/api/discounted/']},
-    {'key': 'supplies-materials',       'label': 'Приёмки',         'group': 'Приёмки',         'route': '/supplies/materials',       'api_prefixes': ['/api/supplies/materials/', '/api/supplies/']},
-    {'key': 'supplies-suppliers',       'label': 'Поставщики',      'group': 'Приёмки',         'route': '/supplies/suppliers',       'api_prefixes': ['/api/supplies/suppliers/']},
-    {'key': 'production',               'label': 'Производство',    'group': 'Производство',    'route': '/production/calculator',    'api_prefixes': ['/api/production/']},
-    {'key': 'inventory',                'label': 'Инвентаризация',  'group': 'Инвентаризация',  'route': '/inventory',                'api_prefixes': ['/api/inventory/']},
-    {'key': 'abc',                      'label': 'ABC Анализ',      'group': 'Аналитика',       'route': '/analysis/abc',             'api_prefixes': ['/api/analysis/abc/']},
-    {'key': 'seasonal',                 'label': 'Сезонность',      'group': 'Аналитика',       'route': '/analysis/seasonal',        'api_prefixes': ['/api/analysis/seasonal/']},
-    {'key': 'fbo',                      'label': 'FBO Заказы',      'group': 'Аналитика',       'route': '/analysis/fbo',             'api_prefixes': ['/api/analysis/fbo/']},
-    {'key': 'fbo-stock',                'label': 'Остатки для FBO', 'group': 'Аналитика',       'route': '/analysis/fbo-stock',       'api_prefixes': ['/api/analysis/fbo-stock/']},
-    {'key': 'counterparty-groups',      'label': 'Группы клиентов', 'group': 'Аналитика',       'route': '/analysis/counterparty-groups', 'api_prefixes': ['/api/counterparty-groups/']},
-    {'key': 'purchases',                'label': 'Помощник закупок','group': 'Аналитика',       'route': '/purchases/analysis',       'api_prefixes': ['/api/analysis/purchase/']},
-    {'key': 'ozon-fbo-converter',       'label': 'FBO Конвертер',   'group': 'Аналитика',       'route': '/ozon/fbo-converter',       'api_prefixes': ['/api/ozon/fbo-converter/']},
-    {'key': 'ozon',                     'label': 'Ozon',            'group': 'Аналитика',       'route': '/analysis/ozon',            'api_prefixes': ['/api/ozon/']},
-    {'key': 'cash-flow',                'label': 'ДДС',             'group': 'Аналитика',       'route': '/analysis/cash-flow',       'api_prefixes': ['/api/analysis/cash-flow/']},
-    {'key': 'cash-flow-v2',             'label': 'ДДС · новая',     'group': 'Аналитика',       'route': '/analysis/cash-flow-v2',    'api_prefixes': ['/api/analysis/cash-flow/']},
+    # Порядок и подписи держим синхронными с меню (frontend/src/components/layout/
+    # sidebar/navGroups.js): страница «Доступы» показывает те же группы, что видит
+    # пользователь в сайдбаре, иначе деление разъезжается.
+    {'key': 'shipments-products',       'label': 'Товары в отгрузках',       'group': 'МойСклад',          'route': '/shipments/products',          'api_prefixes': ['/api/products/', '/api/shipments/']},
+    {'key': 'shipments-counterparties', 'label': 'Покупатели',               'group': 'МойСклад',          'route': '/shipments/counterparties',    'api_prefixes': ['/api/counterparties/']},
+    {'key': 'shipments-materials',      'label': 'Материалы в отгрузках',    'group': 'МойСклад',          'route': '/shipments/materials',         'api_prefixes': ['/api/materials/']},
+    {'key': 'deadlines',                'label': 'Сроки оплаты',             'group': 'МойСклад',          'route': '/deadlines',                   'api_prefixes': ['/api/deadlines/']},
+    {'key': 'supplies-materials',       'label': 'Материалы в приёмках',     'group': 'МойСклад',          'route': '/supplies/materials',          'api_prefixes': ['/api/supplies/materials/', '/api/supplies/']},
+    {'key': 'supplies-suppliers',       'label': 'Поставщики',               'group': 'МойСклад',          'route': '/supplies/suppliers',          'api_prefixes': ['/api/supplies/suppliers/']},
+    {'key': 'production',               'label': 'Калькулятор производства', 'group': 'МойСклад',          'route': '/production/calculator',       'api_prefixes': ['/api/production/']},
+    {'key': 'inventory',                'label': 'Инвентаризация',           'group': 'МойСклад',          'route': '/inventory',                   'api_prefixes': ['/api/inventory/']},
+
+    {'key': 'site-orders',              'label': 'Заказы сайта',             'group': 'Сайт',              'route': '/site-orders',                 'api_prefixes': ['/api/site-orders/']},
+    {'key': 'discounted',               'label': 'Уценка',                   'group': 'Сайт',              'route': '/discounted',                  'api_prefixes': ['/api/discounted/']},
+    {'key': 'delivery-calc',            'label': 'Расчёт доставки',          'group': 'Сайт',              'route': '/delivery/calculator',         'api_prefixes': ['/api/delivery/']},
+
+    {'key': 'abc',                      'label': 'ABC Анализ',               'group': 'Аналитика',         'route': '/analysis/abc',                'api_prefixes': ['/api/analysis/abc/']},
+    {'key': 'seasonal',                 'label': 'Сезонность',               'group': 'Аналитика',         'route': '/analysis/seasonal',           'api_prefixes': ['/api/analysis/seasonal/']},
+    {'key': 'fbo',                      'label': 'FBO Заказы',               'group': 'Аналитика',         'route': '/analysis/fbo',                'api_prefixes': ['/api/analysis/fbo/']},
+    {'key': 'fbo-stock',                'label': 'Остатки для FBO',          'group': 'Аналитика',         'route': '/analysis/fbo-stock',          'api_prefixes': ['/api/analysis/fbo-stock/']},
+    {'key': 'counterparty-groups',      'label': 'Группы клиентов',          'group': 'Аналитика',         'route': '/analysis/counterparty-groups','api_prefixes': ['/api/counterparty-groups/']},
+    {'key': 'purchases',                'label': 'Помощник закупок',         'group': 'Аналитика',         'route': '/purchases/analysis',          'api_prefixes': ['/api/analysis/purchase/']},
+    {'key': 'ozon-fbo-converter',       'label': 'FBO Конвертер',            'group': 'Аналитика',         'route': '/ozon/fbo-converter',          'api_prefixes': ['/api/ozon/fbo-converter/']},
+    {'key': 'ozon',                     'label': 'Ozon',                     'group': 'Аналитика',         'route': '/analysis/ozon',               'api_prefixes': ['/api/ozon/']},
+    {'key': 'cash-flow',                'label': 'ДДС',                      'group': 'Аналитика',         'route': '/analysis/cash-flow',          'api_prefixes': ['/api/analysis/cash-flow/']},
+    {'key': 'cash-flow-v2',             'label': 'ДДС · новая',              'group': 'Аналитика',         'route': '/analysis/cash-flow-v2',       'api_prefixes': ['/api/analysis/cash-flow/']},
+
     # Только для суперпользователя — в UI доступов не показываются
-    {'key': 'checks',           'label': 'Проверки',          'group': 'Администрирование', 'route': '/checks',           'api_prefixes': ['/api/checks/'], 'superuser': True},
-    {'key': 'system-analytics', 'label': 'Аналитика системы', 'group': 'Администрирование', 'route': '/system/analytics', 'api_prefixes': ['/api/auth/admin-analytics/', '/api/auth/sessions/'], 'superuser': True},
+    {'key': 'checks',                   'label': 'Проверки',                 'group': 'Администрирование', 'route': '/checks',                      'api_prefixes': ['/api/checks/'], 'superuser': True},
+    {'key': 'system-analytics',         'label': 'Аналитика системы',        'group': 'Администрирование', 'route': '/system/analytics',            'api_prefixes': ['/api/auth/admin-analytics/', '/api/auth/sessions/'], 'superuser': True},
 ]
 
 # Ozon-конвертер и Ozon-аналитика делят общий префикс /api/ozon/. Чтобы доступ к
 # конвертеру не открывал всю Ozon-аналитику, более специфичный префикс проверяем
 # первым — правило ниже сортирует префиксы по длине (длинный = специфичнее).
+
+_ROUTE_LABELS = {p['route']: p['label'] for p in PAGES}
+
+
+def label_for_route(route):
+    """Актуальная подпись страницы по её маршруту.
+
+    Аналитика использования хранит имя страницы строкой на момент визита, поэтому
+    после переименования пункта меню история одной и той же страницы разъезжается
+    на несколько названий. Ключ у нас — маршрут, он не меняется; имя всегда берём
+    отсюда, а сохранённое в логе используем лишь как запасное.
+    """
+    return _ROUTE_LABELS.get(route)
+
 
 # Ключи страниц, доступных обычному пользователю (можно выдавать в UI)
 ASSIGNABLE_PAGE_KEYS = [p['key'] for p in PAGES if not p.get('superuser')]

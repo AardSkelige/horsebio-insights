@@ -182,14 +182,30 @@
     text-align: center;
 }
 
-/* ── мобильная версия: дорожки в столбик ───────────────── */
+.uc-title {
+    font-family: var(--serif);
+    font-size: 30px;
+    font-weight: 600;
+    margin: 0;
+    color: var(--ink);
+}
+
+/* ── мобильная версия ──────────────────────────────────── */
+
+/* Дорожки в столбик. Пустые прячем: на десктопе пустая колонка сама по себе
+   информация («снимать нечего»), а в столбик она превращается в три экрана
+   заголовков без содержимого. */
 @media (max-width: 900px) {
     .uc-board { grid-template-columns: 1fr; gap: 20px; }
+    .uc-col.empty { display: none; }
 }
 
 @media (max-width: 520px) {
+    .uc-title { font-size: 24px; }
     .uc-summary { grid-template-columns: repeat(2, minmax(0, 1fr)); }
-    .uc-summary .v { font-size: 22px; }
+    .uc-summary > div { padding: 10px 12px; }
+    .uc-summary .v { font-size: 21px; }
+    /* Три кнопки в ряд не помещаются — раскладываем на всю ширину */
     .uc-actions .uc-btn { flex: 1 1 auto; justify-content: center; }
 }
 

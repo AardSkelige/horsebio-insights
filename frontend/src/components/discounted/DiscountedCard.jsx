@@ -38,7 +38,7 @@ export default function DiscountedCard({ position, siteAdminUrl, onDelisted }) {
         } catch (e) {
             // Молчаливый провал опаснее ошибки: человек решит, что товар снят,
             // а он останется в продаже. Поэтому текст показываем прямо на карточке.
-            setError(e?.response?.data?.detail || e?.message || 'Сайт не принял обмен');
+            setError(e?.message || 'Сайт не принял обмен');
         } finally {
             setBusy(false);
         }

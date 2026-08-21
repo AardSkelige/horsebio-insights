@@ -11,7 +11,10 @@ from django.views.decorators.csrf import ensure_csrf_cookie
 from django.views.decorators.http import require_http_methods
 
 from .models import UserActivityLog, UserHomePreference, UserPageEvent, UserSession, UserPageAccess
-from .access import pages_catalog, sanitize_page_keys, user_allowed_page_keys, ASSIGNABLE_PAGE_KEYS
+from .access import (
+    pages_catalog, sanitize_page_keys, user_allowed_page_keys, label_for_route,
+    ASSIGNABLE_PAGE_KEYS,
+)
 
 
 MAX_PINNED_HOME_PATHS = 3
@@ -268,27 +271,54 @@ def home_preferences_view(request):
     })
 
 
+def _top_pages(queryset, extra_annotations=None):
+    """Топ страниц по числу визитов, сгруппированный по маршруту.
+
+    Группируем именно по page_path, а не по паре путь+имя: имя страницы пишется
+    в лог строкой на момент визита, и после переименования пункта меню одна
+    страница разъехалась бы на две строки в отчёте. Подпись подставляем актуальную
+    из реестра страниц; сохранённая в логе остаётся запасной — для страниц вне
+    реестра (профиль, главная).
+    """
+    annotations = {'visits': Count('id'), 'avg_duration': Avg('duration_seconds')}
+    annotations.update(extra_annotations or {})
+
+    rows = list(queryset.values('page_path').annotate(**annotations).order_by('-visits')[:10])
+
+    paths = [row['page_path'] for row in rows]
+    stored = dict(queryset.filter(page_path__in=paths).values_list('page_path', 'page_name'))
+    for row in rows:
+        row['page_name'] = label_for_route(row['page_path']) or stored.get(row['page_path']) or row['page_path']
+    return rows
+
+
 def _compute_badge(user, page_qs, sessions_this_month):
     badge = {'title': 'Цифровой бродяга', 'description': 'Изучаешь систему со всех сторон'}
 
-    top = page_qs.values('page_name').annotate(n=Count('id')).order_by('-n').first()
+    # Ключ — маршрут, а не подпись страницы: подписи в меню меняются (и уже менялись),
+    # и бейдж от этого молча переставал выдаваться.
+    top = page_qs.values('page_path').annotate(n=Count('id')).order_by('-n').first()
     if top:
         page_badges = {
-            'ABC Анализ':        ('ABC-маньяк',            'Категоризируешь всё что движется'),
-            'ДДС':               ('Денежный шпион',         'Ни один рубль не проскочит мимо'),
-            'FBO Заказы':        ('Логистический гений',    'Держишь поставки под полным контролем'),
-            'Производство':      ('Инженер-рационализатор', 'Сырьё посчитано до грамма'),
-            'Мониторинг':        ('Складской детектив',     'Ни одна позиция не ускользнёт'),
-            'Сезонность':        ('Охотник за трендами',    'Видишь паттерны там, где другие — хаос'),
-            'Помощник закупок':  ('Оптимизатор',            'Закупаешь умнее всех'),
-            'Группы клиентов':   ('Профайлер',              'Знаешь клиентов лучше, чем они сами'),
-            'Покупатели':        ('Профайлер',              'Знаешь клиентов лучше, чем они сами'),
-            'Товары':            ('Товаровед',              'В курсе каждого SKU'),
-            'Материалы':         ('Материальный мир',       'Знаешь расход до последнего грамма'),
-            'Поставщики':        ('Переговорщик',           'Держишь поставщиков в тонусе'),
-            'Ozon':              ('Маркетплейс-ниндзя',     'Завоёвываешь полки незаметно'),
+            '/analysis/abc':                 ('ABC-маньяк',             'Категоризируешь всё что движется'),
+            '/analysis/cash-flow':           ('Денежный шпион',         'Ни один рубль не проскочит мимо'),
+            '/analysis/cash-flow-v2':        ('Денежный шпион',         'Ни один рубль не проскочит мимо'),
+            '/analysis/fbo':                 ('Логистический гений',    'Держишь поставки под полным контролем'),
+            '/production/calculator':        ('Инженер-рационализатор', 'Сырьё посчитано до грамма'),
+            '/inventory':                    ('Складской детектив',     'Ни одна позиция не ускользнёт'),
+            '/analysis/seasonal':            ('Охотник за трендами',    'Видишь паттерны там, где другие — хаос'),
+            '/purchases/analysis':           ('Оптимизатор',            'Закупаешь умнее всех'),
+            '/analysis/counterparty-groups': ('Профайлер',              'Знаешь клиентов лучше, чем они сами'),
+            '/shipments/counterparties':     ('Профайлер',              'Знаешь клиентов лучше, чем они сами'),
+            '/shipments/products':           ('Товаровед',              'В курсе каждого SKU'),
+            '/shipments/materials':          ('Материальный мир',       'Знаешь расход до последнего грамма'),
+            '/supplies/materials':           ('Материальный мир',       'Знаешь расход до последнего грамма'),
+            '/supplies/suppliers':           ('Переговорщик',           'Держишь поставщиков в тонусе'),
+            '/analysis/ozon':                ('Маркетплейс-ниндзя',     'Завоёвываешь полки незаметно'),
+            '/site-orders':                  ('Диспетчер заказов',      'Ни один заказ с сайта не потеряется'),
+            '/discounted':                   ('Спасатель тухляка',      'Продаёшь то, что другие списали бы'),
         }
-        entry = page_badges.get(top['page_name'])
+        entry = page_badges.get(top['page_path'])
         if entry:
             badge = {'title': entry[0], 'description': entry[1]}
 
@@ -325,12 +355,7 @@ def usage_view(request):
     page_qs = UserPageEvent.objects.filter(user=request.user, created_at__gte=month_start)
     total_seconds = page_qs.aggregate(total=Sum('duration_seconds'))['total'] or 0
 
-    top_pages = list(
-        page_qs
-        .values('page_path', 'page_name')
-        .annotate(visits=Count('id'), avg_duration=Avg('duration_seconds'))
-        .order_by('-visits')[:10]
-    )
+    top_pages = _top_pages(page_qs)
 
     badge = _compute_badge(request.user, page_qs, sessions_this_month)
 
@@ -396,13 +421,11 @@ def admin_analytics_view(request):
 
     # Топ страниц — только активность обычных пользователей: посещения суперпользователей
     # (и, как следствие, admin-only страницы вроде /checks) не искажают картину.
-    top_pages = list(
+    top_pages = _top_pages(
         UserPageEvent.objects
         .filter(created_at__gte=period_start, created_at__lt=period_end)
-        .exclude(user__is_superuser=True)
-        .values('page_path', 'page_name')
-        .annotate(visits=Count('id'), unique_users=Count('user', distinct=True), avg_duration=Avg('duration_seconds'))
-        .order_by('-visits')[:10]
+        .exclude(user__is_superuser=True),
+        {'unique_users': Count('user', distinct=True)},
     )
 
     login_qs = (
