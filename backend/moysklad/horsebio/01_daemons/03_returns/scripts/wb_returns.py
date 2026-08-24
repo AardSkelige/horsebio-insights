@@ -129,7 +129,7 @@ def is_at_pickup(info: dict) -> bool:
     return bool(info.get('ready_at')) and not info.get('issued_at')
 
 
-def state_for(info: dict, warn_days: int = 30) -> str:
+def state_for(info: dict, warn_days: int = 60) -> str:
     """Имя статуса МС для одной строки отчёта ВБ."""
     status = info.get('status', '')
     if status == ST_ISSUED:
@@ -145,13 +145,13 @@ def state_for(info: dict, warn_days: int = 30) -> str:
 _STATE_PRIORITY = {AT_PICKUP: 0, AT_OUR_SITE: 1, STUCK: 2, IN_TRANSIT: 3}
 
 
-def state_for_group(infos: list, warn_days: int = 30) -> str:
+def state_for_group(infos: list, warn_days: int = 60) -> str:
     """Статус для задания целиком — по самой срочной из его строк."""
     return min((state_for(i, warn_days) for i in infos),
                key=lambda s: _STATE_PRIORITY.get(s, 9))
 
 
-def is_draft_dead(infos: list, warn_days: int = 30) -> bool:
+def is_draft_dead(infos: list, warn_days: int = 60) -> bool:
     """У ВБ возвраты всегда едут к нам — удалять черновики не за что."""
     return False
 

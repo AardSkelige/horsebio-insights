@@ -114,7 +114,7 @@ def age_days(info: dict) -> int:
         return 0
 
 
-def state_for(info: dict, warn_days: int = 30) -> str:
+def state_for(info: dict, warn_days: int = 60) -> str:
     """Имя статуса МС для одной записи возврата Ozon."""
     age = age_days(info)
     if is_homeward(info):
@@ -143,13 +143,13 @@ def state_for(info: dict, warn_days: int = 30) -> str:
 _STATE_PRIORITY = {AT_PICKUP: 0, AT_OUR_SITE: 1, STUCK: 2, IN_TRANSIT: 3, GONE_TO_MP: 4}
 
 
-def state_for_group(infos: list, warn_days: int = 30) -> str:
+def state_for_group(infos: list, warn_days: int = 60) -> str:
     """Статус для отправления целиком — по самой срочной из его записей."""
     return min((state_for(i, warn_days) for i in infos),
                key=lambda s: _STATE_PRIORITY.get(s, 9))
 
 
-def is_draft_dead(infos: list, warn_days: int = 30) -> bool:
+def is_draft_dead(infos: list, warn_days: int = 60) -> bool:
     """Черновик можно удалять: товар к нам не приедет и это уже не изменится.
 
     Два условия сразу, и оба обязательны:

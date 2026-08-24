@@ -40,9 +40,10 @@ MS_HEADERS = {
     'Content-Type': 'application/json',
 }
 
-# Столько дней в пути — и возврат считается зависшим. Согласовано с проверкой
-# «Возвраты в пути» (PENDING_RETURN_WARN_DAYS в 01_health_check.py).
-WARN_DAYS = 30
+# Столько дней в пути — и возврат считается зависшим. Совпадает с WARN_DAYS в
+# 04_pending_returns.py: срок, по истечении которого перевозчику/маркетплейсу
+# можно предъявить претензию за пропавшую посылку — 60 дней.
+WARN_DAYS = 60
 
 
 def fetch_drafts(agent_names) -> list:

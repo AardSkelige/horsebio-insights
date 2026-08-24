@@ -9,14 +9,20 @@ import InfoTip from './InfoTip';
 
 
 
-// Корзины возраста для ленты: [от, до) дней, цвет, подпись
-const BUCKETS = [
-    // Шкала «свежести»: чем дольше возврат висит, тем плотнее заливка
-    { from: 0, to: 10, color: 'color-mix(in srgb, var(--primary) 25%, var(--canvas))', label: 'до 10 дней', darkText: true },
-    { from: 10, to: 20, color: 'color-mix(in srgb, var(--primary) 55%, var(--canvas))', label: '10–20 дней' },
-    { from: 20, to: 30, color: 'var(--primary)', label: '20–30 дней' },
-    { from: 30, to: Infinity, color: 'var(--warning)', label: '⚠ дольше 30', warn: true },
-];
+// Корзины возраста для ленты: [от, до) дней, цвет, подпись. Три равные трети от
+// порога «застрял» (warnDays) — шкала «свежести», чем дольше висит, тем плотнее
+// заливка, — и финальная корзина «дольше порога», совпадающая с KPI/группой ниже.
+function buildBuckets(warnDays) {
+    const step = warnDays / 3;
+    const p1 = Math.round(step);
+    const p2 = Math.round(step * 2);
+    return [
+        { from: 0, to: p1, color: 'color-mix(in srgb, var(--primary) 25%, var(--canvas))', label: `до ${p1} дней`, darkText: true },
+        { from: p1, to: p2, color: 'color-mix(in srgb, var(--primary) 55%, var(--canvas))', label: `${p1}–${p2} дней` },
+        { from: p2, to: warnDays, color: 'var(--primary)', label: `${p2}–${warnDays} дней` },
+        { from: warnDays, to: Infinity, color: 'var(--warning)', label: `⚠ дольше ${warnDays}`, warn: true },
+    ];
+}
 
 // Маркетплейсы: короткая подпись + цвет точки. Порядок — как показываем в разбивке.
 const MP_ORDER = ['ozon', 'wb', 'other'];
@@ -55,7 +61,7 @@ const numStyle = (color, size = 26) => ({
 /** Плоская лента: вся зависшая сумма, разбитая по возрасту возвратов.
  *  Легенда — отдельным рядом чипов, не под сегментами: реальное распределение
  *  бывает очень неравномерным (один сегмент 90%), и подписи под узкими наезжают. */
-function AgeStrip({ items }) {
+function AgeStrip({ items, warnDays }) {
     // Плавающий тултип у курсора (нативный title медленный и не в стиле приложения)
     const [tip, setTip] = useState(null); // {x, y, text}
     const tipRef = useRef(null);
@@ -77,7 +83,7 @@ function AgeStrip({ items }) {
         el.style.top = `${top}px`;
     }, [tip]);
 
-    const buckets = BUCKETS.map((b) => {
+    const buckets = buildBuckets(warnDays).map((b) => {
         const inb = items.filter((it) => (it.age_days ?? 0) >= b.from && (it.age_days ?? 0) < b.to);
         return {
             ...b, count: inb.length,
@@ -145,7 +151,7 @@ function AgeStrip({ items }) {
         </div>
     );
 }
-AgeStrip.propTypes = { items: PropTypes.array.isRequired };
+AgeStrip.propTypes = { items: PropTypes.array.isRequired, warnDays: PropTypes.number.isRequired };
 
 // Старые запуски не отдавали moment/agent отдельными полями — достаём из строки detail
 // («2026-04-21 · 43 дн · 1 912р · Wildberries»)
@@ -340,7 +346,7 @@ export default function PendingReturnsDetail({ onBack }) {
                         )}
                     </div>
 
-                    <AgeStrip items={inTransit} />
+                    <AgeStrip items={inTransit} warnDays={warnDays} />
 
                     {items.length === 0 ? (
                         <div style={{ textAlign: 'center', padding: 40, color: 'var(--success)', fontWeight: 600 }}>
