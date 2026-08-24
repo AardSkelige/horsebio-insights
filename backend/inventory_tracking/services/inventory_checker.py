@@ -33,9 +33,13 @@ class InventoryChecker:
             month_start = date.today().replace(day=1)
 
         month_end = _last_day_of_month(month_start)
-        # A run is a month snapshot if it covers a fully completed month
+        # A run is a month snapshot if it covers a fully completed month. The daily
+        # scheduler run lands ON month_end itself (last day of month, every day
+        # unconditionally) — that IS the closing run, so >= not >: with a strict >,
+        # that exact run was never marked a snapshot, and since nothing else
+        # automatically revisits a month after it ends, it stayed unmarked forever.
         today = date.today()
-        is_month_snapshot = (today > month_end)
+        is_month_snapshot = (today >= month_end)
 
         client = self._get_client()
 
