@@ -420,6 +420,11 @@ class OrderCreator:
                     try:
                         if self._maybe_cancel_stale_draft(order_id, ms):
                             counts["orders_cancelled"] += 1
+                        # Успешная сверка — снимаем last_error от прежних сбоев (например,
+                        # временной недоступности МойСклад), иначе он молча висел бы в
+                        # ms бесконечно и продолжал бы всплывать в /checks за 14 дней
+                        ms.pop("last_error", None)
+                        ms.pop("last_error_at", None)
                     except Exception as e:
                         print(f"    ERROR: автоотмена заказа {order_id} упала: {e}")
                         ms["last_error"] = str(e)
