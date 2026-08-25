@@ -43,6 +43,11 @@ WINDOW_SIZE = 500
 # окно перечитывается, и завтра этот заказ будет проверен.
 SETTLE_DAYS = 1
 
+# Сколько дней сверка терпит молчание сайта, прежде чем поднять тревогу.
+# Прогон ежедневный, так что двух суток хватает и на разовый сбой, и на то,
+# чтобы отличить «сегодня не отдал» от «не отдаёт вообще».
+STALE_FETCH_DAYS = 2
+
 EMPTY_STORE = {"orders": {}, "last_fetch": None, "last_acknowledge": None}
 
 
@@ -107,10 +112,14 @@ def sync_window(export, path: Path, acknowledge: bool, now: datetime = None) -> 
     export — объект с fetch()/acknowledge() (SiteOrdersExport или его двойник).
     """
     orders = export.fetch()
+    refused = getattr(export, "refused", False)
 
     store = load_store(path)
     fresh = merge(store, orders)
-    store["last_fetch"] = (now or datetime.now()).isoformat(timespec="seconds")
+    # last_fetch двигаем только после настоящего ответа: по нему потом считаем,
+    # давно ли сайт вообще что-то отдавал
+    if not refused:
+        store["last_fetch"] = (now or datetime.now()).isoformat(timespec="seconds")
     save_store(path, store)
 
     ack, lost = None, []
@@ -124,7 +133,17 @@ def sync_window(export, path: Path, acknowledge: bool, now: datetime = None) -> 
 
     dropped = prune(store, now=now)
     save_store(path, store)
-    return {"fresh": fresh, "window": len(orders), "ack": ack, "lost": lost, "dropped": dropped}
+    return {"fresh": fresh, "window": len(orders), "ack": ack, "lost": lost,
+            "dropped": dropped, "refused": refused,
+            "stale_days": fetch_age_days(store, now=now)}
+
+
+def fetch_age_days(store: dict, now: datetime = None) -> int | None:
+    """Сколько суток прошло с последней удачной выгрузки (None — не было ни разу)."""
+    last = store.get("last_fetch")
+    if not last:
+        return None
+    return ((now or datetime.now()) - datetime.fromisoformat(last)).days
 
 
 def compare(store: dict, ms_index: dict, today: str = None) -> tuple:
@@ -176,7 +195,8 @@ def _item(order: SiteOrder, ms: dict, detail: str, severity: str) -> dict:
     }
 
 
-def build_payload(findings: dict, checked: int, export_error: str = None) -> dict:
+def build_payload(findings: dict, checked: int, export_error: str = None,
+                  stale_days: int = None) -> dict:
     """Структурированный результат для страницы /checks.
 
     export_error — текст сбоя выгрузки, если сайт не ответил. Его обязательно
@@ -184,11 +204,17 @@ def build_payload(findings: dict, checked: int, export_error: str = None) -> dic
     SITE_CML_*, протух пароль) молча рисует зелёное «расхождений нет», хотя
     на самом деле не сверила ничего.
     """
+    stale = None
+    if stale_days is None:
+        stale = "выгрузка ни разу не отдала заказы"
+    elif stale_days >= STALE_FETCH_DAYS:
+        stale = f"последняя удачная выгрузка была {stale_days} дн. назад"
+
     missing = findings["missing"]
     sum_mismatch = findings["sum_mismatch"]
     unpaid = findings["unpaid"]
     critical = len(missing) + len(sum_mismatch) + (1 if export_error and checked == 0 else 0)
-    important = len(unpaid) + (1 if export_error and checked else 0)
+    important = len(unpaid) + (1 if export_error and checked else 0) + (1 if stale else 0)
 
     categories = []
     if export_error:
@@ -206,6 +232,18 @@ def build_payload(findings: dict, checked: int, export_error: str = None) -> dic
             "items": [{"key": "export_down", "ms_id": "", "ms_href": "",
                        "object": "Обмен с сайтом", "severity": "critical" if blind else "important",
                        "detail": export_error}],
+        })
+    if stale is not None:
+        categories.append({
+            "key": "export_stale", "title": "Сайт давно не отдаёт заказы",
+            "severity": "important", "kind": None, "ms_type": None, "count": 1,
+            "note": "Обмен отвечает, но заказов не присылает. Сверка идёт по сохранённой копии и "
+                    "не видит новые заказы — то есть тихо устаревает. Проверить в админке сайта "
+                    "раздел выгрузки заказов: есть ли заказы со статусом «Не выгружен» и не упёрся "
+                    "ли обмен в ограничение частоты.",
+            "items": [{"key": "export_stale", "ms_id": "", "ms_href": "",
+                       "object": "Обмен с сайтом", "severity": "important",
+                       "detail": stale}],
         })
     if missing:
         categories.append({
@@ -258,6 +296,8 @@ def build_payload(findings: dict, checked: int, export_error: str = None) -> dic
          "tone": "important" if unpaid else "ok", **({"cat": "unpaid"} if unpaid else {})},
         {"label": "Сверено заказов", "value": checked,
          "tone": "critical" if (export_error and not checked) else "neutral"},
+        *([{"label": "Свежесть выгрузки", "value": stale, "tone": "important", "cat": "export_stale"}]
+          if stale else []),
     ]
 
     return {

@@ -121,7 +121,7 @@ class ReconcileTests(SimpleTestCase):
         findings, _ = core.compare(_store([self.order]), {"594131116": _ms(1308, 1264)}, today=TODAY)
 
         self.assertEqual(len(findings["sum_mismatch"]), 1)
-        payload = core.build_payload(findings, 1)
+        payload = core.build_payload(findings, 1, stale_days=0)
         self.assertEqual(payload["summary"]["critical"], 1)
         detail = payload["categories"][0]["items"][0]["detail"]
         self.assertIn("разница 44.00 ₽", detail)
@@ -132,7 +132,7 @@ class ReconcileTests(SimpleTestCase):
 
         self.assertEqual(checked, 1)
         self.assertEqual(len(findings["missing"]), 1)
-        payload = core.build_payload(findings, 1)
+        payload = core.build_payload(findings, 1, stale_days=0)
         self.assertEqual(payload["categories"][0]["key"], "missing")
         # Ссылка ведёт на сайт: документа в МойСклад ещё нет
         self.assertTrue(payload["categories"][0]["items"][0]["ms_href"].startswith(core.SITE_ORDER_URL))
@@ -141,7 +141,7 @@ class ReconcileTests(SimpleTestCase):
         findings, _ = core.compare(_store([self.order]), {"594131116": _ms(1264, 1000)}, today=TODAY)
 
         self.assertEqual(len(findings["unpaid"]), 1)
-        self.assertEqual(core.build_payload(findings, 1)["summary"]["important"], 1)
+        self.assertEqual(core.build_payload(findings, 1, stale_days=0)["summary"]["important"], 1)
 
     def test_orders_before_robot_are_skipped(self):
         # До ROBOT_START заказы заводили руками и с чужим externalCode — по нему
@@ -176,8 +176,9 @@ class ReconcileTests(SimpleTestCase):
 class FakeExport:
     """Двойник SiteOrdersExport: отдаёт заданное окно и считает подтверждения."""
 
-    def __init__(self, orders):
+    def __init__(self, orders, refused=False):
         self.orders = orders
+        self.refused = refused
         self.acknowledged = 0
 
     def fetch(self):
@@ -194,6 +195,22 @@ class SyncWindowTests(SimpleTestCase):
 
     def _run(self, tmp, **kwargs):
         return core.sync_window(self.export, Path(tmp) / "store.json", **kwargs)
+
+    def test_refusal_does_not_move_last_fetch(self):
+        # По last_fetch считается, давно ли сайт что-то отдавал. Если двигать
+        # его на отказе, молчание сайта никогда не всплывёт находкой.
+        self.export = FakeExport([], refused=True)
+
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / "store.json"
+            core.save_store(path, dict(core.EMPTY_STORE, orders={},
+                                       last_fetch="2026-08-01T09:00:00"))
+            result = core.sync_window(self.export, path, acknowledge=True,
+                                      now=datetime(2026, 8, 25))
+
+            self.assertTrue(result["refused"])
+            self.assertEqual(core.load_store(path)["last_fetch"], "2026-08-01T09:00:00")
+            self.assertEqual(result["stale_days"], 23)
 
     def test_incomplete_window_is_not_acknowledged(self):
         # Окно не полное — значит мы догнали, и за ним ничего не стоит.
@@ -277,16 +294,33 @@ class ExportFailureTests(SimpleTestCase):
         self.assertIn("timeout", payload["categories"][0]["items"][0]["detail"])
 
     def test_failure_with_stored_copy_is_only_important(self):
-        payload = core.build_payload(self.EMPTY, 12, export_error="Сайт недоступен (query): timeout")
+        payload = core.build_payload(self.EMPTY, 12, export_error="Сайт недоступен (query): timeout", stale_days=0)
 
         self.assertEqual((payload["summary"]["critical"], payload["summary"]["important"]), (0, 1))
         self.assertEqual(payload["categories"][0]["severity"], "important")
 
     def test_healthy_run_reports_no_export_category(self):
-        payload = core.build_payload(self.EMPTY, 12)
+        payload = core.build_payload(self.EMPTY, 12, stale_days=0)
 
         self.assertEqual(payload["categories"], [])
         self.assertEqual(payload["summary"]["ok"], 12)
+
+    def test_long_silence_is_reported(self):
+        # Сайт отвечает, но заказов не отдаёт: копия тихо устаревает, и без
+        # находки страница показывала бы бодрое «расхождений нет»
+        payload = core.build_payload(self.EMPTY, 12, stale_days=core.STALE_FETCH_DAYS)
+
+        self.assertEqual(payload["summary"]["important"], 1)
+        self.assertEqual(payload["categories"][0]["key"], "export_stale")
+
+    def test_never_fetched_is_reported(self):
+        payload = core.build_payload(self.EMPTY, 0, stale_days=None)
+
+        self.assertEqual(payload["categories"][0]["key"], "export_stale")
+        self.assertIn("ни разу", payload["categories"][0]["items"][0]["detail"])
+
+    def test_yesterday_fetch_is_still_fine(self):
+        self.assertEqual(core.build_payload(self.EMPTY, 12, stale_days=1)["categories"], [])
 
 
 class StoreTests(SimpleTestCase):
@@ -350,17 +384,22 @@ class ExportFetchTests(SimpleTestCase):
         export._request = lambda mode: response
         return export
 
-    def test_empty_queue_is_not_an_error(self):
-        # Когда отдавать нечего, сайт присылает JSON-ошибку с HTTP 200 — это
-        # нормальная пустая очередь, а не сбой: checkauth к этому моменту прошёл
+    def test_refusal_is_reported_but_does_not_crash(self):
+        # Отдавать сайт отказался — падать нельзя (сверимся по копии), но и
+        # делать вид, что заказов просто нет, тоже: 25.08.2026 он так отвечал,
+        # хотя в админке заказы числились «Не выгружен»
         body = '\ufeff{"error":{"message":"Bad Request","code":400}}'
+        export = self._export(self._Response(body))
 
-        self.assertEqual(self._export(self._Response(body)).fetch(), [])
+        self.assertEqual(export.fetch(), [])
+        self.assertTrue(export.refused)
 
     def test_xml_is_parsed(self):
-        orders = self._export(self._Response(SALE_XML)).fetch()
+        export = self._export(self._Response(SALE_XML))
+        orders = export.fetch()
 
         self.assertEqual([o.number for o in orders], ["2066"])
+        self.assertFalse(export.refused)
 
     def test_http_error_is_reported(self):
         with self.assertRaises(SiteExportError):

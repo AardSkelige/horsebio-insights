@@ -43,7 +43,7 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', '..', '..', '_s
 from api_client import ProductionHelper, MOYSKLAD_TOKEN, BASE_URL  # noqa: E402
 from site_orders_export import SiteOrdersExport, SiteExportError  # noqa: E402
 from reconcile_core import (  # noqa: E402
-    ROBOT_START, WINDOW_SIZE, build_payload, compare, load_store, sync_window,
+    ROBOT_START, WINDOW_SIZE, build_payload, compare, fetch_age_days, load_store, sync_window,
 )
 
 STORE_FILE = Path(__file__).parent.parent / "data" / "site_orders.json"
@@ -71,15 +71,16 @@ def main():
 
     print(f"{'=' * 64}\nСверка заказов сайта: {datetime.now():%Y-%m-%d %H:%M:%S}\n{'=' * 64}")
 
-    export_error = None
+    export_error, stale_days = None, None
     try:
         result = sync_window(SiteOrdersExport(), STORE_FILE,
                              acknowledge=not args.no_acknowledge)
-        if result["window"]:
-            print(f"  Прочитано из выгрузки: {result['window']} (новых {result['fresh']})")
+        stale_days = result["stale_days"]
+        if result["refused"]:
+            print("  Сайт заказов не отдал (обмен ответил отказом вместо документа)"
+                  + (f" — последняя удачная выгрузка {stale_days} дн. назад" if stale_days else ""))
         else:
-            print("  Очередь выгрузки пуста — новых заказов сайт не отдал "
-                  "(в неё попадают только заказы, ушедшие из статуса «Новый»)")
+            print(f"  Прочитано из выгрузки: {result['window']} (новых {result['fresh']})")
         if result["lost"]:
             print(f"  WARNING: {len(result['lost'])} заказов не сохранились на диск — "
                   f"окно НЕ подтверждаю")
@@ -87,15 +88,17 @@ def main():
             print(f"  Окно подтверждено, ответ сайта: {result['ack'][:80]}")
         elif args.no_acknowledge:
             print("  Окно НЕ подтверждено (--no-acknowledge)")
-        elif result["window"] < WINDOW_SIZE:
+        elif not result["refused"] and result["window"] < WINDOW_SIZE:
             print(f"  Окно неполное ({result['window']} < {WINDOW_SIZE}) — не подтверждаю: "
                   f"перечитывая его, видим свежий статус оплаты")
         if result["dropped"]:
             print(f"  Выкинуто из хранилища как слишком старое: {result['dropped']}")
+        stale_days = result["stale_days"]
     except SiteExportError as e:
         # Сайт мог прилечь — сверяем по сохранённой копии, а не падаем целиком.
         # Сам факт обязательно уходит в находки, иначе /checks покажет зелёное.
         export_error = str(e)
+        stale_days = fetch_age_days(load_store(STORE_FILE))
         print(f"  WARNING: выгрузка недоступна ({e}) — сверяю по сохранённой копии")
 
     store = load_store(STORE_FILE)
@@ -123,7 +126,7 @@ def main():
     if args.results_out:
         try:
             Path(args.results_out).write_text(
-                json.dumps(build_payload(findings, checked, export_error),
+                json.dumps(build_payload(findings, checked, export_error, stale_days),
                            ensure_ascii=False, indent=2),
                 encoding="utf-8")
         except OSError as e:
