@@ -17,7 +17,7 @@ _HORSEBIO = os.path.join(os.path.dirname(__file__), '..', '..', 'moysklad', 'hor
 sys.path.insert(0, os.path.join(_HORSEBIO, '_shared'))
 sys.path.insert(0, os.path.join(_HORSEBIO, '02_checks', '02_site_orders', 'scripts'))
 
-from site_orders_export import parse_orders  # noqa: E402
+from site_orders_export import SiteExportError, SiteOrdersExport, parse_orders  # noqa: E402
 import reconcile_core as core  # noqa: E402
 
 SALE_XML = """<?xml version="1.0" encoding="UTF-8"?>
@@ -335,3 +335,33 @@ class StoreTests(SimpleTestCase):
     def test_load_missing_file_gives_empty_store(self):
         with tempfile.TemporaryDirectory() as tmp:
             self.assertEqual(core.load_store(Path(tmp) / "нет.json")["orders"], {})
+
+
+class ExportFetchTests(SimpleTestCase):
+    """Разбор ответа выгрузки: пустая очередь у Megagroup выглядит как ошибка."""
+
+    class _Response:
+        def __init__(self, text, status=200):
+            self.text, self.status_code = text, status
+
+    def _export(self, response):
+        export = SiteOrdersExport.__new__(SiteOrdersExport)   # без походов в сеть
+        export._authenticated = True
+        export._request = lambda mode: response
+        return export
+
+    def test_empty_queue_is_not_an_error(self):
+        # Когда отдавать нечего, сайт присылает JSON-ошибку с HTTP 200 — это
+        # нормальная пустая очередь, а не сбой: checkauth к этому моменту прошёл
+        body = '\ufeff{"error":{"message":"Bad Request","code":400}}'
+
+        self.assertEqual(self._export(self._Response(body)).fetch(), [])
+
+    def test_xml_is_parsed(self):
+        orders = self._export(self._Response(SALE_XML)).fetch()
+
+        self.assertEqual([o.number for o in orders], ["2066"])
+
+    def test_http_error_is_reported(self):
+        with self.assertRaises(SiteExportError):
+            self._export(self._Response("nope", status=502)).fetch()

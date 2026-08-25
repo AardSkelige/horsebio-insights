@@ -75,7 +75,11 @@ def main():
     try:
         result = sync_window(SiteOrdersExport(), STORE_FILE,
                              acknowledge=not args.no_acknowledge)
-        print(f"  Прочитано из выгрузки: {result['window']} (новых {result['fresh']})")
+        if result["window"]:
+            print(f"  Прочитано из выгрузки: {result['window']} (новых {result['fresh']})")
+        else:
+            print("  Очередь выгрузки пуста — новых заказов сайт не отдал "
+                  "(в неё попадают только заказы, ушедшие из статуса «Новый»)")
         if result["lost"]:
             print(f"  WARNING: {len(result['lost'])} заказов не сохранились на диск — "
                   f"окно НЕ подтверждаю")
