@@ -22,6 +22,19 @@ function formatRub(value) {
     return (value || 0).toLocaleString('ru-RU', { style: 'currency', currency: 'RUB', maximumFractionDigits: 0 });
 }
 
+// Скидка приходит отдельным полем: сайт в письме шлёт цены по прайсу, а итог
+// уже со скидкой, поэтому в «Сумме» её не видно — показываем второй строкой.
+// В подсказке — название купона, если сайт его прислал.
+function DiscountNote({ row }) {
+    if (!row.discount) return null;
+    return (
+        <span className="discount-note" title={row.discount_label || undefined}>
+            −{formatRub(row.discount)}
+        </span>
+    );
+}
+DiscountNote.propTypes = { row: PropTypes.object.isRequired };
+
 function StatusChip({ row }) {
     const cls = STATUS_CLASS[row.status] || 'processing';
     return (
@@ -122,7 +135,10 @@ function OrderCard({ row, onDeleted, canDelete }) {
                     <div style={{ fontFamily: 'var(--sans)', fontSize: 13.5, fontWeight: 600, color: 'var(--ink)' }}>{row.name}</div>
                     <div style={{ fontFamily: 'var(--mono)', fontSize: 11, color: 'var(--muted)' }}>{row.phone}</div>
                 </div>
-                <span style={{ fontFamily: 'var(--mono)', fontSize: 12, color: 'var(--ink)', whiteSpace: 'nowrap' }}>{formatRub(row.sum)}</span>
+                <span style={{ fontFamily: 'var(--mono)', fontSize: 12, color: 'var(--ink)', whiteSpace: 'nowrap', textAlign: 'right' }}>
+                    {formatRub(row.sum)}
+                    <DiscountNote row={row} />
+                </span>
             </div>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: 8, gap: 8, flexWrap: 'wrap' }}>
                 <span style={{ fontFamily: 'var(--mono)', fontSize: 11.5, color: 'var(--muted)' }}>№{row.number} · {row.date_label}</span>
@@ -176,7 +192,10 @@ export default function SiteOrdersTable({ rows, loading, sort, onSortChange, onD
                             </td>
                             <td className="mono">№{row.number}</td>
                             <td className="mono" style={{ fontSize: 12, color: 'var(--muted-soft)' }}>{row.date_label}</td>
-                            <td className="num-cell">{formatRub(row.sum)}</td>
+                            <td className="num-cell">
+                                {formatRub(row.sum)}
+                                <DiscountNote row={row} />
+                            </td>
                             <td><StatusChip row={row} /></td>
                             <td><RowActions row={row} onDeleted={onDeleted} canDelete={canDelete} /></td>
                         </tr>

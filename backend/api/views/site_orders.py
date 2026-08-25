@@ -11,7 +11,10 @@ from rest_framework.response import Response
 from .scripts_monitor import scripts_auth
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', '..', 'moysklad', 'horsebio', '_shared'))
-from order_email_utils import build_customer_name, state_lock, load_state, save_state, forget_order  # noqa: E402 — те же helper'ы, что и в 02_create_orders.py
+from order_email_utils import (  # noqa: E402 — те же helper'ы, что и в 02_create_orders.py
+    build_customer_name, build_discount_label, site_discount_kopecks,
+    state_lock, load_state, save_state, forget_order,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -134,6 +137,11 @@ def _build_row(order_id, order):
         'date': order_dt.isoformat() if order_dt else None,
         'date_label': _fmt(order_dt),
         'sum': float(latest.get('total') or 0),
+        # Скидку сайт присылает только итогом: считаем её как разницу между
+        # позициями по прайсу и оплаченной суммой — ровно так же, как робот
+        # раскладывает её по позициям заказа (см. site_discount_kopecks)
+        'discount': site_discount_kopecks(latest) / 100,
+        'discount_label': build_discount_label(latest),
         'status': status,
         'status_label': STATUS_LABELS.get(status, status),
         'error_text': ms.get('last_error') if status == 'error' else None,
