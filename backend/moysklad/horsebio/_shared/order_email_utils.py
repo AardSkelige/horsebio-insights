@@ -70,6 +70,98 @@ def forget_order(state: dict, order_id: str) -> dict | None:
     return order
 
 
+def site_discount_kopecks(latest: dict) -> int:
+    """Размер скидки сайта по письму, в копейках (0, если скидки нет).
+
+    В письме позиции идут по РРЦ, а `total` — уже со скидкой. Источник истины
+    именно `total`: на эту сумму робот проводит входящий платёж, и ей обязана
+    равняться сумма заказа, иначе заказ повиснет «частично оплачено», а отгрузка
+    по РРЦ создаст покупателю несуществующий долг (так и было до 24.08.2026).
+    Поле `discount` из письма сюда не подмешиваем — оно годится как подпись
+    в комментарии, но не как основание для цен.
+    """
+    total = latest.get("total")
+    if total in (None, ""):
+        return 0
+    goods = sum(
+        round(float(item["price"]) * 100) * float(item["quantity"])
+        for item in latest.get("items", [])
+    )
+    delivery = round(float(latest.get("delivery_cost") or 0) * 100)
+    discount = round(goods + delivery - round(float(total) * 100))
+    if discount <= 0 or discount >= goods:
+        # Условие ровно то же, при котором отказывается работать
+        # split_site_discount: иначе комментарий и доп. поле заказа рассказывали
+        # бы о скидке, которой в позициях нет.
+        return 0
+    return discount
+
+
+def split_site_discount(goods: list, delivery: dict, total_kopecks: int) -> tuple:
+    """Разложить скидку заказа по товарам, правя `price` позиций на месте.
+
+    Сайт размазывает скидку на заказ по товарам пропорционально их стоимости,
+    а доставку под скидку не пускает — сверено с выгрузкой CommerceML на живых
+    заказах, совпадает до копейки.
+
+    goods: позиции вида {"quantity": float, "price": int (копейки)}.
+    delivery: позиция доставки того же вида либо None. Скидку на неё не кладём,
+    но именно её используем как последнее место для копеек, не поделившихся
+    на количество (см. ниже).
+
+    Возвращает (разложено_копеек, не_разложено_копеек). Второе число не ноль
+    только если скидка не легла ровно — вызывающий код обязан предупредить,
+    потому что заказ снова окажется расходящимся с платежом.
+    """
+    if not goods:
+        return 0, 0
+
+    delivery_kopecks = round(delivery["price"] * delivery["quantity"]) if delivery else 0
+    lines = [round(p["price"] * p["quantity"]) for p in goods]
+    gross_goods = sum(lines)
+    discount = gross_goods + delivery_kopecks - total_kopecks
+    if discount <= 0:
+        return 0, 0
+    if discount >= gross_goods:
+        # Скидка больше стоимости товаров — предпосылка сломана (частичная
+        # предоплата? битый total?). Цены не трогаем, пусть разбирается человек.
+        return 0, discount
+
+    # Последней позиции достаётся остаток, чтобы сумма долей сошлась ровно
+    shares, left = [], discount
+    for line in lines[:-1]:
+        share = round(discount * line / gross_goods)
+        shares.append(share)
+        left -= share
+    shares.append(left)
+
+    for position, line, share in zip(goods, lines, shares):
+        position["price"] = round((line - share) / position["quantity"])
+
+    # Копейки, не поделившиеся на количество (3 × 966,67 из 2900), должны куда-то
+    # деться: расхождение по документу и есть тот самый баг, ради которого всё
+    # затевалось. Сначала пробуем штучную позицию — там достаточно поправить цену.
+    def _document():
+        return sum(round(p["price"] * p["quantity"]) for p in goods) + (
+            round(delivery["price"] * delivery["quantity"]) if delivery else 0)
+
+    residual = total_kopecks - _document()
+    if residual:
+        single = next((p for p in goods if p["quantity"] == 1), None)
+        if single is not None:
+            single["price"] += residual
+        else:
+            # Штучной позиции нет — отщепляем одну штуку от самой крупной по
+            # количеству и вешаем остаток на неё. В заказе появится вторая строка
+            # того же товара с ценой на копейку иной; это заметно глазу, но лучше
+            # заказа, который никогда не сойдётся с оплатой.
+            biggest = max(goods, key=lambda p: p["quantity"])
+            biggest["quantity"] -= 1
+            goods.append({**biggest, "quantity": 1, "price": biggest["price"] + residual})
+        residual = total_kopecks - _document()
+    return discount, residual
+
+
 def build_customer_name(latest: dict) -> str:
     """Собрать ФИО покупателя из полей письма (field:familia/fio/otcestvo)"""
     field = latest.get("field") or {}
@@ -84,6 +176,13 @@ def format_money(value) -> str:
     except (TypeError, ValueError):
         return str(value)
     return f"{n:,.0f}".replace(",", " ") + " ₽"
+
+
+def format_rubles(kopecks: int) -> str:
+    """4400 -> '44 ₽', 67412 -> '674,12 ₽' — точная сумма, в отличие от
+    format_money(), который округляет до рубля ради компактности находок."""
+    rubles = f"{kopecks / 100:.2f}".rstrip("0").rstrip(".")
+    return rubles.replace(".", ",") + " ₽"
 
 
 def format_phone(raw: str) -> str:

@@ -16,6 +16,13 @@
 «осиротевшие» черновики, пересозданные при рассинхроне state. Если оплата всё же
 приходит позже — заводим заказ заново с нуля (черновик + сразу платёж).
 
+Скидки и промокоды сайт передаёт только в итоге письма: позиции идут по РРЦ,
+а total — уже со скидкой. Разницу раскладываем по товарам пропорционально их
+стоимости (доставка под скидку не попадает), иначе заказ не сойдётся с платежом
+и повиснет «частично оплачено», а отгрузка по РРЦ повесит на покупателя
+несуществующий долг. Размер скидки пишем в доп. поле «Купон (скидка)» и строкой
+в комментарий заказа.
+
 Перед созданием платежа и перед обновлением описания заказа скрипт сверяется
 с живым документом в МойСклад — если сотрудник уже сам принял оплату или
 отредактировал комментарий вручную, скрипт это не перезаписывает.
@@ -39,7 +46,8 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', '..', '..', '_s
 from api_client import ProductionHelper, MOYSKLAD_TOKEN, BASE_URL
 from order_email_utils import (
     build_customer_name, build_order_label, build_order_delete_action,
-    format_money, state_lock, load_state, save_state,
+    format_money, format_rubles, site_discount_kopecks, split_site_discount,
+    state_lock, load_state, save_state,
 )
 
 STATE_FILE = Path(__file__).parent.parent / "data" / ".order_email_state.json"
@@ -57,6 +65,9 @@ ORGANIZATION_META = {"meta": {"href": f"{BASE_URL}/entity/organization/1166fd93-
 STORE_META = {"meta": {"href": f"{BASE_URL}/entity/store/7507005e-266e-11eb-0a80-030b001555bd", "type": "store", "mediaType": "application/json"}}
 SALES_CHANNEL_META = {"meta": {"href": f"{BASE_URL}/entity/saleschannel/af781aeb-711c-11f0-0a80-1a56002f3340", "type": "saleschannel", "mediaType": "application/json"}}
 DELIVERY_SERVICE_META = {"meta": {"href": f"{BASE_URL}/entity/service/1202f0a0-d0be-11ee-0a80-10f60014c1a9", "type": "service", "mediaType": "application/json"}}
+
+# Доп. поле заказа "Купон (скидка)" — размер скидки сайта человеку в глаза
+COUPON_ATTRIBUTE_META = {"meta": {"href": f"{BASE_URL}/entity/customerorder/metadata/attributes/ff2326ef-711f-11f0-0a80-141a002e474d", "type": "attributemetadata", "mediaType": "application/json"}}
 
 # Доп. поле заказа "Комментарий от покупателя"
 CUSTOMER_NOTE_ATTRIBUTE_META = {"meta": {"href": f"{BASE_URL}/entity/customerorder/metadata/attributes/96282b87-b98a-11ef-0a80-038000318cca", "type": "attributemetadata", "mediaType": "application/json"}}
@@ -107,6 +118,14 @@ def build_shipment_comment(latest: dict) -> str:
     return build_delivery_line(latest)
 
 
+def build_discount_label(latest: dict) -> str:
+    """Значение доп. поля «Купон (скидка)». Пока это только сумма: названия
+    скидок («На заказ», «Купон») сайт в письме не передаёт — они есть в выгрузке
+    CommerceML, и появятся здесь, когда письмо начнёт их отдавать."""
+    discount = site_discount_kopecks(latest)
+    return format_rubles(discount) if discount else ""
+
+
 def build_description(latest: dict) -> str:
     lines = []
     delivery_line = build_delivery_line(latest)
@@ -116,6 +135,9 @@ def build_description(latest: dict) -> str:
     payment_name = (latest.get("payment_name") or "").strip()
     if payment_name:
         lines.append(f"Способ оплаты: {payment_name}")
+    discount = site_discount_kopecks(latest)
+    if discount:
+        lines.append(f"Скидка сайта: {format_rubles(discount)}")
     contact_pref = (latest.get("field", {}).get("kak_s_vami_udobnee_svazat_sa_") or "").strip()
     if contact_pref:
         lines.append(f"Предпочитаемая связь: {contact_pref}")
@@ -206,12 +228,12 @@ class OrderCreator:
     def _build_positions(self, latest: dict) -> list:
         """Бросает OrderCreationError, если товар не нашёлся — заказ на этой
         итерации не создаём, попытка повторится на следующем прогоне"""
-        positions = []
+        goods = []
         for item in latest.get("items", []):
             product_meta = self._find_product_meta(item["article"])
             if product_meta is None:
                 raise OrderCreationError(f"Артикул «{item['article']}» не найден в МойСклад")
-            positions.append({
+            goods.append({
                 "quantity": float(item["quantity"]),
                 "price": round(float(item["price"]) * 100),
                 "vat": 0,
@@ -219,13 +241,27 @@ class OrderCreator:
             })
 
         delivery_cost = latest.get("delivery_cost") or ""
-        if delivery_cost:
-            positions.append({
-                "quantity": 1,
-                "price": round(float(delivery_cost) * 100),
-                "vat": 0,
-                "assortment": DELIVERY_SERVICE_META,
-            })
+        delivery = {
+            "quantity": 1,
+            "price": round(float(delivery_cost) * 100),
+            "vat": 0,
+            "assortment": DELIVERY_SERVICE_META,
+        } if delivery_cost else None
+
+        # Цены в письме — по РРЦ, а total уже со скидкой. Не разложив разницу по
+        # товарам, мы получим заказ, который никогда не сойдётся с платежом.
+        total = latest.get("total")
+        if total not in (None, ""):
+            applied, unresolved = split_site_discount(goods, delivery, round(float(total) * 100))
+            if applied:
+                print(f"    Скидка сайта {format_rubles(applied)} разложена по товарам")
+            if unresolved:
+                print(f"    WARNING: скидка не разложилась, заказ разойдётся с платежом на "
+                      f"{format_rubles(abs(unresolved))} — нужен ручной разбор")
+
+        positions = goods
+        if delivery is not None:
+            positions.append(delivery)
         return positions
 
     # ─── Заказ покупателя ──────────────────────────────────────────────────
@@ -265,9 +301,15 @@ class OrderCreator:
                 shipment_address_full["comment"] = shipment_comment
             payload["shipmentAddressFull"] = shipment_address_full
 
+        attributes = []
         customer_note = (latest.get("field", {}).get("note") or "").strip()
         if customer_note:
-            payload["attributes"] = [{**CUSTOMER_NOTE_ATTRIBUTE_META, "value": customer_note}]
+            attributes.append({**CUSTOMER_NOTE_ATTRIBUTE_META, "value": customer_note})
+        discount_label = build_discount_label(latest)
+        if discount_label:
+            attributes.append({**COUPON_ATTRIBUTE_META, "value": discount_label})
+        if attributes:
+            payload["attributes"] = attributes
 
         if self.dry_run:
             print(f"    [DRY-RUN] создал бы черновик заказа {order_id}: agent={payload['agent'].get('name')}, "
