@@ -162,6 +162,21 @@ def split_site_discount(goods: list, delivery: dict, total_kopecks: int) -> tupl
     return discount, residual
 
 
+def build_discount_label(latest: dict) -> str:
+    """Значение доп. поля «Купон (скидка)»: сумма и, если сайт их прислал,
+    названия применённых скидок — «Кубок Конного парка, 1500 ₽».
+
+    Сумму берём не из письма, а из разницы позиций и итога (см.
+    site_discount_kopecks): у процентных скидок сайт не присылает готовую сумму
+    в рублях, а разница есть всегда.
+    """
+    discount = site_discount_kopecks(latest)
+    if not discount:
+        return ""
+    names = [d["name"].strip() for d in latest.get("discounts", []) if d.get("name", "").strip()]
+    return f"{', '.join(names)}, {format_rubles(discount)}" if names else format_rubles(discount)
+
+
 def build_customer_name(latest: dict) -> str:
     """Собрать ФИО покупателя из полей письма (field:familia/fio/otcestvo)"""
     field = latest.get("field") or {}

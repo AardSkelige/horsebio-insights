@@ -158,6 +158,17 @@ SCRIPTS_CONFIG = [
         'structured': True,
     },
     {
+        'id': 'horsebio_site_orders_reconcile',
+        'topic': 'Заказы сайта',
+        'name': 'Сверка заказов с сайтом',
+        'account': 'HorseBio',
+        'schedule': 'Ежедн. в 09:40',
+        'description': 'Сверяет заказы сайта с МойСклад по выгрузке CommerceML: не потерялся ли оплаченный заказ, сходятся ли сумма и оплата с учётом скидок',
+        'script': '/app/moysklad/horsebio/02_checks/02_site_orders/scripts/01_reconcile_site_orders.py',
+        'args': [],
+        'structured': True,
+    },
+    {
         'id': 'horsebio_data_sync',
         'topic': 'Обновление данных',
         'name': 'Синхронизация данных',

@@ -46,8 +46,8 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', '..', '..', '_s
 from api_client import ProductionHelper, MOYSKLAD_TOKEN, BASE_URL
 from order_email_utils import (
     build_customer_name, build_order_label, build_order_delete_action,
-    format_money, format_rubles, site_discount_kopecks, split_site_discount,
-    state_lock, load_state, save_state,
+    build_discount_label, format_money, format_rubles, site_discount_kopecks,
+    split_site_discount, state_lock, load_state, save_state,
 )
 
 STATE_FILE = Path(__file__).parent.parent / "data" / ".order_email_state.json"
@@ -118,14 +118,6 @@ def build_shipment_comment(latest: dict) -> str:
     return build_delivery_line(latest)
 
 
-def build_discount_label(latest: dict) -> str:
-    """Значение доп. поля «Купон (скидка)». Пока это только сумма: названия
-    скидок («На заказ», «Купон») сайт в письме не передаёт — они есть в выгрузке
-    CommerceML, и появятся здесь, когда письмо начнёт их отдавать."""
-    discount = site_discount_kopecks(latest)
-    return format_rubles(discount) if discount else ""
-
-
 def build_description(latest: dict) -> str:
     lines = []
     delivery_line = build_delivery_line(latest)
@@ -135,9 +127,9 @@ def build_description(latest: dict) -> str:
     payment_name = (latest.get("payment_name") or "").strip()
     if payment_name:
         lines.append(f"Способ оплаты: {payment_name}")
-    discount = site_discount_kopecks(latest)
-    if discount:
-        lines.append(f"Скидка сайта: {format_rubles(discount)}")
+    discount_label = build_discount_label(latest)
+    if discount_label:
+        lines.append(f"Скидка сайта: {discount_label}")
     contact_pref = (latest.get("field", {}).get("kak_s_vami_udobnee_svazat_sa_") or "").strip()
     if contact_pref:
         lines.append(f"Предпочитаемая связь: {contact_pref}")
@@ -333,6 +325,13 @@ class OrderCreator:
         agent_meta = {"meta": order_full["agent"]["meta"]} if order_full else {"meta": {"href": f"{BASE_URL}/entity/counterparty/dry-run"}}
         total_kopecks = round(float(latest.get("total") or 0) * 100)
 
+        # Позиции считались по письму о заказе, а платим по письму об оплате: если
+        # между ними изменился total (появилась скидка, поменялась доставка), заказ
+        # снова разойдётся с платежом. Пересобираем позиции — но только если заказ
+        # никто не трогал руками, иначе затрём чужую правку.
+        if order_full and round(order_full.get("sum") or 0) != total_kopecks:
+            self._resync_positions(order_id, order_full, latest, total_kopecks, ms)
+
         payload = {
             "organization": ORGANIZATION_META,
             "agent": agent_meta,
@@ -370,6 +369,27 @@ class OrderCreator:
 
         print(f"    OK: создан платёж {payment.get('name')} и заказ {order_id} проведён")
         return payment
+
+    def _resync_positions(self, order_id: str, order_full: dict, latest: dict,
+                          total_kopecks: int, ms: dict) -> None:
+        """Привести позиции заказа к сумме из последнего письма."""
+        was = (order_full.get("sum") or 0) / 100
+        state_href = ((order_full.get("state") or {}).get("meta") or {}).get("href", "")
+        untouched = (
+            state_href.endswith(STATE_NEW_ID)
+            and order_full.get("description") == ms.get("last_description_written")
+        )
+        if not untouched:
+            message = (f"Сумма заказа в МойСклад {was} ₽, а оплачено {total_kopecks / 100} ₽ — "
+                       f"заказ правили вручную, позиции не трогаю")
+            print(f"    WARNING: {message}")
+            ms["last_error"] = message
+            ms["last_error_at"] = datetime.now().isoformat()
+            return
+
+        print(f"    Сумма письма изменилась ({was} → {total_kopecks / 100} ₽) — пересобираю позиции")
+        self.helper._put(f"/entity/customerorder/{order_full['id']}",
+                         {"positions": self._build_positions(latest)})
 
     # ─── Автоотмена неоплаченных черновиков ────────────────────────────────
 

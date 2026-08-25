@@ -10,9 +10,10 @@ import sys
 
 from django.test import SimpleTestCase
 
-sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', '..', 'moysklad', 'horsebio', '_shared'))
+_HORSEBIO = os.path.join(os.path.dirname(__file__), '..', '..', 'moysklad', 'horsebio')
+sys.path.insert(0, os.path.join(_HORSEBIO, '_shared'))
 from order_email_utils import (  # noqa: E402
-    format_rubles, site_discount_kopecks, split_site_discount,
+    build_discount_label, format_rubles, site_discount_kopecks, split_site_discount,
 )
 
 
@@ -110,3 +111,80 @@ class SiteDiscountTests(SimpleTestCase):
         self.assertEqual(format_rubles(4400), "44 ₽")
         self.assertEqual(format_rubles(67412), "674,12 ₽")
         self.assertEqual(format_rubles(322050), "3220,5 ₽")
+
+
+class DiscountLabelTests(SimpleTestCase):
+    """Доп. поле «Купон (скидка)» и строка в комментарии заказа."""
+
+    # Тестовый заказ №2074 от 24.08.2026: купон «Кубок Конного парка» на 1500 ₽
+    ORDER_2074 = {
+        "items": [{"price": "2190", "quantity": "1"}],
+        "delivery_cost": "623", "total": "1313",
+        "discounts": [{"name": "Кубок Конного парка", "type": "sum",
+                       "value": "1500", "is_coupon": True}],
+    }
+
+    def test_label_carries_coupon_name_and_amount(self):
+        self.assertEqual(build_discount_label(self.ORDER_2074), "Кубок Конного парка, 1500 ₽")
+
+    def test_amount_comes_from_the_difference_not_from_the_coupon_value(self):
+        # У процентных скидок сайт не присылает готовую сумму в рублях, поэтому
+        # источник — разница позиций и итога, а не value купона
+        order = {**self.ORDER_2074,
+                 "discounts": [{"name": "Весенняя акция", "type": "percent", "value": "15"}]}
+        self.assertEqual(build_discount_label(order), "Весенняя акция, 1500 ₽")
+
+    def test_label_falls_back_to_amount_when_site_sent_no_names(self):
+        self.assertEqual(build_discount_label({k: v for k, v in self.ORDER_2074.items()
+                                               if k != "discounts"}), "1500 ₽")
+
+    def test_several_discounts_are_listed(self):
+        order = {**self.ORDER_2074, "discounts": [{"name": "Купон"}, {"name": "Товарная"}]}
+        self.assertEqual(build_discount_label(order), "Купон, Товарная, 1500 ₽")
+
+    def test_order_without_discount_has_no_label(self):
+        self.assertEqual(build_discount_label({"items": [{"price": "2190", "quantity": "1"}],
+                                               "delivery_cost": "623", "total": "2813"}), "")
+
+
+class OrderEmailParsingTests(SimpleTestCase):
+    """Разбор скрытого блока письма — строки discount_item~~."""
+
+    BLOCK = """<!--HB_ORDER_DATA
+Скрытый блок для автоматического заведения заказа в МойСклад по почте.
+order_id=4428118
+total=1313
+discount=1500
+delivery_cost=623
+item~~05-01VP1000~~ВИТАМИН Е VitaPro, 1000 мл~~1~~2190
+discount_item~~Кубок Конного парка~~sum~~1500~~1
+HB_ORDER_DATA-->"""
+
+    @classmethod
+    def setUpClass(cls):
+        super().setUpClass()
+        import importlib.util
+        path = os.path.join(_HORSEBIO, '01_daemons', '06_order_email_sync', 'scripts',
+                            '01_read_order_emails.py')
+        spec = importlib.util.spec_from_file_location("read_order_emails", path)
+        cls.reader = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(cls.reader)
+
+    def test_parses_discounts_alongside_items(self):
+        data = self.reader.parse_hb_order_data(self.BLOCK)
+
+        self.assertEqual(data["total"], "1313")
+        self.assertEqual(data["discount"], "1500")
+        self.assertEqual(len(data["items"]), 1)
+        self.assertEqual(data["discounts"], [
+            {"name": "Кубок Конного парка", "type": "sum", "value": "1500", "is_coupon": True},
+        ])
+
+    def test_block_without_discounts_still_parses(self):
+        block = "\n".join(line for line in self.BLOCK.splitlines()
+                          if not line.startswith("discount_item"))
+        data = self.reader.parse_hb_order_data(block)
+
+        self.assertEqual(data["discounts"], [])
+        self.assertEqual(build_discount_label({**data, "items": [
+            {"price": i["price"], "quantity": i["quantity"]} for i in data["items"]]}), "1500 ₽")

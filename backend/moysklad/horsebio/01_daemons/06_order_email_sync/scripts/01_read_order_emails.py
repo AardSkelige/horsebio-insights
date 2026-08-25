@@ -135,7 +135,8 @@ def parse_hb_order_data(html: str) -> dict | None:
 
     Формат — построчно ключ=значение. Первая строка после открывающего тега —
     пояснительный текст на русском без "=", её пропускаем. Строки
-    item~~артикул~~название~~количество~~цена собираются в список items.
+    item~~артикул~~название~~количество~~цена собираются в список items,
+    discount_item~~название~~тип~~значение~~купон — в список discounts.
     field:* и delivery_field:* уходят в отдельные под-словари.
     """
     match = HB_BLOCK_RE.search(html)
@@ -146,6 +147,7 @@ def parse_hb_order_data(html: str) -> dict | None:
         "field": {},
         "delivery_field": {},
         "items": [],
+        "discounts": [],
     }
 
     for line in match.group(1).splitlines():
@@ -163,6 +165,22 @@ def parse_hb_order_data(html: str) -> dict | None:
                 "name": name,
                 "quantity": quantity,
                 "price": price,
+            })
+            continue
+
+        if line.startswith("discount_item~~"):
+            # Скидки, применённые к заказу: название купона/акции, тип (sum или
+            # percent) и значение. Сумму скидки в рублях отсюда не берём — у
+            # процентных она тут не посчитана; её даёт поле discount.
+            parts = line.split("~~")
+            if len(parts) != 5:
+                continue
+            _, name, kind, value, is_coupon = parts
+            data["discounts"].append({
+                "name": name,
+                "type": kind,
+                "value": value,
+                "is_coupon": is_coupon == "1",
             })
             continue
 
