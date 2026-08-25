@@ -190,6 +190,24 @@ describe('StatGrid', () => {
         const grid = container.firstChild;
         expect(grid).toHaveStyle({ display: 'grid', marginBottom: '24px' });
     });
+
+    it('на узком экране показатели встают по две в ряд', () => {
+        // Ширина колонки живёт в переменных: медиа-запрос в ui.css подменяет
+        // --stat-min на --stat-min-sm, иначе на телефоне карточки шли столбиком
+        const { container } = render(<StatGrid><div>карточка</div></StatGrid>);
+        const grid = container.firstChild;
+
+        expect(grid).toHaveClass('ui-statgrid');
+        expect(grid.style.getPropertyValue('--stat-min')).toBe('190px');
+        expect(grid.style.getPropertyValue('--stat-min-sm')).toBe('150px');
+    });
+
+    it('широкие карточки со списками не ужимаются', () => {
+        const { container } = render(<StatGrid min={280}><div>топ страниц</div></StatGrid>);
+        const grid = container.firstChild;
+
+        expect(grid.style.getPropertyValue('--stat-min-sm')).toBe('280px');
+    });
 });
 
 describe('IconButton', () => {

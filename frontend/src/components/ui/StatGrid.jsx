@@ -12,6 +12,12 @@ import { Skeleton } from './Skeleton';
  *
  * Увеличивайте `min` для карточек с длинным содержимым (списки, топы), а не
  * для показателей — у тех значение короткое.
+ *
+ * На телефоне 190px не помещаются дважды в ~360px контента, и показатели
+ * выстраивались в столбик: четыре числа занимали экран целиком. Поэтому для
+ * карточек показателей (`min` не задирали) на узком экране берём половинную
+ * ширину — получается два столбца. Карточки со списками (`min` больше 200)
+ * оставляем как есть: там две колонки нечитаемы.
  */
 export default function StatGrid({
     min = 190,
@@ -25,13 +31,16 @@ export default function StatGrid({
 }) {
     return (
         <div
-            className={className || undefined}
+            className={['ui-statgrid', className].filter(Boolean).join(' ') || undefined}
             // Свой `style` подмешивается, а не заменяет сетку целиком:
             // иначе достаточно передать marginBottom, чтобы раскладка развалилась
             style={{
                 display: 'grid',
-                gridTemplateColumns: `repeat(auto-fill, minmax(min(${min}px, 100%), 1fr))`,
                 gap,
+                // Ширину колонки задаём переменными, а не готовым шаблоном:
+                // медиа-запрос в ui.css подменяет её на узком экране
+                '--stat-min': `${min}px`,
+                '--stat-min-sm': `${min > 200 ? min : Math.min(min, 150)}px`,
                 ...style,
             }}
             {...rest}

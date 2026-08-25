@@ -727,10 +727,27 @@
     font-variant-numeric: tabular-nums;
 }
 
-/* На узком экране значение ещё немного уменьшается */
+.ui-statgrid {
+    grid-template-columns: repeat(auto-fill, minmax(min(var(--stat-min, 190px), 100%), 1fr));
+}
+
+/* На узком экране значение ещё немного уменьшается, карточка ужимается,
+   а сетка складывается по две в ряд вместо столбика */
 @media (max-width: 600px) {
     .ui-stat__value {
         font-size: 20px !important;
+    }
+
+    .ui-stat {
+        padding: 11px 12px;
+    }
+
+    .ui-stat__title {
+        margin-bottom: 5px;
+    }
+
+    .ui-statgrid {
+        grid-template-columns: repeat(auto-fill, minmax(min(var(--stat-min-sm, 150px), 100%), 1fr));
     }
 }
 

@@ -220,6 +220,13 @@ const Layout = ({ children }) => {
                     borderBottom: '1px solid var(--hairline)',
                     boxShadow: 'var(--shadow-soft)',
                     pointerEvents: open ? 'auto' : 'none',
+                    // Панель выезжает от самого верха экрана, поэтому на телефоне
+                    // её шапка уходила под статус-бар, а длинное содержимое —
+                    // за нижний край без возможности доскроллить
+                    paddingTop: 'env(safe-area-inset-top, 0px)',
+                    maxHeight: '100dvh',
+                    overflowY: 'auto',
+                    overscrollBehavior: 'contain',
                 }}>
                 <div style={{ maxWidth: '1280px', margin: '0 auto', padding: '20px 24px', position: 'relative' }}>
                     <button

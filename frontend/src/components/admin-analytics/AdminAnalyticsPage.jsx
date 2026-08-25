@@ -95,7 +95,6 @@ const AdminAnalyticsPage = () => {
                         icon={Icon}
                         title={label}
                         value={loading ? '…' : value}
-                       
                     />
                 ))}
             </StatGrid>
