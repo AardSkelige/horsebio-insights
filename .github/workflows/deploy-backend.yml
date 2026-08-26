@@ -106,8 +106,14 @@ jobs:
           envs: BACKEND_ENV_PROD,POSTGRES_PASSWORD
           script: |
             mkdir -p /root/horsebio/backend
-            printf '%s' "$BACKEND_ENV_PROD" > /root/horsebio/backend/.env.prod
-            printf 'POSTGRES_PASSWORD=%s\n' "$POSTGRES_PASSWORD" > /root/horsebio/.env
+            # umask по умолчанию даёт 644 — токен МойСклада и пароль Postgres
+            # оказываются доступны на чтение любому пользователю системы.
+            # Права ставим сразу при создании, а не chmod'ом после: между
+            # printf и chmod файл иначе успевает пожить открытым.
+            ( umask 077
+              printf '%s' "$BACKEND_ENV_PROD" > /root/horsebio/backend/.env.prod
+              printf 'POSTGRES_PASSWORD=%s\n' "$POSTGRES_PASSWORD" > /root/horsebio/.env )
+            chmod 600 /root/horsebio/backend/.env.prod /root/horsebio/.env
 
       - name: Copy deployment config to server
         uses: appleboy/scp-action@v0.1.7
