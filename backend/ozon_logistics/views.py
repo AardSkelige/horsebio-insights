@@ -1,4 +1,5 @@
 import logging
+from datetime import datetime, timezone as dt_timezone
 
 from django.http import HttpResponse, HttpResponseRedirect, JsonResponse
 from django.utils import timezone
@@ -6,6 +7,7 @@ from django.utils.html import escape
 
 from ozon_logistics.models import OzonOAuthToken
 from ozon_logistics.services import oauth
+from ozon_logistics.services.client import OzonLogisticsClient, OzonLogisticsError
 
 logger = logging.getLogger(__name__)
 
@@ -109,6 +111,10 @@ def oauth_status(request):
             'authorized': False,
             'message': 'Авторизация не пройдена',
         })
+    # Метки времени самого токена: по ним видно, совпадает ли наш расчёт срока
+    # с тем, что считает Ozon.
+    claims = oauth.token_claims(token.access_token)
+
     return JsonResponse({
         'status': 'ok',
         'authorized': True,
@@ -116,4 +122,35 @@ def oauth_status(request):
         'expired': token.is_expired(),
         'has_refresh_token': bool(token.refresh_token),
         'scope': token.scope,
+        'token_claims': {
+            'exp': claims.get('exp'),
+            'exp_readable': _timestamp_to_iso(claims.get('exp')),
+            'iat': claims.get('iat'),
+            'iat_readable': _timestamp_to_iso(claims.get('iat')),
+        },
     })
+
+
+def _timestamp_to_iso(value):
+    if not value:
+        return None
+    try:
+        return datetime.fromtimestamp(int(value), tz=dt_timezone.utc).isoformat()
+    except (TypeError, ValueError, OverflowError, OSError):
+        return None
+
+
+def diagnostics(request):
+    """Живая проверка связи: реально ли открыты методы Ozon Доставки.
+
+    Список складов — самый безобидный read-метод: ничего не меняет, но проходит
+    полный путь через токен и авторизацию Seller API.
+    """
+    denied = _superuser_only(request)
+    if denied:
+        return denied
+    try:
+        result = OzonLogisticsClient().warehouse_list()
+    except (oauth.OzonOAuthError, OzonLogisticsError) as exc:
+        return JsonResponse({'status': 'error', 'message': str(exc)}, status=502)
+    return JsonResponse({'status': 'ok', 'result': result})

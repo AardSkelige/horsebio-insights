@@ -16,6 +16,14 @@ CREDS = {
 }
 
 
+def _jwt(**claims):
+    """Собирает JWT-подобную строку: подпись нам не нужна, читается только payload."""
+    import base64
+
+    body = base64.urlsafe_b64encode(json.dumps(claims).encode()).decode().rstrip('=')
+    return f'header.{body}.signature'
+
+
 class FakeResponse:
     def __init__(self, status_code=200, data=None, text=''):
         self.status_code = status_code
@@ -92,18 +100,38 @@ class ExchangeCodeTests(TestCase):
                 oauth.exchange_code('code-1')
         self.assertIn('bad code', str(ctx.exception))
 
-    def test_expiry_falls_back_to_jwt_exp(self):
-        import base64
-
+    def test_expiry_comes_from_jwt(self):
         exp = int((timezone.now() + timezone.timedelta(hours=2)).timestamp())
-        body = base64.urlsafe_b64encode(json.dumps({'exp': exp}).encode()).decode().rstrip('=')
-        jwt = f'header.{body}.signature'
-
-        with patch('requests.post', return_value=FakeResponse(data={'access_token': jwt})):
+        with patch('requests.post', return_value=FakeResponse(data={'access_token': _jwt(exp=exp)})):
             token = oauth.exchange_code('code-1')
 
-        self.assertIsNotNone(token.expires_at)
         self.assertAlmostEqual(int(token.expires_at.timestamp()), exp, delta=2)
+
+    def test_jwt_wins_over_expires_in(self):
+        """exp выдал сам Ozon и по нему же проверяет токен — он авторитетнее."""
+        exp = int((timezone.now() + timezone.timedelta(hours=2)).timestamp())
+        payload = {'access_token': _jwt(exp=exp), 'expires_in': 60}
+        with patch('requests.post', return_value=FakeResponse(data=payload)):
+            token = oauth.exchange_code('code-1')
+
+        self.assertAlmostEqual(int(token.expires_at.timestamp()), exp, delta=2)
+
+    def test_implausible_expires_in_is_ignored(self):
+        """Ozon прислал ~1.79e9 — это 57 лет; такое значение не длительность."""
+        payload = {'access_token': 'not-a-jwt', 'expires_in': 1787702399}
+        with patch('requests.post', return_value=FakeResponse(data=payload)):
+            token = oauth.exchange_code('code-1')
+
+        horizon = timezone.now() + oauth.MAX_PLAUSIBLE_LIFETIME
+        self.assertLess(token.expires_at, horizon)
+
+    def test_plausible_expires_in_is_used_without_jwt(self):
+        payload = {'access_token': 'not-a-jwt', 'expires_in': 3600}
+        with patch('requests.post', return_value=FakeResponse(data=payload)):
+            token = oauth.exchange_code('code-1')
+
+        expected = timezone.now() + timezone.timedelta(seconds=3600)
+        self.assertAlmostEqual(token.expires_at.timestamp(), expected.timestamp(), delta=5)
 
 
 @patch.dict('os.environ', CREDS)
@@ -283,3 +311,45 @@ class AccessControlTests(TestCase):
         response = self.client.get('/api/ozon-logistics/oauth/status/')
         self.assertEqual(response.status_code, 200)
         self.assertFalse(response.json()['authorized'])
+
+    def test_status_exposes_token_claims(self):
+        exp = int((timezone.now() + timezone.timedelta(hours=2)).timestamp())
+        OzonOAuthToken.objects.create(
+            pk=OzonOAuthToken.SINGLETON_PK,
+            access_token=_jwt(exp=exp, iat=exp - 7200),
+            refresh_token='r',
+            expires_at=timezone.now() + timezone.timedelta(hours=2),
+        )
+        self.client.force_login(self._user(superuser=True))
+        claims = self.client.get('/api/ozon-logistics/oauth/status/').json()['token_claims']
+        self.assertEqual(claims['exp'], exp)
+        self.assertIsNotNone(claims['exp_readable'])
+
+    def test_diag_is_forbidden_for_regular_user(self):
+        self.client.force_login(self._user(superuser=False))
+        self.assertEqual(self.client.get('/api/ozon-logistics/diag/').status_code, 403)
+
+    def test_diag_calls_seller_api(self):
+        OzonOAuthToken.objects.create(
+            pk=OzonOAuthToken.SINGLETON_PK,
+            access_token='access-1',
+            refresh_token='r',
+            expires_at=timezone.now() + timezone.timedelta(hours=1),
+        )
+        self.client.force_login(self._user(superuser=True))
+        with patch('requests.post', return_value=FakeResponse(data={'result': ['w1']})):
+            response = self.client.get('/api/ozon-logistics/diag/')
+        self.assertEqual(response.json()['result'], {'result': ['w1']})
+
+    def test_diag_reports_seller_api_failure(self):
+        OzonOAuthToken.objects.create(
+            pk=OzonOAuthToken.SINGLETON_PK,
+            access_token='access-1',
+            refresh_token='',
+            expires_at=timezone.now() + timezone.timedelta(hours=1),
+        )
+        self.client.force_login(self._user(superuser=True))
+        with patch('requests.post', return_value=FakeResponse(status_code=403, text='no scope')):
+            response = self.client.get('/api/ozon-logistics/diag/')
+        self.assertEqual(response.status_code, 502)
+        self.assertIn('no scope', response.json()['message'])

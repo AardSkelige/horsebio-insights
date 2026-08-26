@@ -8,4 +8,5 @@ urlpatterns = [
     path('oauth/start/', views.oauth_start, name='oauth_start'),
     path('oauth/callback', views.oauth_callback, name='oauth_callback'),
     path('oauth/status/', views.oauth_status, name='oauth_status'),
+    path('diag/', views.diagnostics, name='diagnostics'),
 ]

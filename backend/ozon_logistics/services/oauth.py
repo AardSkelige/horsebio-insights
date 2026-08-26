@@ -42,6 +42,10 @@ SCOPES = [
 # Если Ozon не сообщил срок жизни токена и его не удалось прочитать из JWT.
 FALLBACK_LIFETIME = timezone.timedelta(hours=1)
 
+# Верхняя граница правдоподобной длительности жизни токена: всё, что больше,
+# считаем не длительностью, а чем-то другим, и не используем.
+MAX_PLAUSIBLE_LIFETIME = timezone.timedelta(days=90)
+
 
 class OzonOAuthError(RuntimeError):
     """Ошибка авторизации: нет кредов, отказ Ozon, отсутствует токен."""
@@ -95,22 +99,52 @@ def consume_state(state):
     return deleted > 0
 
 
-def _jwt_expiry(token):
-    """Срок годности из payload JWT без проверки подписи.
+def token_claims(token):
+    """Payload JWT без проверки подписи, {} — если разобрать не удалось.
 
-    Подпись не проверяем сознательно: токен пришёл от Ozon по TLS, а нам нужно
-    лишь понять, когда его обновлять. Не разобрали — вернём None.
+    Подпись не проверяем сознательно: токен пришёл от Ozon по TLS, а нам нужны
+    только его собственные метки времени.
     """
     try:
         payload_b64 = token.split('.')[1]
         payload_b64 += '=' * (-len(payload_b64) % 4)
         payload = json.loads(base64.urlsafe_b64decode(payload_b64))
-        exp = payload.get('exp')
-        if exp:
-            return datetime.fromtimestamp(int(exp), tz=dt_timezone.utc)
     except (IndexError, ValueError, binascii.Error, json.JSONDecodeError):
-        pass
-    return None
+        return {}
+    return payload if isinstance(payload, dict) else {}
+
+
+def _expiry_from_jwt(token):
+    """Срок из самого токена — авторитетный источник: по нему Ozon его и проверяет."""
+    exp = token_claims(token).get('exp')
+    if not exp:
+        return None
+    try:
+        return datetime.fromtimestamp(int(exp), tz=dt_timezone.utc)
+    except (TypeError, ValueError, OverflowError, OSError):
+        return None
+
+
+def _expiry_from_expires_in(value):
+    """Срок из поля expires_in — только если оно правдоподобно как длительность.
+
+    Ozon прислал здесь около 1.79e9 — это 57 лет, столько access-токены не живут.
+    Что означает такое значение, документация не объясняет, поэтому вместо догадок
+    отбрасываем его и полагаемся на exp в JWT.
+    """
+    if value in (None, ''):
+        return None
+    try:
+        seconds = int(value)
+    except (TypeError, ValueError):
+        logger.warning('Ozon Доставка: нечисловой expires_in: %r', value)
+        return None
+    if not 0 < seconds <= MAX_PLAUSIBLE_LIFETIME.total_seconds():
+        logger.warning(
+            'Ozon Доставка: expires_in=%s вне разумных пределов, игнорирую', seconds
+        )
+        return None
+    return timezone.now() + timezone.timedelta(seconds=seconds)
 
 
 def _post_token(payload):
@@ -142,11 +176,11 @@ def _store(data, *, previous_refresh=''):
     if not access_token:
         raise OzonOAuthError(f'В ответе Ozon нет access_token: {list(data)}')
 
-    expires_in = data.get('expires_in')
-    if expires_in:
-        expires_at = timezone.now() + timezone.timedelta(seconds=int(expires_in))
-    else:
-        expires_at = _jwt_expiry(access_token) or timezone.now() + FALLBACK_LIFETIME
+    expires_at = (
+        _expiry_from_jwt(access_token)
+        or _expiry_from_expires_in(data.get('expires_in'))
+        or timezone.now() + FALLBACK_LIFETIME
+    )
 
     scope = data.get('scope') or ''
     if isinstance(scope, (list, tuple)):
