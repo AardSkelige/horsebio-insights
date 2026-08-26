@@ -214,8 +214,12 @@ class ShipmentItem(models.Model):
 
 
 class RawMaterialUsage(models.Model):
-    shipment_item = models.ForeignKey(ShipmentItem, on_delete=models.CASCADE, related_name='raw_material_usages', verbose_name='Позиция отгрузки')
-    raw_material = models.ForeignKey(RawMaterial, on_delete=models.CASCADE, verbose_name='Сырьё')
+    # db_index=False на обоих ключах: Django заводит индекс по каждому внешнему
+    # ключу сам, а ниже те же поля уже перечислены в indexes. Получались пары
+    # одинаковых индексов, и планировщик выбирал из Meta.indexes — автоматические
+    # простояли с нулём обращений, занимая 8,5 МБ на 28 МБ данных.
+    shipment_item = models.ForeignKey(ShipmentItem, on_delete=models.CASCADE, related_name='raw_material_usages', verbose_name='Позиция отгрузки', db_index=False)
+    raw_material = models.ForeignKey(RawMaterial, on_delete=models.CASCADE, verbose_name='Сырьё', db_index=False)
     quantity = models.DecimalField(max_digits=10, decimal_places=2, verbose_name='Количество')
 
     def __str__(self):
@@ -225,11 +229,12 @@ class RawMaterialUsage(models.Model):
         db_table = 'parser_rawmaterialusage'
         verbose_name = 'Использование материала для производства'
         verbose_name_plural = 'Использование материалов для производства'
+        # Индекса по quantity здесь больше нет: по количеству никто не ищет,
+        # а весил он 12 МБ при нуле обращений за всё время работы.
         indexes = [
             models.Index(fields=['raw_material', 'shipment_item']),
             models.Index(fields=['shipment_item']),
             models.Index(fields=['raw_material']),
-            models.Index(fields=['quantity']),
         ]
 
 
