@@ -6,6 +6,7 @@ Client-Id/Api-Key и Performance API, здесь — OAuth-токен прило
 """
 
 import logging
+import re
 
 import requests
 
@@ -15,6 +16,25 @@ logger = logging.getLogger(__name__)
 
 BASE_URL = 'https://api-seller.ozon.ru'
 DEFAULT_TIMEOUT = 30
+
+
+def normalize_phone(phone):
+    """Приводит телефон к формату Ozon: только цифры, 10-15 знаков.
+
+    В заказы сайта номер попадает как угодно: «+7 (916) 622-90-30», «8916…».
+    Ozon Доставка работает только по России, поэтому ведущая восьмёрка в
+    одиннадцатизначном номере — это код страны 7, а не часть абонентского номера.
+    """
+    digits = re.sub(r'\D', '', phone or '')
+    if len(digits) == 11 and digits.startswith('8'):
+        digits = '7' + digits[1:]
+    if len(digits) == 10:  # номер без кода страны
+        digits = '7' + digits
+    if not 10 <= len(digits) <= 15:
+        raise OzonLogisticsError(
+            f'Телефон «{phone}» не приводится к формату Ozon (нужно 10-15 цифр)'
+        )
+    return digits
 
 
 class OzonLogisticsError(RuntimeError):
@@ -80,4 +100,4 @@ class OzonLogisticsClient:
         Первый шаг оформления по документации и самый безобидный вызов из
         скоупа ozon-logistics: ничего не создаёт и не меняет.
         """
-        return self.request('/v1/delivery/check', {'phone': phone})
+        return self.request('/v1/delivery/check', {'phone': normalize_phone(phone)})

@@ -175,6 +175,24 @@ class GetValidTokenTests(TestCase):
         self.assertIn('повторная авторизация', str(ctx.exception))
 
 
+class NormalizePhoneTests(TestCase):
+    def test_strips_formatting(self):
+        self.assertEqual(client_module.normalize_phone('+7 (916) 622-90-30'), '79166229030')
+
+    def test_leading_eight_becomes_country_code(self):
+        self.assertEqual(client_module.normalize_phone('89166229030'), '79166229030')
+
+    def test_adds_country_code_to_ten_digits(self):
+        self.assertEqual(client_module.normalize_phone('9166229030'), '79166229030')
+
+    def test_already_normalized_is_unchanged(self):
+        self.assertEqual(client_module.normalize_phone('79166229030'), '79166229030')
+
+    def test_too_short_is_rejected(self):
+        with self.assertRaises(client_module.OzonLogisticsError):
+            client_module.normalize_phone('12345')
+
+
 @patch.dict('os.environ', CREDS)
 class ClientTests(TestCase):
     def setUp(self):
@@ -190,6 +208,12 @@ class ClientTests(TestCase):
             client_module.OzonLogisticsClient().delivery_check('+79161112233')
         headers = post.call_args.kwargs['headers']
         self.assertEqual(headers['Authorization'], 'Bearer access-1')
+
+    def test_phone_is_normalized_before_sending(self):
+        """Ozon принимает только цифры: ^\\d{10,15}$."""
+        with patch('requests.post', return_value=FakeResponse(data={'result': []})) as post:
+            client_module.OzonLogisticsClient().delivery_check('+7 (916) 622-90-30')
+        self.assertEqual(post.call_args.kwargs['json'], {'phone': '79166229030'})
 
     def test_retries_once_after_401(self):
         refreshed = FakeResponse(data={'access_token': 'access-2', 'expires_in': 3600})

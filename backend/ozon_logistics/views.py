@@ -145,7 +145,7 @@ def diagnostics(request):
 
     Проверяем доступность доставки по номеру телефона — метод ничего не создаёт,
     но проходит весь путь: токен, Bearer, скоуп ozon-logistics.
-    Вызов: /api/ozon-logistics/diag/?phone=+79161112233
+    Вызов: /api/ozon-logistics/diag/?phone=79161112233
     """
     denied = _superuser_only(request)
     if denied:
@@ -155,7 +155,7 @@ def diagnostics(request):
     if not phone:
         return JsonResponse({
             'status': 'error',
-            'message': 'Укажите номер телефона: ?phone=+79161112233',
+            'message': 'Укажите номер телефона: ?phone=79161112233',
         }, status=400)
 
     try:
