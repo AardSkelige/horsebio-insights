@@ -36,6 +36,7 @@ INSTALLED_APPS = [
 
     # OZON
     'ozon',
+    'ozon_logistics',
 
     # Мониторинг инвентаризации
     'inventory_tracking',

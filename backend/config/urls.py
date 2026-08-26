@@ -14,6 +14,9 @@ urlpatterns = [
         # Endpoints для Ozon аналитики
         path('ozon/', include('ozon.urls', namespace='ozon')),
 
+        # Ozon Доставка — отдельный контур с OAuth-авторизацией
+        path('ozon-logistics/', include('ozon_logistics.urls', namespace='ozon_logistics')),
+
     ])),
 
     # Endpoints для синхронизации МойСклад

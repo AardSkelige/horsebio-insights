@@ -56,3 +56,6 @@ yarn-debug.log*
 yarn-error.log*
 
 architecture-flows.html
+
+# Рабочие документы (регламенты, справочники) — локально, вне репозитория
+docs/

@@ -3,6 +3,13 @@ repos:
     hooks:
       - id: gitleaks
         name: gitleaks (secret scan)
-        entry: gitleaks git --pre-commit --staged --redact --verbose
+        # PATH берётся у процесса, запустившего git: у IDE, открытой из Dock, это
+        # голый /usr/bin:/bin:/usr/sbin:/sbin, и gitleaks оттуда не виден. Поэтому
+        # перед запуском добавляем стандартные каталоги Homebrew (Apple Silicon
+        # и Intel), если бинарник ещё не найден.
+        entry: >-
+          bash -c 'command -v gitleaks >/dev/null ||
+          export PATH="/opt/homebrew/bin:/usr/local/bin:$PATH";
+          exec gitleaks git --pre-commit --staged --redact --verbose'
         language: system
         pass_filenames: false
