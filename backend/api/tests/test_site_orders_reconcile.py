@@ -210,7 +210,14 @@ class SyncWindowTests(SimpleTestCase):
 
             self.assertTrue(result["refused"])
             self.assertEqual(core.load_store(path)["last_fetch"], "2026-08-01T09:00:00")
-            self.assertEqual(result["stale_days"], 23)
+            self.assertEqual(result["stale_days"], 24, "считаем календарные дни, а не полные сутки")
+
+    def test_age_counts_calendar_days_not_full_24h(self):
+        # Прогон ежедневный и стартует чуть раньше отметки прошлой выгрузки:
+        # по полным суткам разница отбрасывала бы остаток и теряла целый день
+        store = dict(core.EMPTY_STORE, orders={}, last_fetch="2026-08-25T09:43:00")
+
+        self.assertEqual(core.fetch_age_days(store, now=datetime(2026, 8, 27, 9, 40)), 2)
 
     def test_incomplete_window_is_not_acknowledged(self):
         # Окно не полное — значит мы догнали, и за ним ничего не стоит.

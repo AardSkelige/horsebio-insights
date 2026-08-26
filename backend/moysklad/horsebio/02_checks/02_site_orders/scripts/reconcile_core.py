@@ -139,11 +139,18 @@ def sync_window(export, path: Path, acknowledge: bool, now: datetime = None) -> 
 
 
 def fetch_age_days(store: dict, now: datetime = None) -> int | None:
-    """Сколько суток прошло с последней удачной выгрузки (None — не было ни разу)."""
+    """Сколько календарных дней назад была последняя удачная выгрузка
+    (None — не было ни разу).
+
+    Считаем именно по датам, а не по прошедшему времени: прогон ежедневный, и
+    если он стартует хоть на минуту раньше отметки прошлой выгрузки, разница в
+    сутках отбрасывает остаток и теряет целый день — находка о молчании сайта
+    вылезала бы на сутки позже, чем задумано.
+    """
     last = store.get("last_fetch")
     if not last:
         return None
-    return ((now or datetime.now()) - datetime.fromisoformat(last)).days
+    return ((now or datetime.now()).date() - datetime.fromisoformat(last).date()).days
 
 
 def compare(store: dict, ms_index: dict, today: str = None) -> tuple:
