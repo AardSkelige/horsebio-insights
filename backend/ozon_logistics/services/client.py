@@ -95,9 +95,10 @@ class OzonLogisticsClient:
     # --- Методы Ozon Доставки -------------------------------------------------
 
     def delivery_check(self, phone):
-        """Доступна ли покупателю доставка Ozon по его номеру телефона.
+        """Доступна ли покупателю доставка Ozon: {'is_possible': bool}.
 
         Первый шаг оформления по документации и самый безобидный вызов из
-        скоупа ozon-logistics: ничего не создаёт и не меняет.
+        скоупа ozon-logistics: ничего не создаёт и не меняет. Ограничения по
+        сумме, категории и географии метод не учитывает.
         """
-        return self.request('/v1/delivery/check', {'phone': normalize_phone(phone)})
+        return self.request('/v1/delivery/check', {'client_phone': normalize_phone(phone)})

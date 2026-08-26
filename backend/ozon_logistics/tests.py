@@ -213,7 +213,7 @@ class ClientTests(TestCase):
         """Ozon принимает только цифры: ^\\d{10,15}$."""
         with patch('requests.post', return_value=FakeResponse(data={'result': []})) as post:
             client_module.OzonLogisticsClient().delivery_check('+7 (916) 622-90-30')
-        self.assertEqual(post.call_args.kwargs['json'], {'phone': '79166229030'})
+        self.assertEqual(post.call_args.kwargs['json'], {'client_phone': '79166229030'})
 
     def test_retries_once_after_401(self):
         refreshed = FakeResponse(data={'access_token': 'access-2', 'expires_in': 3600})
