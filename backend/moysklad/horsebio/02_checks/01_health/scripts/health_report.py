@@ -349,7 +349,7 @@ class ReportingMixin:
                     marker = "→" if i == 0 else "  "
                     print(
                         f"    {marker} №{h['doc']:<8}  {h['date']}  "
-                        f"{h['price']:>10.2f} руб  x{qty_str}"
+                        f"{h['price']:>10.2f} руб  x{qty_str:<9}  {h.get('agent', '')}"
                     )
                 print()
 
@@ -633,15 +633,27 @@ class ReportingMixin:
 
         # 13. Скачки цен в приёмках. last_doc нужен UI для разового исключения
         # (extra.supply_doc — глушит только скачок этой приёмки).
+        def _jump_detail(it):
+            # Поставщики показываем только когда они разные: одинаковый у всех приёмок
+            # ничего не объясняет, а разный — обычно и есть причина «скачка».
+            last_agent = it.get('last_agent') or ''
+            prev_agents = [a for a in it.get('prev_agents', []) if a]
+            same = bool(last_agent) and set(prev_agents) <= {last_agent}
+            last_who = '' if same else (f" ({last_agent})" if last_agent else '')
+            prev_who = '' if same else (f" ({', '.join(prev_agents)})" if prev_agents else '')
+            tail = f" · {last_agent}" if same else ''
+            return (f"приёмка {'дороже' if it['last_price'] > it['avg_prev'] else 'дешевле'} "
+                    f"обычной на {it['jump_pct']:.1f}% · "
+                    f"последняя {money(it['last_price'])}{last_who} ↔ "
+                    f"средняя по прошлым {money(it['avg_prev'])}{prev_who} · "
+                    f"приёмка №{it.get('last_doc', '?')} {it.get('last_date', '')}{tail}")
+
         add('supply_jumps', 'Скачки цен в приёмках', 'supply_jumps', None, [
             {
                 'key': it['name'], 'ms_id': '',
                 'object': it['name'], 'severity': 'warning',
                 'last_doc': it.get('last_doc', ''),
-                'detail': f"приёмка {'дороже' if it['last_price'] > it['avg_prev'] else 'дешевле'} "
-                          f"обычной на {it['jump_pct']:.1f}% · "
-                          f"последняя {money(it['last_price'])} ↔ средняя по прошлым {money(it['avg_prev'])} · "
-                          f"приёмка №{it.get('last_doc', '?')} {it.get('last_date', '')}",
+                'detail': _jump_detail(it),
             }
             for it in self.stats['supply_jumps']
         ])

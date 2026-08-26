@@ -57,6 +57,16 @@ class PriceChecksMixin:
         return products
 
     @staticmethod
+    def _short_agent(row):
+        """Короткое имя поставщика: «ООО "Ревада-Нева", г. Москва» → «Ревада-Нева»."""
+        name = (row.get('operation', {}).get('agent', {}) or {}).get('name', '') or ''
+        name = name.split(',')[0].strip()
+        for prefix in ('ООО', 'АО', 'ЗАО', 'ПАО', 'ИП'):
+            if name.startswith(prefix + ' '):
+                name = name[len(prefix) + 1:]
+        return name.replace('"', '').replace('«', '').replace('»', '').strip()
+
+    @staticmethod
     def _merge_supply_rows(rows):
         """Склеить строки одной приёмки в одну, цена — средневзвешенная по количеству.
 
@@ -152,6 +162,7 @@ class PriceChecksMixin:
             # Берём предыдущие цены только в пределах max_months
             # чтобы старые приёмки (2021 и т.п.) не искажали среднее
             prev_candidates = []
+            prev_agents = []
             for r in rows[1: 1 + self.prev_count + 3]:  # +3 запас на случай пропусков
                 op_moment = r.get('operation', {}).get('moment', '')[:10]
                 p = r.get('cost', 0) / 100
@@ -161,8 +172,10 @@ class PriceChecksMixin:
                     dt = datetime.strptime(op_moment, '%Y-%m-%d')
                     if dt >= self.cutoff_date:
                         prev_candidates.append(p)
+                        prev_agents.append(self._short_agent(r))
                 except ValueError:
                     prev_candidates.append(p)
+                    prev_agents.append(self._short_agent(r))
                 if len(prev_candidates) >= self.prev_count:
                     break
 
@@ -207,6 +220,7 @@ class PriceChecksMixin:
                         'date': op.get('moment', '')[:10],
                         'price': p,
                         'qty': q,
+                        'agent': self._short_agent(r),
                     })
 
             # Авто-определение паттерна "одна сторона этикетки":
@@ -220,10 +234,14 @@ class PriceChecksMixin:
                         f" одна сторона этикетки (задник или передник)"
                     )
 
+            # Поставщики: половина «скачков» — это сравнение разных поставщиков между
+            # собой (мелкий заказ с Алиэкспресса против оптовой поставки), видно сразу
             return {
                 'name': product_name,
                 'last_price': last_price,
                 'last_qty': last_qty,
+                'last_agent': self._short_agent(rows[0]),
+                'prev_agents': list(dict.fromkeys(a for a in prev_agents if a)),
                 'avg_prev': avg_prev,
                 'jump_pct': jump_pct,
                 'last_doc': last_doc,
