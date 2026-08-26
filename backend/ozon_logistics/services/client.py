@@ -75,9 +75,9 @@ class OzonLogisticsClient:
     # --- Методы Ozon Доставки -------------------------------------------------
 
     def delivery_check(self, phone):
-        """Доступна ли покупателю доставка Ozon. Телефон — в формате Ozon."""
-        return self.request('/v1/delivery/check', {'phone': phone})
+        """Доступна ли покупателю доставка Ozon по его номеру телефона.
 
-    def warehouse_list(self):
-        """Склады продавца. Безопасный read-метод для проверки авторизации."""
-        return self.request('/v1/warehouse/list')
+        Первый шаг оформления по документации и самый безобидный вызов из
+        скоупа ozon-logistics: ничего не создаёт и не меняет.
+        """
+        return self.request('/v1/delivery/check', {'phone': phone})

@@ -143,14 +143,23 @@ def _timestamp_to_iso(value):
 def diagnostics(request):
     """Живая проверка связи: реально ли открыты методы Ozon Доставки.
 
-    Список складов — самый безобидный read-метод: ничего не меняет, но проходит
-    полный путь через токен и авторизацию Seller API.
+    Проверяем доступность доставки по номеру телефона — метод ничего не создаёт,
+    но проходит весь путь: токен, Bearer, скоуп ozon-logistics.
+    Вызов: /api/ozon-logistics/diag/?phone=+79161112233
     """
     denied = _superuser_only(request)
     if denied:
         return denied
+
+    phone = request.GET.get('phone', '').strip()
+    if not phone:
+        return JsonResponse({
+            'status': 'error',
+            'message': 'Укажите номер телефона: ?phone=+79161112233',
+        }, status=400)
+
     try:
-        result = OzonLogisticsClient().warehouse_list()
+        result = OzonLogisticsClient().delivery_check(phone)
     except (oauth.OzonOAuthError, OzonLogisticsError) as exc:
         return JsonResponse({'status': 'error', 'message': str(exc)}, status=502)
     return JsonResponse({'status': 'ok', 'result': result})

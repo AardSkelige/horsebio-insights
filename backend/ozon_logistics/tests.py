@@ -187,7 +187,7 @@ class ClientTests(TestCase):
 
     def test_sends_bearer_token(self):
         with patch('requests.post', return_value=FakeResponse(data={'result': []})) as post:
-            client_module.OzonLogisticsClient().warehouse_list()
+            client_module.OzonLogisticsClient().delivery_check('+79161112233')
         headers = post.call_args.kwargs['headers']
         self.assertEqual(headers['Authorization'], 'Bearer access-1')
 
@@ -199,7 +199,7 @@ class ClientTests(TestCase):
             FakeResponse(data={'result': ['ok']}),                # повтор
         ]
         with patch('requests.post', side_effect=responses):
-            result = client_module.OzonLogisticsClient().warehouse_list()
+            result = client_module.OzonLogisticsClient().delivery_check('+79161112233')
         self.assertEqual(result, {'result': ['ok']})
 
     def test_raises_with_response_body(self):
@@ -329,6 +329,10 @@ class AccessControlTests(TestCase):
         self.client.force_login(self._user(superuser=False))
         self.assertEqual(self.client.get('/api/ozon-logistics/diag/').status_code, 403)
 
+    def test_diag_requires_phone(self):
+        self.client.force_login(self._user(superuser=True))
+        self.assertEqual(self.client.get('/api/ozon-logistics/diag/').status_code, 400)
+
     def test_diag_calls_seller_api(self):
         OzonOAuthToken.objects.create(
             pk=OzonOAuthToken.SINGLETON_PK,
@@ -338,7 +342,7 @@ class AccessControlTests(TestCase):
         )
         self.client.force_login(self._user(superuser=True))
         with patch('requests.post', return_value=FakeResponse(data={'result': ['w1']})):
-            response = self.client.get('/api/ozon-logistics/diag/')
+            response = self.client.get('/api/ozon-logistics/diag/', {'phone': '+79161112233'})
         self.assertEqual(response.json()['result'], {'result': ['w1']})
 
     def test_diag_reports_seller_api_failure(self):
@@ -350,6 +354,6 @@ class AccessControlTests(TestCase):
         )
         self.client.force_login(self._user(superuser=True))
         with patch('requests.post', return_value=FakeResponse(status_code=403, text='no scope')):
-            response = self.client.get('/api/ozon-logistics/diag/')
+            response = self.client.get('/api/ozon-logistics/diag/', {'phone': '+79161112233'})
         self.assertEqual(response.status_code, 502)
         self.assertIn('no scope', response.json()['message'])
