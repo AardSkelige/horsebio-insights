@@ -25,6 +25,11 @@ services:
       # Копия заказов сайта: подтверждённые в выгрузке заказы сайт больше не
       # отдаёт, так что этот файл — единственный их экземпляр
       - hb_site_orders_data:/app/moysklad/horsebio/02_checks/02_site_orders/data
+      # Состояние бэкапа для проверки «Бэкапы» на странице /checks. Только чтение
+      # и только каталог state: в самих архивах лежат .env.prod и приватные ключи,
+      # их приложению видеть незачем. Каталог на хосте, а не volume — пишет его
+      # скрипт бэкапа, который живёт вне Docker.
+      - /root/backup/state:/app/backup-state:ro
     depends_on:
       db:
         condition: service_healthy

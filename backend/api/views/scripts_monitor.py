@@ -188,6 +188,17 @@ SCRIPTS_CONFIG = [
         'script': '/app/manage.py',
         'args': ['check_inventory', '--triggered-by', 'scheduler'],
     },
+    {
+        'id': 'horsebio_backup',
+        'topic': 'Сохранность',
+        'name': 'Бэкапы',
+        'account': 'HorseBio',
+        'schedule': 'Ежедн. в 09:50',
+        'description': 'Идут ли бэкапы: свежесть последнего прогона, размер архивов, место на диске, давность проверки восстановлением',
+        'script': '/app/moysklad/horsebio/02_checks/03_backup/scripts/01_check_backup.py',
+        'args': [],
+        'structured': True,
+    },
 ]
 
 SCRIPTS_BY_ID = {s['id']: s for s in SCRIPTS_CONFIG}
