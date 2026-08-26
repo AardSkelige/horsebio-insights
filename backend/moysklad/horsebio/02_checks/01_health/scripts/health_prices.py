@@ -56,6 +56,43 @@ class PriceChecksMixin:
 
         return products
 
+    @staticmethod
+    def _merge_supply_rows(rows):
+        """Склеить строки одной приёмки в одну, цена — средневзвешенная по количеству.
+
+        Один товар может стоять в приёмке несколькими строками с разной ценой
+        (например комплект наклейки и отдельно задник к нему). Без склейки каждая
+        строка считается самостоятельной приёмкой: одна попадает в «последнюю
+        цену», другая в среднее по предыдущим — и получается скачок на пустом месте.
+
+        Возвращает строки от новых к старым.
+        """
+        merged = {}
+        for r in rows:
+            op = r.get('operation', {})
+            key = op.get('meta', {}).get('href') or op.get('name')
+            if not key:
+                continue  # без опознанного документа склеивать не с чем
+            qty = r.get('quantity', 0) or 0
+            sum_cost = r.get('sum', 0) or 0  # итог строки в копейках
+            item = merged.get(key)
+            if item is None:
+                merged[key] = {'operation': op, 'quantity': qty, 'sum_cost': sum_cost}
+            else:
+                item['quantity'] += qty
+                item['sum_cost'] += sum_cost
+
+        rows = [
+            {
+                'operation': it['operation'],
+                'quantity': it['quantity'],
+                'cost': it['sum_cost'] / it['quantity'] if it['quantity'] else 0,
+            }
+            for it in merged.values()
+        ]
+        rows.sort(key=lambda x: x['operation'].get('moment', ''), reverse=True)
+        return rows
+
     def check_supply_price(self, product_id, product_name):
         """Проверить скачок цены в приёмках одного товара.
 
@@ -66,20 +103,38 @@ class PriceChecksMixin:
         try:
             time.sleep(0.2)
 
-            turnover = self.h._get("/report/turnover/byoperations", {
+            # momentFrom = cutoff_date, а не 2020 год: отчёт отдаёт строки от старых
+            # к новым и режет по limit, поэтому запрос за всю историю возвращал
+            # приёмки 2020-2023 и до свежих не доходил — товары с длинной историей
+            # выпадали из проверки целиком. Окно и так ограничено max_months.
+            params = {
                 "filter": f"product=https://api.moysklad.ru/api/remap/1.2/entity/product/{product_id};type=supply",
-                "momentFrom": "2020-01-01 00:00:00",
+                "momentFrom": self.cutoff_date.strftime('%Y-%m-%d 00:00:00'),
                 "momentTo": datetime.now().strftime('%Y-%m-%d 23:59:59'),
-                "limit": 10,
-            })
+                "limit": 1000,  # максимум страницы отчёта
+            }
 
-            rows = turnover.get('rows', [])
+            # Забираем все строки окна: порядок выдачи не гарантирован, а одна приёмка
+            # даёт несколько строк (разные цены позиций, разные склады) — неполный
+            # набор исказил бы и склейку, и «последнюю» цену.
+            rows = []
+            offset = 0
+            while True:
+                turnover = self.h._get("/report/turnover/byoperations",
+                                       {**params, "offset": offset})
+                batch = turnover.get('rows', [])
+                rows.extend(batch)
+                offset += len(batch)
+                size = turnover.get('meta', {}).get('size', len(rows))
+                if not batch or offset >= size:
+                    break
+                time.sleep(0.2)
+
+            # Строки одной приёмки склеиваем, иначе каждая считается отдельной приёмкой
+            rows = self._merge_supply_rows(rows)
 
             if len(rows) < 2:
                 return None  # Недостаточно приёмок для сравнения
-
-            # Сортируем от новых к старым
-            rows.sort(key=lambda x: x.get('operation', {}).get('moment', ''), reverse=True)
 
             prices = [r.get('cost', 0) / 100 for r in rows]
             qtys = [r.get('quantity', 0) for r in rows]

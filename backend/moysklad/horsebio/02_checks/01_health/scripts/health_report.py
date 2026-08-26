@@ -478,9 +478,12 @@ class ReportingMixin:
         _phref = getattr(self, '_product_uuid_href', {})
 
         def _dev_item(it, sev):
-            sign = '+' if it['current_cost'] > it['last_supply_cost'] else '−'
+            # Словами, а не знаком: «+12%» читается как «подорожало», хотя означает
+            # «остаток на складе числится дороже, чем стоила последняя закупка».
+            side = 'склад дороже' if it['current_cost'] > it['last_supply_cost'] else 'склад дешевле'
             msg = it.get('message')
-            head = f"{msg} · " if (sev == 'critical' and msg) else f"{sign}{it['deviation_pct']:.1f}% · "
+            head = (f"{msg} · " if (sev == 'critical' and msg)
+                    else f"{side} закупки на {it['deviation_pct']:.1f}% · ")
             return {
                 'key': it.get('product_code') or '', 'ms_id': it.get('product_id') or '',
                 'ms_href': _phref.get(it.get('product_id')) or '',
@@ -635,8 +638,9 @@ class ReportingMixin:
                 'key': it['name'], 'ms_id': '',
                 'object': it['name'], 'severity': 'warning',
                 'last_doc': it.get('last_doc', ''),
-                'detail': f"{'▲' if it['last_price'] > it['avg_prev'] else '▼'} {it['jump_pct']:.1f}% · "
-                          f"последняя {money(it['last_price'])} ↔ средняя {money(it['avg_prev'])} · "
+                'detail': f"приёмка {'дороже' if it['last_price'] > it['avg_prev'] else 'дешевле'} "
+                          f"обычной на {it['jump_pct']:.1f}% · "
+                          f"последняя {money(it['last_price'])} ↔ средняя по прошлым {money(it['avg_prev'])} · "
                           f"приёмка №{it.get('last_doc', '?')} {it.get('last_date', '')}",
             }
             for it in self.stats['supply_jumps']
