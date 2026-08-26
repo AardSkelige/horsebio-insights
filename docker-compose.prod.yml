@@ -59,6 +59,13 @@ services:
     ports:
       - "80:80"
       - "3001:80"
+    # nginx фронтенда резолвит upstream backend_nginx один раз, при старте,
+    # и падает с "host not found in upstream", если тот ещё не поднялся.
+    # Без depends_on порядок запуска не гарантирован — после перезагрузки
+    # сервера 26.08.2026 фронтенд из-за этого не поднялся.
+    depends_on:
+      backend_nginx:
+        condition: service_started
     networks:
       - app-network
     restart: unless-stopped
