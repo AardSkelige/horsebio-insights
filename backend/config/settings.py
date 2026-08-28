@@ -138,6 +138,7 @@ _BASE_CORS_ORIGINS = [
     "http://localhost:8001",
     "http://frontend:3001",
     "http://insight.horse-bio.ru",
+    "https://insight.horse-bio.ru",
 ]
 _extra_cors = os.getenv('CORS_ALLOWED_ORIGINS', '')
 CORS_ALLOWED_ORIGINS = _BASE_CORS_ORIGINS + [o.strip() for o in _extra_cors.split(',') if o.strip()]
@@ -151,6 +152,7 @@ _BASE_CSRF_ORIGINS = [
     "http://frontend:3001",
     "http://insight.horse-bio.ru",
     "http://insight.horse-bio.ru:8001",
+    "https://insight.horse-bio.ru",
 ]
 _extra_csrf = os.getenv('CSRF_TRUSTED_ORIGINS', '')
 CSRF_TRUSTED_ORIGINS = _BASE_CSRF_ORIGINS + [o.strip() for o in _extra_csrf.split(',') if o.strip()]
