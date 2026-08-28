@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import PropTypes from 'prop-types';
-import { ExternalLink, EyeOff, Package } from 'lucide-react';
+import { ExternalLink, EyeOff, Package, Upload } from 'lucide-react';
 import { Button } from '../ui';
 import { discountedApi } from '../../api/discountedApi';
 
@@ -16,14 +16,19 @@ function term(position) {
 /**
  * Позиция на складе «Уценка».
  *
+ * «Нет на витрине» означает, что покупатель карточку не видит: её либо ещё не
+ * отправляли, либо она скрыта. Это читается из фида сайта, а не из наших записей,
+ * поэтому показывает настоящее положение дел, а не то, что мы когда-то отправили.
+ *
  * «Снять с продажи» уходит обменом на сайт, а не в МойСклад: остаток и срок
  * остаются как были, меняется только доступность карточки покупателю. Поэтому
  * после успешного снятия карточка не исчезает — она просто перестаёт предлагать
  * это действие, а сама позиция остаётся на складе до списания.
  */
-export default function DiscountedCard({ position, onDelisted }) {
+export default function DiscountedCard({ position, onDelisted, onPublished }) {
     const [busy, setBusy] = useState(false);
     const [done, setDone] = useState(false);
+    const [publishing, setPublishing] = useState(false);
     const [error, setError] = useState(null);
 
     const { text, hot } = term(position);
@@ -42,6 +47,19 @@ export default function DiscountedCard({ position, onDelisted }) {
             setError(e?.message || 'Сайт не принял обмен');
         } finally {
             setBusy(false);
+        }
+    };
+
+    const handlePublish = async () => {
+        setPublishing(true);
+        setError(null);
+        try {
+            await discountedApi.publish(position.id);
+            onPublished?.(position.id);
+        } catch (e) {
+            setError(e?.message || 'Сайт не принял карточку');
+        } finally {
+            setPublishing(false);
         }
     };
 
@@ -65,6 +83,15 @@ export default function DiscountedCard({ position, onDelisted }) {
                 <span className="qty">{money(position.sum)}</span>
             </div>
 
+            {position.published !== null && (
+                <div className={`uc-site${position.published ? ' live' : ''}`}>
+                    <span className="dot" />
+                    {position.published
+                        ? `На сайте: ${money(position.site_price)}, ${position.site_quantity} шт`
+                        : 'Нет на витрине'}
+                </div>
+            )}
+
             <div className="uc-actions">
                 {canDelist && (
                     <Button
@@ -76,6 +103,17 @@ export default function DiscountedCard({ position, onDelisted }) {
                         onClick={handleDelist}
                     >
                         {done ? 'Снят с продажи' : busy ? 'Снимаю…' : 'Снять с продажи'}
+                    </Button>
+                )}
+                {!position.published && (
+                    <Button
+                        variant="primary"
+                        size="sm"
+                        icon={Upload}
+                        loading={publishing}
+                        onClick={handlePublish}
+                    >
+                        {publishing ? 'Отправляю…' : 'Отправить на сайт'}
                     </Button>
                 )}
                 {position.ms_url && (
@@ -110,6 +148,10 @@ DiscountedCard.propTypes = {
         sum: PropTypes.number,
         ms_url: PropTypes.string,
         site_url: PropTypes.string,
+        published: PropTypes.bool,
+        site_price: PropTypes.number,
+        site_quantity: PropTypes.number,
     }).isRequired,
     onDelisted: PropTypes.func,
+    onPublished: PropTypes.func,
 };

@@ -119,6 +119,10 @@ MOYSKLAD_TOKEN = os.getenv('MOYSKLAD_TOKEN')
 # Адрес админки держим без параметра access — это токен сессии, в коде ему не место;
 # у залогиненного сотрудника ссылка откроется по его собственной сессии.
 SITE_CML_URL = os.getenv('SITE_CML_URL', 'https://horse-bio.ru/-/api/cml/v2/')
+# Служебный фид сайта: обмен CommerceML умеет только писать, а читать витрину —
+# нечем. Один из фидов маркетплейсов переведён на свой шаблон и отдаёт артикулы,
+# цены, остатки и фотографии (см. docs/site-channels.md).
+SITE_FEED_URL = os.getenv('SITE_FEED_URL', 'https://horse-bio.ru/e/share/avito')
 SITE_CML_LOGIN = os.getenv('SITE_CML_LOGIN', '')
 SITE_CML_PASSWORD = os.getenv('SITE_CML_PASSWORD', '')
 

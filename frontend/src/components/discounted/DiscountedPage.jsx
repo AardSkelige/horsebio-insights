@@ -14,7 +14,7 @@ const units = (value) => `${Math.round(value || 0).toLocaleString('ru-RU')} шт
 const LANES = [
     { key: 'urgent',  title: 'Снять с продажи', tone: 'urgent', states: ['expired'],           empty: 'Просроченного нет' },
     { key: 'soon',    title: 'Скоро снимать',   tone: 'warn',   states: ['delist', 'no_date'], empty: 'Ничего не подходит к сроку' },
-    { key: 'selling', title: 'В продаже',       tone: '',       states: ['ok'],                empty: 'Пусто' },
+    { key: 'selling', title: 'В продаже',       tone: 'ok',     states: ['ok'],                empty: 'Пусто' },
 ];
 
 // Процесс живёт в трёх местах сразу, и без подсказки на экране приходится каждый
@@ -112,7 +112,10 @@ export default function DiscountedPage() {
                                             <Stagger className="uc-list">
                                                 {items.map((position) => (
                                                     <StaggerItem key={position.id}>
-                                                        <DiscountedCard position={position} />
+                                                        <DiscountedCard
+                                                            position={position}
+                                                            onPublished={() => load(true)}
+                                                        />
                                                     </StaggerItem>
                                                 ))}
                                             </Stagger>

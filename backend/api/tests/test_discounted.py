@@ -80,6 +80,7 @@ class BuildDataTest(SimpleTestCase):
         with patch('api.views.discounted._resolve_refs', return_value=(STORE_HREF, FOLDER_HREF, ATTR_ID)), \
              patch('api.views.discounted._get_all_pages', side_effect=[products, stock_rows]), \
              patch('api.views.discounted._build_analytics', return_value={}), \
+             patch('api.views.discounted.site_feed.offers', return_value={}), \
              patch('api.views.discounted._days_on_stock', return_value=days_on_stock):
             return _build_data()
 
@@ -135,6 +136,7 @@ class BuildDataTest(SimpleTestCase):
         """Отчёт по документам стоит запроса на товар — для пустых карточек не дёргаем."""
         soon = (self.today + timedelta(days=100)).isoformat()
         with patch('api.views.discounted._resolve_refs', return_value=(STORE_HREF, FOLDER_HREF, ATTR_ID)), \
+             patch('api.views.discounted.site_feed.offers', return_value={}), \
              patch('api.views.discounted._get_all_pages', side_effect=[
                  [_product('p1', 'A-UC', 'С остатком', soon), _product('p2', 'B-UC', 'Пустая', soon)],
                  [_stock('p1', 3.0, 10000)],
@@ -240,6 +242,7 @@ class RequestShapeTest(SimpleTestCase):
 
         with patch('api.views.discounted._resolve_refs', return_value=(STORE_HREF, FOLDER_HREF, ATTR_ID)), \
              patch('api.views.discounted._build_analytics', return_value={}), \
+             patch('api.views.discounted.site_feed.offers', return_value={}), \
              patch('api.views.discounted._get_all_pages', side_effect=remember):
             _build_data()
 
@@ -257,6 +260,7 @@ class RequestShapeTest(SimpleTestCase):
 
         with patch('api.views.discounted._resolve_refs', return_value=(STORE_HREF, FOLDER_HREF, ATTR_ID)), \
              patch('api.views.discounted._build_analytics', return_value={}), \
+             patch('api.views.discounted.site_feed.offers', return_value={}), \
              patch('api.views.discounted._get_all_pages', side_effect=remember):
             _build_data()
 
@@ -325,3 +329,120 @@ class AnalyticsTest(SimpleTestCase):
         self.assertEqual(data['marked']['quantity'], 0)
         self.assertEqual(data['sold']['revenue'], 0)
         self.assertEqual(data['written_off']['quantity'], 0)
+
+
+class SiteStateTest(SimpleTestCase):
+    """Публикация на сайте: читаем её из фида, а не угадываем.
+
+    Важно различать «карточки на сайте нет» и «не смогли проверить»: в первом
+    случае интерфейс предлагает опубликовать, во втором — молчит, иначе человек
+    отправит карточку второй раз из-за упавшего фида.
+    """
+
+    def setUp(self):
+        cache.clear()
+
+    def tearDown(self):
+        cache.clear()
+
+    def _run(self, products, stock_rows, on_site):
+        with patch('api.views.discounted._resolve_refs', return_value=(STORE_HREF, FOLDER_HREF, ATTR_ID)), \
+             patch('api.views.discounted._get_all_pages', side_effect=[products, stock_rows]), \
+             patch('api.views.discounted._build_analytics', return_value={}), \
+             patch('api.views.discounted.site_feed.offers', **on_site), \
+             patch('api.views.discounted._days_on_stock', return_value=None):
+            return _build_data()
+
+    def _position(self, on_site):
+        expires = (date.today() + timedelta(days=100)).isoformat()
+        data = self._run(
+            [_product('p1', '01-01AP0500-UC', 'Уценка // Хондро', expires)],
+            [_stock('p1', 5.0, 30000)],
+            on_site,
+        )
+        return data['positions'][0]
+
+    def test_published_when_feed_knows_the_article(self):
+        position = self._position({'return_value': {
+            '01-01AP0500-UC': {'name': 'Уценка // Хондро',
+                               'url': 'https://horse-bio.ru/ucenka-hondro',
+                               'price': 1176.0, 'amount': 5.0, 'pictures': []},
+        }})
+        self.assertIs(position['published'], True)
+        self.assertEqual(position['site_price'], 1176.0)
+        self.assertEqual(position['site_quantity'], 5.0)
+        self.assertEqual(position['site_url'], 'https://horse-bio.ru/ucenka-hondro')
+
+    def test_not_published_when_feed_has_no_article(self):
+        position = self._position({'return_value': {}})
+        self.assertIs(position['published'], False)
+        # без карточки на сайте адрес всё равно нужен — по нему её и откроют после публикации
+        self.assertEqual(position['site_url'], 'https://horse-bio.ru/ucenka-hondro')
+
+    def test_unknown_when_feed_is_down(self):
+        position = self._position({'side_effect': RuntimeError('фид не ответил')})
+        self.assertIsNone(position['published'])
+
+
+class SlugTest(SimpleTestCase):
+    """ЧПУ считается из названия — тем же правилом, что ставится в карточке сайта."""
+
+    def test_transliterates_and_drops_separators(self):
+        from api.views.discounted import site_slug
+        self.assertEqual(
+            site_slug('Уценка // Пробиотик GastroPro для лошадей, 1600г'),
+            'ucenka-probiotik-gastropro-dlya-loshadej-1600g',
+        )
+
+
+class PublishTest(TestCase):
+    """Отправка карточки на сайт."""
+
+    def setUp(self):
+        cache.clear()
+        self.client = Client()
+        user = User.objects.create_user('sergey', password='secret')
+        UserPageAccess.objects.create(user=user, page_key='discounted')
+        self.client.login(username='sergey', password='secret')
+
+    def tearDown(self):
+        cache.clear()
+
+    def _post(self, product, pictures=('https://horse-bio.ru/d/a.png',), stock=7.0):
+        with patch('api.views.discounted._get', return_value=product), \
+             patch('api.views.discounted._resolve_refs', return_value=(STORE_HREF, FOLDER_HREF, ATTR_ID)), \
+             patch('api.views.discounted._get_all_pages', return_value=[{'stock': stock}]), \
+             patch('api.views.discounted.site_feed.pictures_for', return_value=list(pictures)) as pics, \
+             patch('api.views.discounted.site_exchange.publish', return_value=len(pictures)) as publish:
+            response = self.client.post('/api/discounted/p1/publish/')
+        return response, publish, pics
+
+    def test_publishes_with_stock_and_pictures_of_the_source_card(self):
+        product = {
+            'article': '01-01AP0500-UC',
+            'name': 'Уценка // Хондро',
+            'salePrices': [{'priceType': {'name': RETAIL}, 'value': 117600}],
+        }
+        response, publish, pics = self._post(product)
+
+        self.assertEqual(response.status_code, 200)
+        # фотографии берём у основной карточки — это артикул без суффикса
+        pics.assert_called_once_with('01-01AP0500')
+        kwargs = publish.call_args.kwargs
+        self.assertEqual(kwargs['price'], 1176)
+        self.assertEqual(kwargs['quantity'], 7)
+        self.assertEqual(kwargs['pictures'], ['https://horse-bio.ru/d/a.png'])
+        attributes = dict(kwargs['attributes'])
+        self.assertEqual(attributes['ЧПУ'], 'ucenka-hondro')
+        self.assertEqual(attributes['Товар уже со скидкой'], 1)
+        self.assertEqual(attributes['Запретить индексацию страницы'], 1)
+
+    def test_refuses_card_without_price(self):
+        """Карточка без цены уехала бы на сайт с нулём — это хуже, чем ошибка."""
+        product = {'article': '01-01AP0500-UC', 'name': 'Уценка // Хондро', 'salePrices': []}
+        with patch('api.views.discounted._get', return_value=product), \
+             patch('api.views.discounted.site_exchange.publish') as publish:
+            response = self.client.post('/api/discounted/p1/publish/')
+
+        self.assertGreaterEqual(response.status_code, 400)
+        publish.assert_not_called()

@@ -26,7 +26,7 @@ from rest_framework.response import Response
 from rest_framework import status
 
 from api.exceptions import ExternalServiceError
-from api.services import site_exchange
+from api.services import site_exchange, site_feed
 from msapi import http as ms_http
 from sync.moysklad import MoySkladAPIClient
 
@@ -43,6 +43,23 @@ ATTRIBUTE_NAME = "Годен до"
 RETAIL_PRICE_NAME = "Розница – ИП (Сайт | РРЦ)"
 
 SITE_URL = "https://horse-bio.ru"
+UC_SUFFIX = "-UC"
+
+# Текст на карточке уценки — согласован с ГД, менять только вместе с docs/ucenka.md
+NOTICE = (
+    "<p><strong>Товар реализуется со скидкой в связи с истекающим сроком годности:"
+    " от 2 до 4 месяцев на момент покупки.</strong></p>"
+    "<p>Пожалуйста, учитывайте, что товары из категории «Уцененный товар»"
+    " обмену и возврату не подлежат.</p>"
+    "<p>Скидка на уценённый товар не суммируется с другими действующими акциями"
+    " и специальными предложениями*.</p>"
+    "<p>*Исключением является акция на бесплатную доставку, если она действует"
+    " на момент оформления заказа.</p>"
+)
+ANNOUNCE = (
+    "Уценка по сроку годности — скидка 30 %. Срок годности на момент покупки"
+    " от 2 до 4 месяцев. Обмену и возврату не подлежит."
+)
 
 # Транслитерация под ЧПУ сайта: адрес страницы товара нигде не хранится, поэтому
 # и здесь, и в файле импорта он собирается из названия карточки по одному правилу.
@@ -158,6 +175,30 @@ def site_slug(name):
     return slug.strip("-")
 
 
+def _site_state(product, on_site):
+    """Что известно про карточку на сайте: опубликована ли, с какой ценой и остатком.
+
+    on_site is None означает «фид не ответили», и это не то же самое, что «карточки
+    нет»: в таком случае published остаётся неизвестным (None), чтобы интерфейс не
+    показал «не опубликовано» там, где просто не смогли проверить.
+    """
+    article = product.get("article") or ""
+    name = product.get("name") or ""
+    fallback = f"{SITE_URL}/{site_slug(name)}"
+    if on_site is None:
+        return {"published": None, "site_url": fallback, "site_price": None, "site_quantity": None}
+
+    offer = on_site.get(article)
+    if not offer:
+        return {"published": False, "site_url": fallback, "site_price": None, "site_quantity": None}
+    return {
+        "published": True,
+        "site_url": offer.get("url") or fallback,
+        "site_price": offer.get("price"),
+        "site_quantity": offer.get("amount"),
+    }
+
+
 def _price_of(product, name):
     for entry in product.get("salePrices") or []:
         if (entry.get("priceType") or {}).get("name") == name:
@@ -269,6 +310,14 @@ def _build_data(period_days=DEFAULT_PERIOD_DAYS):
             "cost": (row.get("price") or 0) / 100,
         }
 
+    # Что сейчас выставлено на сайте. Обмен умеет только писать, поэтому факт
+    # публикации и витринные цену с остатком читаем из служебного фида.
+    try:
+        on_site = site_feed.offers()
+    except Exception:
+        logger.warning("Фид сайта недоступен — публикация позиций неизвестна", exc_info=True)
+        on_site = None
+
     positions = []
     for product_id, product in by_id.items():
         held = stock.get(product_id, {})
@@ -302,7 +351,7 @@ def _build_data(period_days=DEFAULT_PERIOD_DAYS):
             # Ссылку для человека МойСклад отдаёт сам в meta.uuidHref: у веб-интерфейса
             # свой идентификатор, и адрес, собранный из id карточки, не открывается.
             "ms_url": (product.get("meta") or {}).get("uuidHref"),
-            "site_url": f"{SITE_URL}/{site_slug(product.get('name') or '')}",
+            **_site_state(product, on_site),
         })
 
     # Сначала то, с чем надо что-то делать: истёкшие, потом «пора снимать»,
@@ -368,3 +417,68 @@ def discounted_delist(request, product_id):
     # кеш сбрасываем только чтобы страница перерисовалась свежей.
     cache.delete(DATA_CACHE_KEY)
     return Response({"ok": True, "product_id": product_id}, status=status.HTTP_200_OK)
+
+
+@api_view(["POST"])
+def discounted_publish(request, product_id):
+    """Завести карточку уценки на сайте: фото, цена, остаток, тексты и SEO.
+
+    Фотографии берём у основной карточки — артикул уценки без суффикса `-UC`.
+    Карточка создаётся скрытой: открывает её человек, убедившись, что всё легло
+    правильно. Так же безопаснее при повторном вызове — обновление не выкинет
+    товар в продажу раньше времени.
+    """
+    try:
+        product = _get(f"/entity/product/{product_id}")
+    except Exception as exc:
+        logger.warning("Товар %s не найден в МойСклад", product_id, exc_info=True)
+        raise ExternalServiceError(f"Товар не найден в МойСклад: {exc}")
+
+    article = product.get("article") or ""
+    name = product.get("name") or ""
+    price = _price_of(product, RETAIL_PRICE_NAME)
+    if not price:
+        raise ExternalServiceError(
+            f"У карточки не заполнена цена «{RETAIL_PRICE_NAME}» — публиковать нечего"
+        )
+
+    store_href, _, _ = _resolve_refs()
+    stock_rows = _get_all_pages(
+        "/report/stock/all",
+        {"filter": f"store={store_href};product={BASE_URL}/entity/product/{product_id}",
+         "groupBy": "product"},
+    )
+    quantity = int(sum(row.get("stock") or 0 for row in stock_rows))
+
+    source_article = article[: -len(UC_SUFFIX)] if article.endswith(UC_SUFFIX) else article
+    pictures = site_feed.pictures_for(source_article)
+
+    uploaded = site_exchange.publish(
+        product_id=product_id,
+        article=article,
+        name=name,
+        price=int(round(price)),
+        quantity=quantity,
+        pictures=pictures,
+        attributes=[
+            ("Анонс товара", ANNOUNCE),
+            ("Подробное описание товара", NOTICE),
+            ("ЧПУ", site_slug(name)),
+            ("Заголовок (H1)", name),
+            ("Заголовок страницы (Title)", f"{name} — уценка со скидкой 30 % | Horse-Bio"),
+            ("Описание страницы (Description)", ANNOUNCE),
+            # Уценка не должна конкурировать с основной карточкой в поиске
+            ("Запретить индексацию страницы", 1),
+            # Промокоды на уценённый товар не действуют
+            ("Товар уже со скидкой", 1),
+        ],
+    )
+
+    cache.delete(DATA_CACHE_KEY)
+    return Response({
+        "ok": True,
+        "product_id": product_id,
+        "pictures": uploaded,
+        "quantity": quantity,
+        "price": int(round(price)),
+    }, status=status.HTTP_200_OK)

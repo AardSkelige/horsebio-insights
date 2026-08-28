@@ -30,6 +30,7 @@
 
 .uc-col.urgent .uc-col-head { border-bottom-color: var(--error);   color: var(--error); }
 .uc-col.warn   .uc-col-head { border-bottom-color: var(--warning); color: var(--warning-ink); }
+.uc-col.ok     .uc-col-head { border-bottom-color: var(--success); color: var(--success-ink); }
 
 .uc-col-count { font-variant-numeric: tabular-nums; }
 
@@ -50,6 +51,24 @@
 .uc-card.expired { border-left-color: var(--error); }
 .uc-card.delist  { border-left-color: var(--warning); }
 .uc-card.no_date { border-left-color: var(--muted-soft); }
+.uc-card.ok      { border-left-color: var(--success); }
+
+/* строка «опубликовано / не на сайте» — служебная, поэтому мельче основного текста */
+.uc-site {
+    display: flex;
+    align-items: center;
+    gap: 5px;
+    font-size: 11px;
+    color: var(--muted);
+}
+.uc-site.live { color: var(--success-ink); }
+.uc-site .dot {
+    width: 5px;
+    height: 5px;
+    border-radius: 50%;
+    background: currentColor;
+    flex: none;
+}
 
 .uc-card .nm {
     font-family: var(--sans);

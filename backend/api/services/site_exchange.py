@@ -28,6 +28,7 @@
 """
 
 import logging
+import time
 from datetime import date
 from xml.sax.saxutils import escape
 
@@ -43,6 +44,10 @@ logger = logging.getLogger(__name__)
 CLASSIFIER_ID = "11111111-0000-4000-8000-000000000001"
 CATALOG_ID = "11111111-0000-4000-8000-000000000002"
 FOLDER_ID = "11111111-0000-4000-8000-000000000003"
+PRICE_TYPE_ID = "22222222-0000-4000-8000-000000000001"
+PRICE_TYPE_NAME = "Розница"
+# Каталог файлов обмена на стороне сайта — в него кладём фотографии
+PICTURES_DIR = "import_files"
 # Имя категории видит покупатель на сайте — оно НЕ совпадает с группой «Уценка»
 # в МойСклад: там это слово нужно отделу упаковки, чтобы отличать позиции в накладной.
 SITE_FOLDER_NAME = "Уцененный товар"
@@ -59,6 +64,8 @@ HIDDEN_404 = 1
 HIDDEN_BY_LINK = 2
 
 TIMEOUT = 60
+IMPORT_RETRIES = 40
+IMPORT_RETRY_DELAY = 3
 
 
 class SiteExchangeError(ExternalServiceError):
@@ -114,35 +121,50 @@ def _send(session, filename, xml):
     if response.status_code != 200 or "success" not in response.text:
         raise SiteExchangeError(f"Сайт не принял файл {filename}: {response.text[:200]}")
 
-    response = session.get(
-        settings.SITE_CML_URL,
-        params={"type": "catalog", "mode": "import", "filename": filename},
-        timeout=TIMEOUT * 2,
+    # «progress» означает «файлы ещё готовятся, повтори запрос»: клиент обязан
+    # звать mode=import, пока не получит success. Без этого импорт остаётся
+    # недоделанным и в списке заданий сайта даже не появляется. Картинки готовятся
+    # дольше всего — шесть штук занимали около восьми повторов.
+    for _ in range(IMPORT_RETRIES):
+        response = session.get(
+            settings.SITE_CML_URL,
+            params={"type": "catalog", "mode": "import", "filename": filename},
+            timeout=TIMEOUT * 2,
+        )
+        text = response.text.strip()
+        if response.status_code != 200 or not (text.startswith("success") or text.startswith("progress")):
+            raise SiteExchangeError(f"Сайт отказался применять {filename}: {text[:200]}")
+        if text.startswith("success"):
+            return text
+        time.sleep(IMPORT_RETRY_DELAY)
+    raise SiteExchangeError(
+        f"Сайт так и не применил {filename}: за "
+        f"{IMPORT_RETRIES * IMPORT_RETRY_DELAY} секунд файл остался в обработке"
     )
-    text = response.text.strip()
-    # «progress» — сайт ещё готовит файлы; для наших объёмов это не встречалось,
-    # но ошибкой не является, поэтому пропускаем его наравне с success
-    if response.status_code != 200 or not (text.startswith("success") or text.startswith("progress")):
-        raise SiteExchangeError(f"Сайт отказался применять {filename}: {text[:200]}")
-    return text
 
 
 def _catalog_xml(items):
     """import.xml: карточки товаров и категория на сайте.
 
-    items — список словарей: id (он же GUID обмена), article, name и,
-    необязательно, visibility.
+    items — список словарей: id (он же GUID обмена), article, name и, необязательно,
+    visibility, attributes (список пар имя-значение) и pictures (пути файлов обмена).
     """
     goods = []
     for item in items:
-        attributes = ""
+        values = []
         if item.get("visibility") is not None:
-            attributes = (
-                "    <ЗначенияРеквизитов>"
-                f"<ЗначениеРеквизита><Наименование>{VISIBILITY_ATTRIBUTE}</Наименование>"
-                f"<Значение>{escape(str(item['visibility']))}</Значение></ЗначениеРеквизита>"
-                "</ЗначенияРеквизитов>\n"
-            )
+            values.append((VISIBILITY_ATTRIBUTE, item["visibility"]))
+        values.extend(item.get("attributes") or [])
+        attributes = ""
+        if values:
+            attributes = "    <ЗначенияРеквизитов>" + "".join(
+                f"<ЗначениеРеквизита><Наименование>{escape(str(name))}</Наименование>"
+                f"<Значение>{escape(str(value))}</Значение></ЗначениеРеквизита>"
+                for name, value in values
+            ) + "</ЗначенияРеквизитов>\n"
+        pictures = "".join(
+            f"    <Картинка>{escape(path)}</Картинка>\n" for path in item.get("pictures") or []
+        )
         goods.append(
             f"""   <Товар>
     <Ид>{escape(item['id'])}</Ид>
@@ -150,7 +172,7 @@ def _catalog_xml(items):
     <Наименование>{escape(item['name'])}</Наименование>
     <Группы><Ид>{FOLDER_ID}</Ид></Группы>
     <БазоваяЕдиница Код="796" НаименованиеПолное="Штука" МеждународноеСокращение="PCE">шт</БазоваяЕдиница>
-{attributes}   </Товар>"""
+{pictures}{attributes}   </Товар>"""
         )
 
     return f"""<?xml version="1.0" encoding="UTF-8"?>
@@ -191,3 +213,118 @@ def set_visibility(product_id, article, name, visibility):
         article, product_id, visibility, result,
     )
     return result
+
+
+def _offers_xml(items):
+    """offers.xml: цены и остатки.
+
+    Цена применяется только если в админке, во вкладке Автоимпорт, выбран тип цены
+    в поле «Что использовать в качестве основной цены». Тип цены появляется в той
+    выпадашке лишь после того, как обмен его однажды принёс, — поэтому имя и
+    идентификатор здесь постоянные.
+    """
+    offers = []
+    for item in items:
+        offers.append(
+            f"""   <Предложение>
+    <Ид>{escape(item['id'])}</Ид>
+    <Артикул>{escape(item['article'])}</Артикул>
+    <Наименование>{escape(item['name'])}</Наименование>
+    <БазоваяЕдиница Код="796" НаименованиеПолное="Штука" МеждународноеСокращение="PCE">шт</БазоваяЕдиница>
+    <Цены><Цена>
+     <ИдТипаЦены>{PRICE_TYPE_ID}</ИдТипаЦены>
+     <ЦенаЗаЕдиницу>{item['price']}</ЦенаЗаЕдиницу>
+     <Валюта>руб</Валюта><Единица>шт</Единица><Коэффициент>1</Коэффициент>
+    </Цена></Цены>
+    <Количество>{item['quantity']}</Количество>
+   </Предложение>"""
+        )
+
+    return f"""<?xml version="1.0" encoding="UTF-8"?>
+<КоммерческаяИнформация ВерсияСхемы="2.05" ДатаФормирования="{date.today().isoformat()}">
+ <ПакетПредложений>
+  <Ид>{CATALOG_ID}</Ид>
+  <Наименование>Предложения Horse-Bio</Наименование>
+  <ИдКаталога>{CATALOG_ID}</ИдКаталога>
+  <ИдКлассификатора>{CLASSIFIER_ID}</ИдКлассификатора>
+  <ТипыЦен>
+   <ТипЦены><Ид>{PRICE_TYPE_ID}</Ид><Наименование>{PRICE_TYPE_NAME}</Наименование>
+    <Валюта>руб</Валюта></ТипЦены>
+  </ТипыЦен>
+  <Предложения>
+{chr(10).join(offers)}
+  </Предложения>
+ </ПакетПредложений>
+</КоммерческаяИнформация>"""
+
+
+def _upload_pictures(session, urls):
+    """Залить фотографии как файлы обмена и вернуть пути, на которые можно ссылаться.
+
+    В CommerceML <Картинка> — это путь к файлу внутри архива обмена, а не ссылка:
+    ни абсолютный URL, ни относительный путь на сайте платформа не принимает.
+    Архив мы не собираем (init отвечает zip=no), поэтому шлём каждый файл отдельным
+    mode=file с именем import_files/<имя>. Фотографии при этом задваиваются
+    в хранилище сайта — по-другому протокол не умеет.
+    """
+    paths = []
+    for url in urls:
+        name = url.rstrip("/").rsplit("/", 1)[-1]
+        path = f"{PICTURES_DIR}/{name}"
+        try:
+            body = requests.get(url, timeout=TIMEOUT).content
+        except requests.RequestException as exc:
+            logger.warning("Не скачал фотографию %s: %s", url, exc)
+            continue
+
+        response = session.post(
+            settings.SITE_CML_URL,
+            params={"type": "catalog", "mode": "file", "filename": path},
+            data=body,
+            headers={"Content-Type": "application/octet-stream"},
+            timeout=TIMEOUT * 2,
+        )
+        if response.status_code != 200 or "success" not in response.text:
+            raise SiteExchangeError(f"Сайт не принял фотографию {name}: {response.text[:200]}")
+        paths.append(path)
+    return paths
+
+
+def publish(product_id, article, name, price, quantity, pictures=(), attributes=()):
+    """Завести или обновить карточку уценки на сайте.
+
+    Один вызов делает всё: заливает фотографии, отправляет карточку с текстами
+    и SEO, следом — цену и остаток. Карточка создаётся скрытой: открывает её
+    человек, проверив глазами (см. docs/ucenka.md).
+
+    Возвращает число залитых фотографий — по нему видно, дошли ли они.
+    """
+    session = _session()
+    paths = _upload_pictures(session, pictures) if pictures else []
+
+    _send(session, "import.xml", _catalog_xml([{
+        "id": product_id,
+        "article": article,
+        "name": name,
+        "visibility": HIDDEN_404,
+        "attributes": list(attributes),
+        "pictures": paths,
+    }]))
+    _send(session, "offers.xml", _offers_xml([{
+        "id": product_id,
+        "article": article,
+        "name": name,
+        "price": price,
+        "quantity": quantity,
+    }]))
+    logger.info("Обмен с сайтом: опубликован %s (%s), фотографий %s", article, product_id, len(paths))
+    return len(paths)
+
+
+def push_stock(items):
+    """Отправить на сайт цены и остатки. items — id, article, name, price, quantity."""
+    if not items:
+        return 0
+    _send(_session(), "offers.xml", _offers_xml(items))
+    logger.info("Обмен с сайтом: обновлены цены и остатки, позиций %s", len(items))
+    return len(items)
