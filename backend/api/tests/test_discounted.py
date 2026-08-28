@@ -539,3 +539,26 @@ class CsvExportTest(TestCase):
         """Пустое описание лучше, чем затёртое: восстанавливать его неоткуда."""
         row = self._get([self._position()], description='').content.decode('cp1251').splitlines()[1]
         self.assertNotIn('истекающим сроком годности', row)
+
+
+class RefreshTest(TestCase):
+    """«Обновить» должно перечитывать и витрину сайта, а не только МойСклад."""
+
+    def setUp(self):
+        cache.clear()
+        self.client = Client()
+        user = User.objects.create_user('sergey', password='secret')
+        UserPageAccess.objects.create(user=user, page_key='discounted')
+        self.client.login(username='sergey', password='secret')
+
+    def tearDown(self):
+        cache.clear()
+
+    def test_refresh_rereads_the_feed(self):
+        with patch('api.views.discounted._resolve_refs', return_value=(STORE_HREF, FOLDER_HREF, ATTR_ID)), \
+             patch('api.views.discounted._get_all_pages', side_effect=[[], []]), \
+             patch('api.views.discounted._build_analytics', return_value={}), \
+             patch('api.views.discounted.site_feed.offers', return_value={}) as feed:
+            self.client.get('/api/discounted/?refresh=1')
+
+        self.assertTrue(feed.call_args.kwargs['refresh'])

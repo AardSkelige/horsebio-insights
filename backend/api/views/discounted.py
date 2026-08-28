@@ -295,7 +295,7 @@ def _build_analytics(store_href, days):
     }
 
 
-def _build_data(period_days=DEFAULT_PERIOD_DAYS):
+def _build_data(period_days=DEFAULT_PERIOD_DAYS, refresh=False):
     """Собрать отчёт из МойСклад. Тяжёлая часть — кешируется вызывающим."""
     store_href, folder_href, attribute_id = _resolve_refs()
     today = date.today()
@@ -328,7 +328,9 @@ def _build_data(period_days=DEFAULT_PERIOD_DAYS):
     # Что сейчас выставлено на сайте. Обмен умеет только писать, поэтому факт
     # публикации и витринные цену с остатком читаем из служебного фида.
     try:
-        on_site = site_feed.offers()
+        # По «Обновить» перечитываем и фид: иначе страница десять минут показывает
+        # «нет на витрине» по карточке, которая уже опубликована
+        on_site = site_feed.offers(refresh=refresh)
     except Exception:
         logger.warning("Фид сайта недоступен — публикация позиций неизвестна", exc_info=True)
         on_site = None
@@ -398,12 +400,13 @@ def _build_data(period_days=DEFAULT_PERIOD_DAYS):
 @api_view(["GET"])
 def discounted_list(request):
     """Позиции на складе «Уценка» с расчётом, что пора снимать с продажи."""
-    if request.GET.get("refresh") == "1":
+    refresh = request.GET.get("refresh") == "1"
+    if refresh:
         cache.delete(DATA_CACHE_KEY)
 
     data = cache.get(DATA_CACHE_KEY)
     if data is None:
-        data = _build_data()
+        data = _build_data(refresh=refresh)
         cache.set(DATA_CACHE_KEY, data, DATA_CACHE_TTL)
     return Response(data)
 
