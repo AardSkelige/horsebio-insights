@@ -42,6 +42,18 @@ FOLDER_PARENT = "Товары"
 ATTRIBUTE_NAME = "Годен до"
 RETAIL_PRICE_NAME = "Розница – ИП (Сайт | РРЦ)"
 
+SITE_URL = "https://horse-bio.ru"
+
+# Транслитерация под ЧПУ сайта: адрес страницы товара нигде не хранится, поэтому
+# и здесь, и в файле импорта он собирается из названия карточки по одному правилу.
+TRANSLIT = {
+    "а": "a", "б": "b", "в": "v", "г": "g", "д": "d", "е": "e", "ё": "e", "ж": "zh",
+    "з": "z", "и": "i", "й": "j", "к": "k", "л": "l", "м": "m", "н": "n", "о": "o",
+    "п": "p", "р": "r", "с": "s", "т": "t", "у": "u", "ф": "f", "х": "h", "ц": "c",
+    "ч": "ch", "ш": "sh", "щ": "sch", "ъ": "", "ы": "y", "ь": "", "э": "e",
+    "ю": "yu", "я": "ya",
+}
+
 # Правила уценки — согласованы 21.08.2026. Держим здесь, а не в настройках:
 # меняются раз в год, и в коде их видно рядом с расчётом.
 DISCOUNT_RATE = 0.30          # скидка от розничной цены сайта
@@ -128,6 +140,22 @@ def _parse_expiry(value):
     except ValueError:
         logger.warning("Не разобрал «%s» = %r", ATTRIBUTE_NAME, value)
         return None
+
+
+def site_slug(name):
+    """ЧПУ страницы товара на сайте: «Уценка // Пробиотик, 1600г» → ucenka-probiotik-1600g."""
+    letters = []
+    for char in name.lower():
+        if char in TRANSLIT:
+            letters.append(TRANSLIT[char])
+        elif char.isalnum() and char.isascii():
+            letters.append(char)
+        else:
+            letters.append("-")
+    slug = "".join(letters)
+    while "--" in slug:
+        slug = slug.replace("--", "-")
+    return slug.strip("-")
 
 
 def _price_of(product, name):
@@ -274,6 +302,7 @@ def _build_data(period_days=DEFAULT_PERIOD_DAYS):
             # Ссылку для человека МойСклад отдаёт сам в meta.uuidHref: у веб-интерфейса
             # свой идентификатор, и адрес, собранный из id карточки, не открывается.
             "ms_url": (product.get("meta") or {}).get("uuidHref"),
+            "site_url": f"{SITE_URL}/{site_slug(product.get('name') or '')}",
         })
 
     # Сначала то, с чем надо что-то делать: истёкшие, потом «пора снимать»,
@@ -298,7 +327,6 @@ def _build_data(period_days=DEFAULT_PERIOD_DAYS):
             "discount_rate": DISCOUNT_RATE,
             "months_to_delist": MONTHS_TO_DELIST,
         },
-        "site_admin_url": settings.SITE_ADMIN_URL,
         "generated_at": datetime.now().isoformat(timespec="seconds"),
     }
 

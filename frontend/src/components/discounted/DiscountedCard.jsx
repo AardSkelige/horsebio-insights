@@ -21,7 +21,7 @@ function term(position) {
  * после успешного снятия карточка не исчезает — она просто перестаёт предлагать
  * это действие, а сама позиция остаётся на складе до списания.
  */
-export default function DiscountedCard({ position, siteAdminUrl, onDelisted }) {
+export default function DiscountedCard({ position, onDelisted }) {
     const [busy, setBusy] = useState(false);
     const [done, setDone] = useState(false);
     const [error, setError] = useState(null);
@@ -84,10 +84,12 @@ export default function DiscountedCard({ position, siteAdminUrl, onDelisted }) {
                         МойСклад
                     </Button>
                 )}
-                <Button as="a" variant="ghost" size="sm" icon={ExternalLink}
-                    href={siteAdminUrl} target="_blank" rel="noreferrer">
-                    Админка
-                </Button>
+                {position.site_url && (
+                    <Button as="a" variant="ghost" size="sm" icon={ExternalLink}
+                        href={position.site_url} target="_blank" rel="noreferrer">
+                        Сайт
+                    </Button>
+                )}
             </div>
 
             {error && <div className="uc-error" role="alert">{error}</div>}
@@ -107,7 +109,7 @@ DiscountedCard.propTypes = {
         price_full: PropTypes.number,
         sum: PropTypes.number,
         ms_url: PropTypes.string,
+        site_url: PropTypes.string,
     }).isRequired,
-    siteAdminUrl: PropTypes.string,
     onDelisted: PropTypes.func,
 };

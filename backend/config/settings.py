@@ -121,9 +121,6 @@ MOYSKLAD_TOKEN = os.getenv('MOYSKLAD_TOKEN')
 SITE_CML_URL = os.getenv('SITE_CML_URL', 'https://horse-bio.ru/-/api/cml/v2/')
 SITE_CML_LOGIN = os.getenv('SITE_CML_LOGIN', '')
 SITE_CML_PASSWORD = os.getenv('SITE_CML_PASSWORD', '')
-# Категория «Уцененный товар» в админке сайта. Сессионный параметр access не указываем:
-# он у каждого пользователя свой, админка запросит вход и вернёт на этот адрес.
-SITE_ADMIN_URL = os.getenv('SITE_ADMIN_URL', 'https://cp21.megagroup.ru/-/cms/v1/main/?ver_id=2076502#/-/cms/v1/shop2/?act=view&object_id=1069061&ver_id=2076502&folder_id=1287118&tab_id=loaded')
 
 # Scripts monitor settings
 SCRIPTS_LOGS_DIR = os.getenv('SCRIPTS_LOGS_DIR', '/app/scripts_logs')
