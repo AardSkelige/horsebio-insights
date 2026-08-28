@@ -70,6 +70,11 @@ BARCODE_FORMAT = "A6"           # формат ШК места (A4/A5/A6/A7) —
 # сотрудник видел в самом заказе, почему накладной нет. Обе строки — «управляемые»:
 # при следующем прогоне они переписываются/снимаются в зависимости от состояния.
 MARKER_PREFIX = "Накладная СДЭК №"
+# Имена прикрепляемых PDF. По этим же префиксам проверяем, что накладная реально
+# лежит в заказе: сотрудник, сохранив карточку, открытую до прихода накладной,
+# затирает и файлы, и пометку (МойСклад шлёт полное состояние формы).
+WAYBILL_FILE_PREFIX = "Накладная СДЭК"
+BARCODE_FILE_PREFIX = "ШК места СДЭК"
 REASON_MARKER_PREFIX = "⚠ Накладная СДЭК не создана:"
 TRACK_LINE_PREFIX = "Отслеживание: https://www.cdek.ru"
 TRACK_URL = "https://www.cdek.ru/ru/tracking?order_id={number}"
@@ -154,11 +159,34 @@ class WaybillCreator:
         text += " " + (saf.get("comment") or "")
         return "СДЭК" in text or "CDEK" in text.upper()
 
+    def _attached_file_names(self, order_id: str) -> list:
+        rows = self.ms._get(f"/entity/customerorder/{order_id}/files", {}).get("rows", [])
+        return [r.get("filename") or "" for r in rows]
+
     def _already_done(self, order_id: str, order: dict) -> bool:
-        st = self.state["orders"].get(order_id, {})
-        if st.get("pdf_attached"):
+        """Готов — только если ОБА PDF реально лежат в заказе.
+
+        Флагам state и пометке в комментарии верить нельзя: сотрудник, сохранивший
+        карточку, открытую до прихода накладной, откатывает документ вместе с
+        файлами и пометкой, а робот считает заказ сделанным и больше не приходит.
+        Поэтому проверяем факт и, если PDF пропали, снимаем флаги — process
+        приложит их заново. Отправление при этом не дублируется: process берёт
+        cdek_uuid из state, а без него ищет заказ в СДЭК по номеру."""
+        st = self.state["orders"].get(order_id) or {}
+        if not (st.get("pdf_attached") or MARKER_PREFIX in (order.get("description") or "")):
+            return False
+
+        names = self._attached_file_names(order_id)
+        has_waybill = any(n.startswith(WAYBILL_FILE_PREFIX) for n in names)
+        has_barcode = any(n.startswith(BARCODE_FILE_PREFIX) for n in names)
+        if has_waybill and has_barcode:
             return True
-        return MARKER_PREFIX in (order.get("description") or "")
+
+        st = self.state["orders"].setdefault(order_id, {})
+        st["pdf_attached"] = has_waybill
+        st["barcode_attached"] = has_barcode
+        print(f"  Заказ {order.get('name')}: PDF пропали из заказа — прикреплю заново")
+        return False
 
     def classify(self, order: dict):
         """→ (status, detail). status: 'done'|'skip'|'manual'|'ready'.
@@ -304,7 +332,7 @@ class WaybillCreator:
             print_uuid = (pr.get("entity") or {}).get("uuid")
             self.cdek.poll_waybill(print_uuid)
             pdf = self.cdek.download_waybill_pdf(print_uuid)
-            self._attach_file(order_id, f"Накладная СДЭК {cdek_number}.pdf", pdf)
+            self._attach_file(order_id, f"{WAYBILL_FILE_PREFIX} {cdek_number}.pdf", pdf)
             st["pdf_attached"] = True
             st["print_uuid"] = print_uuid
             print(f"  Заказ {number}: накладная ({len(pdf)} б) прикреплена к заказу МойСклад")
@@ -317,7 +345,8 @@ class WaybillCreator:
             barcode_uuid = (br.get("entity") or {}).get("uuid")
             self.cdek.poll_barcode(barcode_uuid)
             bc = self.cdek.download_barcode_pdf(barcode_uuid)
-            self._attach_file(order_id, f"ШК места СДЭК {cdek_number} ({BARCODE_FORMAT}).pdf", bc)
+            self._attach_file(order_id,
+                              f"{BARCODE_FILE_PREFIX} {cdek_number} ({BARCODE_FORMAT}).pdf", bc)
             st["barcode_attached"] = True
             st["barcode_uuid"] = barcode_uuid
             print(f"  Заказ {number}: ШК места {BARCODE_FORMAT} ({len(bc)} б) прикреплён к заказу МойСклад")
