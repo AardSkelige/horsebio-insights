@@ -22,11 +22,12 @@ from functools import lru_cache
 from django.conf import settings
 from django.core.cache import cache
 from rest_framework.decorators import api_view
+from django.http import HttpResponse
 from rest_framework.response import Response
 from rest_framework import status
 
 from api.exceptions import ExternalServiceError
-from api.services import site_exchange, site_feed
+from api.services import site_csv, site_exchange, site_feed
 from msapi import http as ms_http
 from sync.moysklad import MoySkladAPIClient
 
@@ -44,6 +45,9 @@ RETAIL_PRICE_NAME = "Розница – ИП (Сайт | РРЦ)"
 
 SITE_URL = "https://horse-bio.ru"
 UC_SUFFIX = "-UC"
+
+# Категория на сайте — покупатель видит именно это название
+SITE_FOLDER = "Уцененный товар"
 
 # Текст на карточке уценки — согласован с ГД, менять только вместе с docs/ucenka.md
 NOTICE = (
@@ -504,3 +508,56 @@ def discounted_publish(request, product_id):
         "quantity": quantity,
         "price": int(round(price)),
     }, status=status.HTTP_200_OK)
+
+
+def _csv_row(position, pictures):
+    """Строка файла импорта по позиции склада «Уценка»."""
+    name = position["name"]
+    return {
+        "article": position["article"],
+        "name": name,
+        "folder": SITE_FOLDER,
+        # Карточку, которой ещё нет на витрине, открывает человек — проверив её
+        # глазами. А ту, что уже продаётся, файл не должен скрывать.
+        "hidden": 0 if position.get("published") else 1,
+        "price": f"{position['price']:.2f}",
+        # Зачёркнутая цена — РРЦ, от которой считали скидку
+        "price_old": f"{position['price_full']:.2f}",
+        "amount": int(position["quantity"]),
+        # Промокоды на уценённый товар не действуют
+        "discounted": 1,
+        "note": ANNOUNCE,
+        "body": NOTICE,
+        "image": ", ".join(pictures),
+        "sef_url": site_slug(name),
+        # Уценка не должна конкурировать с основной карточкой в поиске
+        "seo_noindex": 1,
+        "seo_h1": name,
+        "seo_title": f"{name} — уценка со скидкой 30 % | Horse-Bio",
+        "seo_description": ANNOUNCE,
+        "seo_keywords": _keywords(name),
+    }
+
+
+@api_view(["GET"])
+def discounted_csv(request):
+    """Файл импорта для админки сайта — на случай, когда обмен недоступен.
+
+    Обмен работает в демо-режиме с лимитом на число загруженных предложений;
+    когда лимит выбран, он отвечает `success`, но часть полей не применяет.
+    Импорт CSV лимитов не имеет, поэтому файл — надёжный запасной путь.
+
+    В файл идут позиции с остатком: карточки без товара на сайте не нужны.
+    """
+    data = cache.get(DATA_CACHE_KEY) or _build_data()
+    positions = [p for p in data["positions"] if p["quantity"] > 0]
+
+    rows = []
+    for position in positions:
+        article = position["article"]
+        source = article[: -len(UC_SUFFIX)] if article.endswith(UC_SUFFIX) else article
+        rows.append(_csv_row(position, site_feed.pictures_for(source)))
+
+    response = HttpResponse(site_csv.build(rows), content_type="text/csv; charset=windows-1251")
+    response["Content-Disposition"] = 'attachment; filename="ucenka-import.csv"'
+    return response

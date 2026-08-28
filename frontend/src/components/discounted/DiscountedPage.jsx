@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { timeOnly } from '../../utils/formatters';
-import { EmptyState, ErrorState, Page, PageHeader, Skeleton, StatCard, StatGrid } from '../ui';
+import { Download } from 'lucide-react';
+import { Button, EmptyState, ErrorState, Page, PageHeader, Skeleton, StatCard, StatGrid } from '../ui';
 import { FadeRise, Stagger, StaggerItem } from '../ui/motion';
 import { discountedApi } from '../../api/discountedApi';
 import DiscountedCard from './DiscountedCard';
@@ -22,7 +23,7 @@ const LANES = [
 const FLOW = [
     ['Лера', 'Находит товар с подходящим сроком и проводит техоперацию в МойСклад — товар переезжает на склад «Уценка»'],
     ['Система', 'Позиция появляется здесь: цена, остаток и дата, до которой её можно продавать'],
-    ['Сергей', 'Жмёт «Отправить на сайт» — карточка заводится с фотографиями, ценой, остатком и текстом про уценку. Остаётся открыть её в админке'],
+    ['Сергей', 'Жмёт «Отправить на сайт» — карточка заводится с фотографиями, ценой, остатком и текстом про уценку, но скрытой от покупателей. Проверяет её и переключает в админке на «Доступен»'],
     ['Система', 'Остаток на сайте едет за МойСклад сам; за два месяца до конца срока позиция снимается с продажи'],
 ];
 
@@ -70,6 +71,20 @@ export default function DiscountedPage() {
                             Товар с подходящим сроком годности на складе «Уценка»
                             {data?.rules && ` — скидка ${Math.round(data.rules.discount_rate * 100)} %, снимаем с продажи за ${data.rules.months_to_delist} месяца до конца срока`}
                         </>
+                    }
+                    actions={
+                        inStock.length > 0 && (
+                            <Button
+                                as="a"
+                                variant="ghost"
+                                size="sm"
+                                icon={Download}
+                                href={discountedApi.csvUrl()}
+                                title="Файл для импорта в админке сайта — на случай, когда обмен не применяет изменения"
+                            >
+                                Файл для сайта
+                            </Button>
+                        )
                     }
                     updatedAt={data?.generated_at ? timeOnly(data.generated_at) : undefined}
                     onRefresh={() => load(true)}
@@ -163,6 +178,16 @@ export default function DiscountedPage() {
                                         </li>
                                     ))}
                                 </ol>
+
+                                <p className="uc-fallback">
+                                    <strong>Если обмен перестал применять изменения.</strong> У обмена
+                                    с сайтом демо-режим с лимитом на число загруженных предложений: когда
+                                    лимит выбран, сайт отвечает «принято», но часть полей молча не
+                                    применяет. Тогда — «Файл для сайта» в шапке, дальше в админке
+                                    Магазин → Импорт → CSV. Настройка «Операция над товарами, не
+                                    участвующими в импорте» должна стоять прочерком, иначе импорт
+                                    скроет весь остальной каталог.
+                                </p>
                             </section>
                         </div>
                     </>

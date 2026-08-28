@@ -223,6 +223,20 @@
 
 .uc-flow .what { color: var(--muted); }
 
+/* Что делать, когда обмен упёрся в демо-лимит: редкий, но дорогой случай —
+   без подсказки под рукой его каждый раз приходится вспоминать заново. */
+.uc-fallback {
+    margin: 14px 0 0;
+    padding: 10px 12px;
+    border-left: 2px solid var(--warning);
+    background: var(--surface-soft);
+    border-radius: 0 7px 7px 0;
+    font-size: 12px;
+    line-height: 1.5;
+    color: var(--muted);
+}
+.uc-fallback strong { color: var(--ink); font-weight: 500; }
+
 @media (max-width: 520px) {
     .uc-flow li { grid-template-columns: 1.4rem 1fr; }
     .uc-flow .who { grid-column: 2; }

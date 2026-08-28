@@ -8,7 +8,9 @@ from .views import scripts_monitor, checks
 from .views.inventory_tracking import inventory_current, inventory_refresh, inventory_history, inventory_upload_cells, inventory_cells_log
 from .views.deadlines import get_deadlines
 from .views.site_orders import site_orders_list, site_order_delete
-from .views.discounted import discounted_list, discounted_delist, discounted_publish
+from .views.discounted import (
+    discounted_list, discounted_delist, discounted_publish, discounted_csv,
+)
 from .views import delivery
 
 
@@ -121,6 +123,7 @@ urlpatterns = [
     path('discounted/', discounted_list, name='discounted_list'),
     path('discounted/<str:product_id>/delist/', discounted_delist, name='discounted_delist'),
     path('discounted/<str:product_id>/publish/', discounted_publish, name='discounted_publish'),
+    path('discounted/export.csv', discounted_csv, name='discounted_csv'),
 
     # Калькулятор стоимости доставки (раскладка по коробкам + тарифы ПЭК/СДЭК)
     path('delivery/estimate/', delivery.estimate, name='delivery_estimate'),

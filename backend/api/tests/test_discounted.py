@@ -479,3 +479,54 @@ class PublishTest(TestCase):
         keywords = dict(publish.call_args.kwargs['attributes'])['Ключевые слова (Keywords)']
         self.assertTrue(keywords.strip())
         self.assertIn('хондро', keywords)
+
+
+class CsvExportTest(TestCase):
+    """Файл импорта — запасной путь, когда обмен упёрся в демо-лимит."""
+
+    def setUp(self):
+        cache.clear()
+        self.client = Client()
+        user = User.objects.create_user('sergey', password='secret')
+        UserPageAccess.objects.create(user=user, page_key='discounted')
+        self.client.login(username='sergey', password='secret')
+
+    def tearDown(self):
+        cache.clear()
+
+    def _get(self, positions):
+        data = {'positions': positions, 'summary': {}}
+        with patch('api.views.discounted._build_data', return_value=data), \
+             patch('api.views.discounted.site_feed.pictures_for',
+                   return_value=['https://horse-bio.ru/d/a.png', 'https://horse-bio.ru/d/b.png']):
+            return self.client.get('/api/discounted/export.csv')
+
+    @staticmethod
+    def _position(**kwargs):
+        base = {'article': '01-01AP0500-UC', 'name': 'Уценка // Хондро', 'price': 1176.0,
+                'price_full': 1680.0, 'quantity': 5, 'published': False}
+        base.update(kwargs)
+        return base
+
+    def test_returns_cp1251_file_for_positions_in_stock(self):
+        response = self._get([self._position(), self._position(article='B-UC', quantity=0)])
+
+        self.assertEqual(response.status_code, 200)
+        self.assertIn('attachment', response['Content-Disposition'])
+        text = response.content.decode('cp1251')
+        rows = text.splitlines()
+        # шапка и одна позиция: без остатка на сайт отправлять нечего
+        self.assertEqual(len(rows), 2)
+        self.assertIn('article : Артикул', rows[0])
+        self.assertIn('01-01AP0500-UC', rows[1])
+        # зачёркнутая цена — РРЦ, и обе картинки в одной колонке
+        self.assertIn('1680.00', rows[1])
+        self.assertIn('https://horse-bio.ru/d/a.png, https://horse-bio.ru/d/b.png', rows[1])
+
+    def test_does_not_hide_a_card_that_is_already_on_sale(self):
+        """Импорт не должен снимать с витрины то, что уже продаётся."""
+        live = self._get([self._position(published=True)]).content.decode('cp1251').splitlines()[1]
+        new = self._get([self._position(published=False)]).content.decode('cp1251').splitlines()[1]
+        columns = live.split(';')
+        self.assertEqual(columns[3], '0')          # hidden
+        self.assertEqual(new.split(';')[3], '1')
