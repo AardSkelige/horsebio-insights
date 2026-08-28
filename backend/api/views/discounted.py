@@ -271,7 +271,9 @@ def _build_data(period_days=DEFAULT_PERIOD_DAYS):
             "sum": round(retail * quantity, 2),
             "sum_cost": round(cost * quantity, 2),
             "days_on_stock": _days_on_stock(product_id) if quantity > 0 else None,
-            "ms_url": f"https://online.moysklad.ru/app/#good/edit?id={product_id}",
+            # Ссылку для человека МойСклад отдаёт сам в meta.uuidHref: у веб-интерфейса
+            # свой идентификатор, и адрес, собранный из id карточки, не открывается.
+            "ms_url": (product.get("meta") or {}).get("uuidHref"),
         })
 
     # Сначала то, с чем надо что-то делать: истёкшие, потом «пора снимать»,

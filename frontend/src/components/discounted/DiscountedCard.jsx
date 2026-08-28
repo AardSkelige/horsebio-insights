@@ -78,10 +78,12 @@ export default function DiscountedCard({ position, siteAdminUrl, onDelisted }) {
                         {done ? 'Снят с продажи' : busy ? 'Снимаю…' : 'Снять с продажи'}
                     </Button>
                 )}
-                <Button as="a" variant="ghost" size="sm" icon={Package}
-                    href={position.ms_url} target="_blank" rel="noreferrer">
-                    МойСклад
-                </Button>
+                {position.ms_url && (
+                    <Button as="a" variant="ghost" size="sm" icon={Package}
+                        href={position.ms_url} target="_blank" rel="noreferrer">
+                        МойСклад
+                    </Button>
+                )}
                 <Button as="a" variant="ghost" size="sm" icon={ExternalLink}
                     href={siteAdminUrl} target="_blank" rel="noreferrer">
                     Админка

@@ -34,6 +34,7 @@ def _product(pid, article, name, expires):
         'name': name,
         'attributes': attributes,
         'salePrices': [{'priceType': {'name': RETAIL}, 'value': 168000}],  # 1680 ₽
+        'meta': {'uuidHref': f'https://online.moysklad.ru/app/#good/edit?id=ui-{pid}'},
     }
 
 
