@@ -494,11 +494,12 @@ class CsvExportTest(TestCase):
     def tearDown(self):
         cache.clear()
 
-    def _get(self, positions):
+    def _get(self, positions, description='<p>Текст основной карточки</p>'):
         data = {'positions': positions, 'summary': {}}
         with patch('api.views.discounted._build_data', return_value=data), \
              patch('api.views.discounted.site_feed.pictures_for',
-                   return_value=['https://horse-bio.ru/d/a.png', 'https://horse-bio.ru/d/b.png']):
+                   return_value=['https://horse-bio.ru/d/a.png', 'https://horse-bio.ru/d/b.png']), \
+             patch('api.views.discounted.site_feed.description_for', return_value=description):
             return self.client.get('/api/discounted/export.csv')
 
     @staticmethod
@@ -521,6 +522,9 @@ class CsvExportTest(TestCase):
         self.assertIn('01-01AP0500-UC', rows[1])
         # зачёркнутая цена — РРЦ, и обе картинки в одной колонке
         self.assertIn('1680.00', rows[1])
+        # описание — врезка про срок плюс текст основной карточки
+        self.assertIn('истекающим сроком годности', rows[1])
+        self.assertIn('Текст основной карточки', rows[1])
         self.assertIn('https://horse-bio.ru/d/a.png, https://horse-bio.ru/d/b.png', rows[1])
 
     def test_does_not_hide_a_card_that_is_already_on_sale(self):
@@ -530,3 +534,8 @@ class CsvExportTest(TestCase):
         columns = live.split(';')
         self.assertEqual(columns[3], '0')          # hidden
         self.assertEqual(new.split(';')[3], '1')
+
+    def test_leaves_description_empty_when_the_source_page_is_unreadable(self):
+        """Пустое описание лучше, чем затёртое: восстанавливать его неоткуда."""
+        row = self._get([self._position()], description='').content.decode('cp1251').splitlines()[1]
+        self.assertNotIn('истекающим сроком годности', row)

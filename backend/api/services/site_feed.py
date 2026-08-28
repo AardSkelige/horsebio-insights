@@ -18,6 +18,7 @@
 """
 
 import logging
+import re
 from xml.etree import ElementTree
 
 import requests
@@ -42,6 +43,9 @@ def _parse(xml):
             "url": (node.findtext("url") or "").strip(),
             "price": float(node.findtext("price") or 0),
             "amount": float(node.findtext("amount") or 0),
+            # В фиде это анонс, а не полный текст карточки: полное описание
+            # шаблонизатор не отдаёт, за ним ходим на саму страницу
+            "announce": (node.findtext("description") or "").strip(),
             "pictures": [p.text.strip() for p in node.findall("picture") if (p.text or "").strip()],
         }
     return offers
@@ -72,3 +76,41 @@ def pictures_for(article):
     except Exception:
         logger.warning("Фид сайта недоступен, фотографии для %s не получены", article, exc_info=True)
         return []
+
+
+# Блок с полным описанием на странице товара. Фид его не отдаёт — среди полей
+# оффера полного текста нет вовсе, только анонс. Поэтому читаем страницу.
+DESCRIPTION_BLOCK = "desc-area html_block"
+
+
+def _block(html, marker):
+    """Содержимое div, в классе которого встречается marker, с учётом вложенных div."""
+    opening = re.search(r'<div[^>]*class="[^"]*' + re.escape(marker) + r'[^"]*"[^>]*>', html)
+    if not opening:
+        return None
+    start = opening.end()
+    depth = 1
+    for tag in re.finditer(r"<(/?)div\b", html[start:]):
+        depth += -1 if tag.group(1) else 1
+        if depth == 0:
+            return html[start:start + tag.start()].strip()
+    return None
+
+
+def description_for(article):
+    """Полное описание карточки с её страницы на сайте.
+
+    Пустая строка, если страницы нет или вёрстка изменилась: описание — вещь
+    приятная, но не настолько, чтобы из-за неё падала выгрузка. Вызывающий сам
+    решает, что делать с пустым результатом (обычно — не трогать поле).
+    """
+    offer = offers().get(article)
+    if not offer or not offer.get("url"):
+        return ""
+    try:
+        response = requests.get(offer["url"], timeout=TIMEOUT)
+        response.raise_for_status()
+    except requests.RequestException:
+        logger.warning("Не открыл страницу товара %s", article, exc_info=True)
+        return ""
+    return _block(response.text, DESCRIPTION_BLOCK) or ""

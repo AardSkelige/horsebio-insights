@@ -510,8 +510,12 @@ def discounted_publish(request, product_id):
     }, status=status.HTTP_200_OK)
 
 
-def _csv_row(position, pictures):
-    """Строка файла импорта по позиции склада «Уценка»."""
+def _csv_row(position, pictures, description=""):
+    """Строка файла импорта по позиции склада «Уценка».
+
+    description — текст основной карточки. Пустой оставляем поле пустым: импорт
+    затрёт описание, которое уже стоит в карточке, а восстанавливать его неоткуда.
+    """
     name = position["name"]
     return {
         "article": position["article"],
@@ -527,7 +531,7 @@ def _csv_row(position, pictures):
         # Промокоды на уценённый товар не действуют
         "discounted": 1,
         "note": ANNOUNCE,
-        "body": NOTICE,
+        "body": (NOTICE + description) if description else "",
         "image": ", ".join(pictures),
         "sef_url": site_slug(name),
         # Уценка не должна конкурировать с основной карточкой в поиске
@@ -556,7 +560,11 @@ def discounted_csv(request):
     for position in positions:
         article = position["article"]
         source = article[: -len(UC_SUFFIX)] if article.endswith(UC_SUFFIX) else article
-        rows.append(_csv_row(position, site_feed.pictures_for(source)))
+        rows.append(_csv_row(
+            position,
+            site_feed.pictures_for(source),
+            site_feed.description_for(source),
+        ))
 
     response = HttpResponse(site_csv.build(rows), content_type="text/csv; charset=windows-1251")
     response["Content-Disposition"] = 'attachment; filename="ucenka-import.csv"'
