@@ -175,6 +175,17 @@ def site_slug(name):
     return slug.strip("-")
 
 
+def _keywords(name):
+    """Ключевые слова для карточки уценки.
+
+    Страница закрыта от индексации, так что поле почти декоративное. Но пустым
+    его оставлять нельзя: пустое значение обмен не применяет, и в карточке
+    останется то, что лежало там раньше.
+    """
+    base = name.split("//", 1)[-1].strip().rstrip(".").lower()
+    return f"уценка, распродажа, {base}"
+
+
 def _site_state(product, on_site):
     """Что известно про карточку на сайте: опубликована ли, с какой ценой и остатком.
 
@@ -453,6 +464,15 @@ def discounted_publish(request, product_id):
     source_article = article[: -len(UC_SUFFIX)] if article.endswith(UC_SUFFIX) else article
     pictures = site_feed.pictures_for(source_article)
 
+    # Если карточка уже на витрине, доступность не трогаем: иначе повторная
+    # отправка (например, чтобы обновить фотографии) снимет товар с продажи.
+    on_site = {}
+    try:
+        on_site = site_feed.offers()
+    except Exception:
+        logger.warning("Фид сайта недоступен, публикуем карточку скрытой", exc_info=True)
+    visibility = None if article in on_site else site_exchange.HIDDEN_404
+
     uploaded = site_exchange.publish(
         product_id=product_id,
         article=article,
@@ -460,6 +480,7 @@ def discounted_publish(request, product_id):
         price=int(round(price)),
         quantity=quantity,
         pictures=pictures,
+        visibility=visibility,
         attributes=[
             ("Анонс товара", ANNOUNCE),
             ("Подробное описание товара", NOTICE),
@@ -467,6 +488,7 @@ def discounted_publish(request, product_id):
             ("Заголовок (H1)", name),
             ("Заголовок страницы (Title)", f"{name} — уценка со скидкой 30 % | Horse-Bio"),
             ("Описание страницы (Description)", ANNOUNCE),
+            ("Ключевые слова (Keywords)", _keywords(name)),
             # Уценка не должна конкурировать с основной карточкой в поиске
             ("Запретить индексацию страницы", 1),
             # Промокоды на уценённый товар не действуют

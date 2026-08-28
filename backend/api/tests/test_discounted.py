@@ -408,10 +408,11 @@ class PublishTest(TestCase):
     def tearDown(self):
         cache.clear()
 
-    def _post(self, product, pictures=('https://horse-bio.ru/d/a.png',), stock=7.0):
+    def _post(self, product, pictures=('https://horse-bio.ru/d/a.png',), stock=7.0, on_site=None):
         with patch('api.views.discounted._get', return_value=product), \
              patch('api.views.discounted._resolve_refs', return_value=(STORE_HREF, FOLDER_HREF, ATTR_ID)), \
              patch('api.views.discounted._get_all_pages', return_value=[{'stock': stock}]), \
+             patch('api.views.discounted.site_feed.offers', return_value=on_site or {}), \
              patch('api.views.discounted.site_feed.pictures_for', return_value=list(pictures)) as pics, \
              patch('api.views.discounted.site_exchange.publish', return_value=len(pictures)) as publish:
             response = self.client.post('/api/discounted/p1/publish/')
@@ -446,3 +447,35 @@ class PublishTest(TestCase):
 
         self.assertGreaterEqual(response.status_code, 400)
         publish.assert_not_called()
+
+    def test_new_card_is_created_hidden(self):
+        """Новую карточку открывает человек, проверив её глазами."""
+        product = {
+            'article': '01-01AP0500-UC',
+            'name': 'Уценка // Хондро',
+            'salePrices': [{'priceType': {'name': RETAIL}, 'value': 117600}],
+        }
+        _, publish, _ = self._post(product)
+        self.assertEqual(publish.call_args.kwargs['visibility'], 1)  # недоступен (404)
+
+    def test_update_does_not_touch_visibility_of_a_live_card(self):
+        """Повторная отправка не должна снимать товар с продажи."""
+        product = {
+            'article': '01-01AP0500-UC',
+            'name': 'Уценка // Хондро',
+            'salePrices': [{'priceType': {'name': RETAIL}, 'value': 117600}],
+        }
+        _, publish, _ = self._post(product, on_site={'01-01AP0500-UC': {'pictures': []}})
+        self.assertIsNone(publish.call_args.kwargs['visibility'])
+
+    def test_keywords_are_never_empty(self):
+        """Пустое значение обмен не применяет — в карточке осталось бы старое."""
+        product = {
+            'article': '01-01AP0500-UC',
+            'name': 'Уценка // Хондро',
+            'salePrices': [{'priceType': {'name': RETAIL}, 'value': 117600}],
+        }
+        _, publish, _ = self._post(product)
+        keywords = dict(publish.call_args.kwargs['attributes'])['Ключевые слова (Keywords)']
+        self.assertTrue(keywords.strip())
+        self.assertIn('хондро', keywords)

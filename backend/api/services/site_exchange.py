@@ -290,12 +290,17 @@ def _upload_pictures(session, urls):
     return paths
 
 
-def publish(product_id, article, name, price, quantity, pictures=(), attributes=()):
+def publish(product_id, article, name, price, quantity, pictures=(), attributes=(),
+            visibility=HIDDEN_404):
     """Завести или обновить карточку уценки на сайте.
 
     Один вызов делает всё: заливает фотографии, отправляет карточку с текстами
-    и SEO, следом — цену и остаток. Карточка создаётся скрытой: открывает её
-    человек, проверив глазами (см. docs/ucenka.md).
+    и SEO, следом — цену и остаток.
+
+    Новая карточка создаётся скрытой: открывает её человек, проверив глазами
+    (см. docs/ucenka.md). А вот при обновлении уже открытой карточки доступность
+    трогать нельзя — иначе повторная отправка молча снимет товар с продажи.
+    Для этого вызывающий передаёт visibility=None.
 
     Возвращает число залитых фотографий — по нему видно, дошли ли они.
     """
@@ -306,7 +311,7 @@ def publish(product_id, article, name, price, quantity, pictures=(), attributes=
         "id": product_id,
         "article": article,
         "name": name,
-        "visibility": HIDDEN_404,
+        "visibility": visibility,
         "attributes": list(attributes),
         "pictures": paths,
     }]))
