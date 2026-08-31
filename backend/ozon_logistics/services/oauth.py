@@ -32,6 +32,7 @@ DEFAULT_TIMEOUT = 30
 SCOPES = [
     'seller-api.ozon-logistics',
     'seller-api.posting-fbs',
+    'seller-api.posting-fbo',
     'seller-api.warehouse',
     'seller-api.notification',
     'seller-api.product',

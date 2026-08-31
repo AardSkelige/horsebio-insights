@@ -89,8 +89,10 @@ class OzonProduct(models.Model):
 
     @property
     def sellable_via_ozon_delivery(self):
-        """Годен ли товар для Ozon Доставки: нужен остаток FBS и не архив.
+        """Годен ли товар для Ozon Доставки.
 
-        Без зарегистрированного в Ozon остатка заказ создать нельзя.
+        Схема MIX: везти могут и с нашего склада (FBS), и со склада Ozon (FBO) —
+        достаточно остатка хоть где-то. Без зарегистрированного в Ozon остатка
+        заказ создать нельзя вовсе.
         """
-        return self.has_fbs_stocks and not self.archived
+        return (self.has_fbs_stocks or self.has_fbo_stocks) and not self.archived

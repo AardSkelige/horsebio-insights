@@ -7,6 +7,7 @@ offer_id и sku. sku выдаёт сам Ozon, в МойСклад его нет
 
 import logging
 
+from django.db import models
 from django.utils import timezone
 
 from ozon_logistics.models import OzonProduct
@@ -64,8 +65,10 @@ def sync_products(*, client=None):
     else:
         logger.warning('Ozon Доставка: пагинация каталога прервана на %s страницах', MAX_PAGES)
 
+    # Схема MIX: годится остаток и на нашем складе, и на складе Ozon
     stats['sellable'] = OzonProduct.objects.filter(
-        has_fbs_stocks=True, archived=False
+        models.Q(has_fbs_stocks=True) | models.Q(has_fbo_stocks=True),
+        archived=False,
     ).count()
     stats['total_stored'] = OzonProduct.objects.count()
     stats['synced_at'] = timezone.now().isoformat()

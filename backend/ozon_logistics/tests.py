@@ -49,7 +49,10 @@ class AuthorizeUrlTests(TestCase):
         self.assertEqual(query['client_id'], ['test-client-id'])
         self.assertEqual(query['redirect_uri'], [CREDS['OZON_LOGISTICS_REDIRECT_URI']])
         self.assertEqual(query['state'], [state])
-        self.assertIn('seller-api.ozon-logistics', query['scope'][0].split(' '))
+        scopes = query['scope'][0].split(' ')
+        self.assertIn('seller-api.ozon-logistics', scopes)
+        # MIX-доставка возит и со складов Ozon — нужен доступ к FBO-отправлениям
+        self.assertIn('seller-api.posting-fbo', scopes)
 
     def test_state_is_stored_and_single_use(self):
         _, state = oauth.build_authorize_url()
@@ -551,16 +554,18 @@ class CatalogSyncTests(TestCase):
             'items': [
                 {'offer_id': 'ART-1', 'sku': 111, 'product_id': 1, 'has_fbs_stocks': True},
                 {'offer_id': 'ART-2', 'sku': 222, 'product_id': 2, 'archived': True},
+                {'offer_id': 'ART-3', 'sku': 333, 'has_fbo_stocks': True},
+                {'offer_id': 'ART-4', 'sku': 444},
             ],
             'last_id': None,
         }])
         stats = catalog.sync_products(client=client)
 
-        self.assertEqual(stats['fetched'], 2)
-        self.assertEqual(stats['created'], 2)
+        self.assertEqual(stats['fetched'], 4)
+        self.assertEqual(stats['created'], 4)
         self.assertEqual(OzonProduct.objects.get(offer_id='ART-1').sku, 111)
-        # Годен только товар с остатком FBS и не в архиве
-        self.assertEqual(stats['sellable'], 1)
+        # Годны товары с остатком где угодно (MIX), но не архивные и не пустые
+        self.assertEqual(stats['sellable'], 2)
 
     def test_second_run_updates_instead_of_duplicating(self):
         page = {'items': [{'offer_id': 'ART-1', 'sku': 111, 'has_fbs_stocks': False}], 'last_id': None}
@@ -612,8 +617,15 @@ class CatalogSyncTests(TestCase):
     def test_sellable_property(self):
         product = OzonProduct(offer_id='A', sku=1, has_fbs_stocks=True, archived=False)
         self.assertTrue(product.sellable_via_ozon_delivery)
+
+        # Остаток только на складе Ozon — при MIX тоже годится
+        product.has_fbs_stocks = False
+        product.has_fbo_stocks = True
+        self.assertTrue(product.sellable_via_ozon_delivery)
+
         product.archived = True
         self.assertFalse(product.sellable_via_ozon_delivery)
+
         product.archived = False
-        product.has_fbs_stocks = False
+        product.has_fbo_stocks = False
         self.assertFalse(product.sellable_via_ozon_delivery)
