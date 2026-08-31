@@ -106,6 +106,29 @@
     background: var(--error-bg);
 }
 
+/* Подпись загрузки и обычная лежат в одной ячейке грида: кнопка держит ширину
+   по самой длинной из них, поэтому переключение не сдвигает соседние элементы. */
+.ui-btn__label {
+    display: inline-grid;
+    justify-items: center;
+}
+
+.ui-btn__label > span {
+    grid-area: 1 / 1;
+    transition: opacity 150ms ease-out;
+}
+
+.ui-btn__label > span[data-off] {
+    opacity: 0;
+    visibility: hidden;
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .ui-btn__label > span {
+        transition: none;
+    }
+}
+
 /* Текстовая кнопка без рамки — «Обновить», «Детали», «Сбросить».
    Самый частый вариант в приложении. */
 .ui-btn--link {

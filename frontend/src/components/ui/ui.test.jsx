@@ -26,6 +26,18 @@ describe('Button', () => {
         expect(onClick).not.toHaveBeenCalled();
     });
 
+    it('на время загрузки показывает подпись загрузки, не теряя обычную ширину', () => {
+        const { rerender, container } = render(
+            <Button loadingLabel="Обновляем…">Обновить</Button>,
+        );
+        expect(screen.getByRole('button', { name: 'Обновить' })).toBeInTheDocument();
+
+        rerender(<Button loading loadingLabel="Обновляем…">Обновить</Button>);
+        expect(screen.getByRole('button', { name: 'Обновляем…' })).toBeInTheDocument();
+        // обе подписи остаются в разметке — ширину кнопки задаёт самая длинная
+        expect(container.querySelectorAll('.ui-btn__label > span')).toHaveLength(2);
+    });
+
     it('рендерится ссылкой при as="a"', () => {
         render(<Button as="a" href="https://example.com">МойСклад</Button>);
         const link = screen.getByRole('link', { name: 'МойСклад' });
@@ -50,6 +62,11 @@ describe('PageHeader', () => {
         expect(screen.getByRole('heading', { name: 'Поставщики' })).toBeInTheDocument();
         expect(screen.getByText('Анализ приёмок')).toBeInTheDocument();
         expect(screen.getByText('Обновлено 14:20')).toBeInTheDocument();
+    });
+
+    it('во время обновления кнопка подписана «Обновляем…»', () => {
+        render(<PageHeader title="Товары" onRefresh={vi.fn()} refreshing />);
+        expect(screen.getByRole('button', { name: 'Обновляем…' })).toBeInTheDocument();
     });
 
     it('кнопка «Обновить» появляется только с обработчиком', async () => {

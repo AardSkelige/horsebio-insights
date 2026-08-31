@@ -18,12 +18,17 @@ import { Loader2 } from 'lucide-react';
  *
  * `as="a"` рендерит ссылку с тем же оформлением — внешние ссылки в интерфейсе
  * выглядят как кнопки и должны совпадать с ними пиксель в пиксель.
+ *
+ * `loadingLabel` подменяет подпись на время загрузки («Обновляем…»): обе подписи
+ * лежат в одной ячейке грида, поэтому кнопка держит ширину по самой длинной и
+ * не дёргает соседей в момент переключения.
  */
 export default function Button({
     variant = 'secondary',
     tone,
     size = 'md',
     loading = false,
+    loadingLabel = null,
     block = false,
     icon: Icon = null,
     as = 'button',
@@ -48,6 +53,15 @@ export default function Button({
         ? <Loader2 size={iconSize} className="ui-btn__spinner" aria-hidden="true" />
         : Icon ? <Icon size={iconSize} aria-hidden="true" /> : null;
 
+    // Скрытая подпись помечена aria-hidden, поэтому скринридер читает ровно
+    // одну — актуальную, а не обе сразу
+    const label = loadingLabel == null ? children : (
+        <span className="ui-btn__label">
+            <span data-off={loading || undefined} aria-hidden={loading || undefined}>{children}</span>
+            <span data-off={!loading || undefined} aria-hidden={!loading || undefined}>{loadingLabel}</span>
+        </span>
+    );
+
     if (as === 'a') {
         // У ссылки нет атрибута disabled: гасим её через aria и снятие href,
         // иначе «выключенная» ссылка выглядит выключенной, но остаётся кликабельной
@@ -61,7 +75,7 @@ export default function Button({
                 href={off ? undefined : rest.href}
             >
                 {leading}
-                {children}
+                {label}
             </a>
         );
     }
@@ -74,7 +88,7 @@ export default function Button({
             {...rest}
         >
             {leading}
-            {children}
+            {label}
         </button>
     );
 }
@@ -84,6 +98,7 @@ Button.propTypes = {
     tone: PropTypes.oneOf(['accent', 'danger']),
     size: PropTypes.oneOf(['sm', 'md']),
     loading: PropTypes.bool,
+    loadingLabel: PropTypes.node,
     block: PropTypes.bool,
     icon: PropTypes.elementType,
     as: PropTypes.oneOf(['button', 'a']),

@@ -13,10 +13,11 @@ import Button from './Button';
  * Дополнительные действия идут в `actions` и встают слева от неё.
  *
  * `refreshLabel` меняет подпись, когда действие называется иначе («Загрузить
- * июль»). Заводить ради этого свою кнопку не нужно — именно так на одной
- * странице появлялась залитая «Обновить» вместо текстовой, как на остальных.
+ * июль»), `refreshingLabel` — подпись на время загрузки. Заводить ради этого
+ * свою кнопку не нужно — именно так на одной странице появлялась залитая
+ * «Обновить» вместо текстовой, как на остальных.
  */
-export default function PageHeader({ title, subtitle, actions, onRefresh, refreshing = false, refreshLabel = 'Обновить', updatedAt }) {
+export default function PageHeader({ title, subtitle, actions, onRefresh, refreshing = false, refreshLabel = 'Обновить', refreshingLabel = 'Обновляем…', updatedAt }) {
     return (
         <header className="ui-page-header">
             <div>
@@ -35,6 +36,7 @@ export default function PageHeader({ title, subtitle, actions, onRefresh, refres
                             variant="link"
                             icon={RefreshCw}
                             loading={refreshing}
+                            loadingLabel={refreshingLabel}
                             onClick={onRefresh}
                         >
                             {refreshLabel}
@@ -53,5 +55,6 @@ PageHeader.propTypes = {
     onRefresh: PropTypes.func,
     refreshing: PropTypes.bool,
     refreshLabel: PropTypes.node,
+    refreshingLabel: PropTypes.node,
     updatedAt: PropTypes.string,
 };

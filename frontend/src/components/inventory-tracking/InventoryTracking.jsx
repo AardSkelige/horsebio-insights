@@ -270,9 +270,7 @@ export default function InventoryTracking() {
         return 'Мониторинг позиций за текущий месяц';
     })();
 
-    const btnLabel = refreshing
-        ? 'Запрос в МС...'
-        : selectedMonth && !isMobile
+    const btnLabel = selectedMonth && !isMobile
         ? `Загрузить ${formatMonthLabel(selectedMonth)}`
         : 'Обновить';
 
@@ -289,6 +287,7 @@ export default function InventoryTracking() {
                 onRefresh={handleRefresh}
                 refreshing={refreshing}
                 refreshLabel={btnLabel}
+                refreshingLabel="Запрос в МС…"
                 actions={
                     <>
                         <input
