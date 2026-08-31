@@ -406,6 +406,91 @@ class AccessControlTests(TestCase):
             self.client.get('/api/ozon-logistics/diag/point/', {'ids': '12, 34'})
         self.assertEqual(post.call_args.kwargs['json'], {'map_point_ids': ['12', '34']})
 
+    def test_checkout_requires_exactly_one_destination(self):
+        client = client_module.OzonLogisticsClient()
+        items = [{'offer_id': 'A', 'sku': 1, 'quantity': 1}]
+        with self.assertRaises(client_module.OzonLogisticsError):
+            client.checkout(phone='79161112233', items=items)
+        with self.assertRaises(client_module.OzonLogisticsError):
+            client.checkout(phone='79161112233', items=items, map_point_id=1, coordinates=(55.7, 37.6))
+
+    def test_checkout_rejects_empty_items(self):
+        with self.assertRaises(client_module.OzonLogisticsError):
+            client_module.OzonLogisticsClient().checkout(
+                phone='79161112233', items=[], map_point_id=1
+            )
+
+    def test_checkout_builds_pickup_payload(self):
+        OzonOAuthToken.objects.create(
+            pk=OzonOAuthToken.SINGLETON_PK,
+            access_token='access-1',
+            refresh_token='r',
+            expires_at=timezone.now() + timezone.timedelta(hours=1),
+        )
+        with patch('requests.post', return_value=FakeResponse(data={'splits': []})) as post:
+            client_module.OzonLogisticsClient().checkout(
+                phone='+7 (916) 111-22-33',
+                items=[{'offer_id': 'ART-1', 'sku': '42', 'quantity': '2'}],
+                map_point_id='7',
+            )
+        sent = post.call_args.kwargs['json']
+        self.assertEqual(sent['buyer_phone'], '79161112233')
+        self.assertEqual(sent['delivery_schema'], 'FBS')
+        self.assertEqual(sent['delivery_type'], {'pick_up': {'map_point_id': 7}})
+        self.assertEqual(sent['items'], [{'offer_id': 'ART-1', 'quantity': 2, 'sku': 42}])
+
+    def test_checkout_builds_courier_payload(self):
+        OzonOAuthToken.objects.create(
+            pk=OzonOAuthToken.SINGLETON_PK,
+            access_token='access-1',
+            refresh_token='r',
+            expires_at=timezone.now() + timezone.timedelta(hours=1),
+        )
+        with patch('requests.post', return_value=FakeResponse(data={'splits': []})) as post:
+            client_module.OzonLogisticsClient().checkout(
+                phone='79161112233',
+                items=[{'offer_id': 'ART-1', 'sku': 42, 'quantity': 1}],
+                coordinates=(55.75, 37.61),
+            )
+        self.assertEqual(
+            post.call_args.kwargs['json']['delivery_type'],
+            {'courier': {'coordinates': {'latitude': 55.75, 'longitude': 37.61}}},
+        )
+
+    def test_warehouse_list_sends_required_limit(self):
+        OzonOAuthToken.objects.create(
+            pk=OzonOAuthToken.SINGLETON_PK,
+            access_token='access-1',
+            refresh_token='r',
+            expires_at=timezone.now() + timezone.timedelta(hours=1),
+        )
+        with patch('requests.post', return_value=FakeResponse(data={'warehouses': []})) as post:
+            client_module.OzonLogisticsClient().warehouse_list()
+        self.assertEqual(post.call_args.kwargs['json'], {'limit': 200})
+
+    def test_product_list_filters_by_offer_id(self):
+        OzonOAuthToken.objects.create(
+            pk=OzonOAuthToken.SINGLETON_PK,
+            access_token='access-1',
+            refresh_token='r',
+            expires_at=timezone.now() + timezone.timedelta(hours=1),
+        )
+        with patch('requests.post', return_value=FakeResponse(data={'result': {}})) as post:
+            client_module.OzonLogisticsClient().product_list(offer_ids=['A1', 'A2'])
+        self.assertEqual(post.call_args.kwargs['json']['filter'], {'offer_id': ['A1', 'A2']})
+
+    def test_diag_checkout_requires_params(self):
+        self.client.force_login(self._user(superuser=True))
+        response = self.client.get('/api/ozon-logistics/diag/checkout/', {'phone': '79161112233'})
+        self.assertEqual(response.status_code, 400)
+
+    def test_diag_checkout_rejects_bad_coords(self):
+        self.client.force_login(self._user(superuser=True))
+        response = self.client.get('/api/ozon-logistics/diag/checkout/', {
+            'phone': '79161112233', 'offer_id': 'A', 'sku': '1', 'coords': 'москва',
+        })
+        self.assertEqual(response.status_code, 400)
+
     def test_diag_points_is_forbidden_for_regular_user(self):
         self.client.force_login(self._user(superuser=False))
         self.assertEqual(self.client.get('/api/ozon-logistics/diag/points/').status_code, 403)

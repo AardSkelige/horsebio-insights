@@ -202,3 +202,75 @@ def diag_point_info(request):
         }, status=400)
 
     return _call(lambda: OzonLogisticsClient().point_info(ids))
+
+
+def diag_warehouses(request):
+    """Склады FBS: ищем warehouse_id нашего склада."""
+    denied = _superuser_only(request)
+    if denied:
+        return denied
+    return _call(OzonLogisticsClient().warehouse_list)
+
+
+def diag_products(request):
+    """Товары с sku и признаком остатков FBS: /diag/products/?offer_id=ART1,ART2
+
+    Без параметра отдаёт первую сотню — этого хватает, чтобы понять, сходятся ли
+    наши артикулы с offer_id в Ozon.
+    """
+    denied = _superuser_only(request)
+    if denied:
+        return denied
+
+    raw = request.GET.get('offer_id', '').strip()
+    offer_ids = [part for part in raw.split(',') if part.strip()] or None
+    return _call(lambda: OzonLogisticsClient().product_list(offer_ids=offer_ids))
+
+
+def diag_checkout(request):
+    """Пробный расчёт доставки — самая содержательная проверка цепочки.
+
+    /diag/checkout/?phone=79161112233&point=<map_point_id>&offer_id=ART&sku=123&qty=1
+    Вместо point можно передать coords=55.75,37.61 для курьерской доставки.
+    """
+    denied = _superuser_only(request)
+    if denied:
+        return denied
+
+    phone = request.GET.get('phone', '').strip()
+    offer_id = request.GET.get('offer_id', '').strip()
+    sku = request.GET.get('sku', '').strip()
+    point = request.GET.get('point', '').strip()
+    coords = request.GET.get('coords', '').strip()
+
+    if not (phone and offer_id and sku):
+        return JsonResponse({
+            'status': 'error',
+            'message': 'Нужны phone, offer_id и sku; плюс point или coords',
+        }, status=400)
+
+    kwargs = {}
+    if point:
+        kwargs['map_point_id'] = point
+    elif coords:
+        try:
+            lat, lon = (float(part) for part in coords.split(','))
+        except ValueError:
+            return JsonResponse({
+                'status': 'error',
+                'message': 'coords задаются как широта,долгота — например 55.75,37.61',
+            }, status=400)
+        kwargs['coordinates'] = (lat, lon)
+    else:
+        return JsonResponse({
+            'status': 'error',
+            'message': 'Укажите point (самовывоз) или coords (курьер)',
+        }, status=400)
+
+    try:
+        quantity = int(request.GET.get('qty', '1'))
+    except ValueError:
+        return JsonResponse({'status': 'error', 'message': 'qty — целое число'}, status=400)
+
+    items = [{'offer_id': offer_id, 'sku': sku, 'quantity': quantity}]
+    return _call(lambda: OzonLogisticsClient().checkout(phone=phone, items=items, **kwargs))

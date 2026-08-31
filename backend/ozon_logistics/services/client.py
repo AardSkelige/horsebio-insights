@@ -118,6 +118,67 @@ class OzonLogisticsClient:
             raise OzonLogisticsError('Нужно от 1 до 100 идентификаторов точек')
         return self.request('/v1/delivery/point/info', {'map_point_ids': ids})
 
+    def warehouse_list(self, *, limit=200, cursor=None):
+        """Склады FBS и rFBS: {'warehouses': [...], 'cursor': ..., 'has_next': ...}.
+
+        Нужен `warehouse_id` нашего склада — с ним товары уезжают в checkout.
+        Склады FBO живут отдельно, в /v1/warehouse/fbo/list.
+        """
+        payload = {'limit': limit}
+        if cursor:
+            payload['cursor'] = cursor
+        return self.request('/v2/warehouse/list', payload)
+
+    def product_list(self, *, limit=100, last_id=None, offer_ids=None):
+        """Товары с их `offer_id`, `sku` и признаком остатков FBS.
+
+        `sku` обязателен для checkout и создания заказа, а получить его больше
+        негде — в МойСклад его нет.
+        """
+        payload = {'limit': limit, 'filter': {}}
+        if offer_ids:
+            payload['filter']['offer_id'] = [str(o) for o in offer_ids]
+        if last_id:
+            payload['last_id'] = last_id
+        return self.request('/v3/product/list', payload)
+
+    def checkout(self, *, phone, items, map_point_id=None, coordinates=None,
+                 delivery_schema='FBS'):
+        """Варианты доставки, сроки и стоимость логистики для набора товаров.
+
+        Ровно один из `map_point_id` (самовывоз) и `coordinates` (курьер, пара
+        широта-долгота). В ответе `splits` — разбиение по складам: у каждого
+        свои сроки (`delivery_method.timeslots`) и комиссия (`commissions.total`).
+        Недоступность объясняется в `unavailable_reason`.
+        """
+        if (map_point_id is None) == (coordinates is None):
+            raise OzonLogisticsError(
+                'Укажите либо map_point_id (самовывоз), либо coordinates (курьер)'
+            )
+        if not items:
+            raise OzonLogisticsError('Список товаров пуст')
+
+        if map_point_id is not None:
+            delivery_type = {'pick_up': {'map_point_id': int(map_point_id)}}
+        else:
+            delivery_type = {'courier': {'coordinates': {
+                'latitude': coordinates[0], 'longitude': coordinates[1],
+            }}}
+
+        return self.request('/v2/delivery/checkout', {
+            'buyer_phone': normalize_phone(phone),
+            'delivery_schema': delivery_schema,
+            'delivery_type': delivery_type,
+            'items': [
+                {
+                    'offer_id': str(item['offer_id']),
+                    'quantity': int(item['quantity']),
+                    'sku': int(item['sku']),
+                }
+                for item in items
+            ],
+        })
+
     def delivery_map(self, left_bottom, right_top, zoom):
         """Кластеры точек в области карты — для отрисовки при мелком масштабе.
 
