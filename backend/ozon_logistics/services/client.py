@@ -189,6 +189,14 @@ class OzonLogisticsClient:
             'items': [_checkout_item(item) for item in items],
         })
 
+    def order_create(self, payload):
+        """Создаёт заказ в Ozon. Вызывать только после подтверждения оплаты.
+
+        Состав заказа после создания изменить нельзя, а успешный ответ не
+        гарантирует, что заказ собрался: часть товаров может не подобраться.
+        """
+        return self.request('/v2/order/create', payload)
+
     def delivery_map(self, left_bottom, right_top, zoom):
         """Кластеры точек в области карты — для отрисовки при мелком масштабе.
 

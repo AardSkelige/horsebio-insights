@@ -1,3 +1,5 @@
+import uuid
+
 from django.db import models
 from django.utils import timezone
 
@@ -145,3 +147,77 @@ class OzonPickupPoint(models.Model):
             latitude__gte=south, latitude__lte=north,
             longitude__gte=west, longitude__lte=east,
         )[:limit]
+
+
+class OzonDeliveryQuote(models.Model):
+    """Рассчитанный вариант доставки, выбранный покупателем в корзине.
+
+    Ozon разрешает создавать заказ только после оплаты, а оплата у нас
+    подтверждается письмом через несколько минут. К этому моменту исходный
+    расчёт нужно откуда-то взять — здесь он и лежит: `checkout_response`
+    хранится целиком, из него собирается запрос на создание заказа.
+    """
+
+    STATUS_NEW = 'new'
+    STATUS_ORDERED = 'ordered'
+    STATUS_FAILED = 'failed'
+    STATUS_CHOICES = [
+        (STATUS_NEW, 'Рассчитан'),
+        (STATUS_ORDERED, 'Заказ создан в Ozon'),
+        (STATUS_FAILED, 'Ошибка создания'),
+    ]
+
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    phone = models.CharField('Телефон покупателя', max_length=20)
+    items = models.JSONField('Состав: sku и количество')
+
+    map_point_id = models.BigIntegerField('Пункт выдачи', null=True, blank=True)
+    courier_address = models.JSONField('Адрес курьерской доставки', null=True, blank=True)
+
+    checkout_response = models.JSONField('Ответ Ozon на расчёт')
+    delivery_cost = models.DecimalField(
+        'Стоимость логистики, ₽', max_digits=10, decimal_places=2, null=True, blank=True
+    )
+
+    status = models.CharField('Статус', max_length=16, choices=STATUS_CHOICES, default=STATUS_NEW)
+    site_order_id = models.CharField('Заказ сайта', max_length=64, blank=True, db_index=True)
+    order_number = models.CharField('Номер заказа в Ozon', max_length=64, blank=True)
+    error = models.TextField('Ошибка создания', blank=True)
+
+    created_at = models.DateTimeField(auto_now_add=True)
+    ordered_at = models.DateTimeField('Заказ создан', null=True, blank=True)
+
+    class Meta:
+        verbose_name = 'Расчёт доставки Ozon'
+        verbose_name_plural = 'Расчёты доставки Ozon'
+        ordering = ['-created_at']
+
+    def __str__(self):
+        return f'{self.id} · {self.get_status_display()}'
+
+    @property
+    def age(self):
+        return timezone.now() - self.created_at
+
+    @property
+    def splits(self):
+        return self.checkout_response.get('splits') or []
+
+    @property
+    def is_deliverable(self):
+        """Есть ли хоть один доступный вариант доставки.
+
+        Ozon помечает недоступный вариант через commissions = null и
+        объясняет причину в unavailable_reason.
+        """
+        return any(split.get('commissions') for split in self.splits)
+
+    def unavailable_reasons(self):
+        """Причины, по которым доставка невозможна — для показа покупателю."""
+        reasons = []
+        for split in self.splits:
+            for reason in (split.get('unavailable_reason'),
+                           (split.get('delivery_method') or {}).get('unavailable_reason')):
+                if reason and reason != 'UNSPECIFIED':
+                    reasons.append(reason)
+        return sorted(set(reasons))

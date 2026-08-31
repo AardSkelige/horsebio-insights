@@ -1,4 +1,5 @@
 import json
+from decimal import Decimal
 from unittest.mock import patch
 from urllib.parse import parse_qs, urlparse
 
@@ -6,9 +7,10 @@ from django.test import TestCase, override_settings
 from django.utils import timezone
 
 from ozon_logistics.models import (
-    OzonAuthState, OzonOAuthToken, OzonPickupPoint, OzonProduct,
+    OzonAuthState, OzonDeliveryQuote, OzonOAuthToken, OzonPickupPoint, OzonProduct,
 )
 from ozon_logistics.services import catalog
+from ozon_logistics.services import orders
 from ozon_logistics.services import pickup_points
 from ozon_logistics.services import client as client_module
 from ozon_logistics.services import oauth
@@ -747,3 +749,179 @@ class PickupPointDetailsTests(TestCase):
         client = FakePointsClient()
         self.assertEqual(pickup_points.fetch_details([], client=client), [])
         self.assertEqual(client.info_calls, [])
+
+
+def _checkout_response(*, available=True, sku=758646053, warehouse_id=23996939891000):
+    """Ответ checkout по образцу живого — с ним и сверялись поля."""
+    return {'splits': [{
+        'delivery_method': {
+            'id': 378617,
+            'name': 'Пункт Ozon',
+            'delivery_type': 'PVZ',
+            'timeslots': [{
+                'timeslot_id': 1014000655935686,
+                'logistic_date_range': {
+                    'from': '2026-09-04T17:00:00Z', 'to': '2026-09-04T18:00:00Z',
+                },
+                'client_date_range': None,
+            }],
+            'unavailable_reason': 'UNSPECIFIED',
+        },
+        'warehouse_id': warehouse_id,
+        'items': [{'sku': sku, 'quantity': 1, 'offer_id': '01-14AP0250'}],
+        'unavailable_reason': 'UNSPECIFIED' if available else 'OUT_OF_STOCK',
+        'delivery_schema': 'FBS',
+        'commissions': {'total': {'amount': '100', 'currency': 'RUB'}} if available else None,
+    }]}
+
+
+class FakeOrderClient:
+    def __init__(self, checkout=None, order=None, order_error=None):
+        self._checkout = checkout or _checkout_response()
+        self._order = order or {'order_number': 'OZ-1'}
+        self._order_error = order_error
+        self.order_payloads = []
+
+    def checkout(self, **kwargs):
+        self.checkout_kwargs = kwargs
+        return self._checkout
+
+    def order_create(self, payload):
+        self.order_payloads.append(payload)
+        if self._order_error:
+            raise client_module.OzonLogisticsError(self._order_error)
+        return self._order
+
+
+BUYER = {'first_name': 'Иван', 'last_name': 'Петров', 'phone': '+7 (916) 111-22-33'}
+
+
+class QuoteTests(TestCase):
+    def test_saves_quote_with_delivery_cost(self):
+        client = FakeOrderClient()
+        quote = orders.create_quote(
+            phone='79161112233',
+            items=[{'sku': 758646053, 'quantity': 1}],
+            map_point_id=378617,
+            client=client,
+        )
+
+        self.assertEqual(quote.delivery_cost, Decimal('100'))
+        self.assertTrue(quote.is_deliverable)
+        self.assertEqual(quote.phone, '79161112233')
+
+    def test_unavailable_delivery_is_recognised(self):
+        client = FakeOrderClient(checkout=_checkout_response(available=False))
+        quote = orders.create_quote(
+            phone='79161112233', items=[{'sku': 1, 'quantity': 1}],
+            map_point_id=1, client=client,
+        )
+
+        self.assertFalse(quote.is_deliverable)
+        self.assertEqual(quote.unavailable_reasons(), ['OUT_OF_STOCK'])
+
+
+class OrderPayloadTests(TestCase):
+    def _quote(self, **kwargs):
+        defaults = {
+            'phone': '79161112233',
+            'items': [{'sku': 758646053, 'quantity': 1}],
+            'map_point_id': 378617,
+            'checkout_response': _checkout_response(),
+        }
+        return OzonDeliveryQuote.objects.create(**{**defaults, **kwargs})
+
+    def test_builds_required_fields(self):
+        payload = orders.build_order_payload(
+            self._quote(), buyer=BUYER, prices={758646053: Decimal('1990.50')}
+        )
+
+        split = payload['splits'][0]
+        method = split['delivery_method']
+        self.assertEqual(method['delivery_method_id'], 378617)
+        self.assertEqual(method['delivery_type'], 'PVZ')
+        self.assertEqual(method['timeslot_id'], 1014000655935686)
+        self.assertIn('from', method['logistic_date_range'])
+        self.assertEqual(split['warehouse_id'], 23996939891000)
+        self.assertEqual(payload['delivery'], {'pick_up': {'map_point_id': 378617}})
+        self.assertEqual(payload['delivery_schema'], 'MIX')
+
+    def test_price_is_split_into_units_and_nanos(self):
+        payload = orders.build_order_payload(
+            self._quote(), buyer=BUYER, prices={758646053: Decimal('1990.50')}
+        )
+        price = payload['splits'][0]['items'][0]['price']
+        self.assertEqual(price, {'currency_code': 'RUB', 'units': 1990, 'nanos': 500000000})
+
+    def test_phone_is_normalized_for_buyer_and_recipient(self):
+        payload = orders.build_order_payload(
+            self._quote(), buyer=BUYER, prices={758646053: Decimal('100')}
+        )
+        self.assertEqual(payload['buyer']['phone'], '79161112233')
+        self.assertEqual(payload['recipient']['recipient_phone'], '79161112233')
+
+    def test_missing_price_is_rejected(self):
+        with self.assertRaises(orders.OzonOrderError):
+            orders.build_order_payload(self._quote(), buyer=BUYER, prices={})
+
+    def test_unavailable_quote_is_rejected(self):
+        quote = self._quote(checkout_response=_checkout_response(available=False))
+        with self.assertRaises(orders.OzonOrderError) as ctx:
+            orders.build_order_payload(quote, buyer=BUYER, prices={758646053: Decimal('1')})
+        self.assertIn('OUT_OF_STOCK', str(ctx.exception))
+
+    def test_quote_without_destination_is_rejected(self):
+        quote = self._quote(map_point_id=None)
+        with self.assertRaises(orders.OzonOrderError):
+            orders.build_order_payload(quote, buyer=BUYER, prices={758646053: Decimal('1')})
+
+    def test_courier_address_is_used_when_no_pickup_point(self):
+        quote = self._quote(
+            map_point_id=None,
+            courier_address={'city': 'Москва', 'country': 'Россия', 'house_number': '1'},
+        )
+        payload = orders.build_order_payload(
+            quote, buyer=BUYER, prices={758646053: Decimal('1')}
+        )
+        self.assertEqual(payload['delivery']['courier']['city'], 'Москва')
+
+
+class CreateOrderTests(TestCase):
+    def _quote(self):
+        return OzonDeliveryQuote.objects.create(
+            phone='79161112233',
+            items=[{'sku': 758646053, 'quantity': 1}],
+            map_point_id=378617,
+            checkout_response=_checkout_response(),
+        )
+
+    def test_stores_order_number(self):
+        quote = self._quote()
+        client = FakeOrderClient()
+
+        orders.create_order(quote, buyer=BUYER, prices={758646053: Decimal('100')}, client=client)
+
+        quote.refresh_from_db()
+        self.assertEqual(quote.status, OzonDeliveryQuote.STATUS_ORDERED)
+        self.assertEqual(quote.order_number, 'OZ-1')
+        self.assertIsNotNone(quote.ordered_at)
+
+    def test_second_call_does_not_create_duplicate(self):
+        """Дубль означал бы вторую отгрузку тому же покупателю."""
+        quote = self._quote()
+        client = FakeOrderClient()
+        orders.create_order(quote, buyer=BUYER, prices={758646053: Decimal('100')}, client=client)
+        orders.create_order(quote, buyer=BUYER, prices={758646053: Decimal('100')}, client=client)
+
+        self.assertEqual(len(client.order_payloads), 1)
+
+    def test_failure_is_recorded_on_quote(self):
+        quote = self._quote()
+        client = FakeOrderClient(order_error='HTTP 400: out of stock')
+
+        with self.assertRaises(orders.OzonOrderError):
+            orders.create_order(quote, buyer=BUYER, prices={758646053: Decimal('100')}, client=client)
+
+        quote.refresh_from_db()
+        self.assertEqual(quote.status, OzonDeliveryQuote.STATUS_FAILED)
+        self.assertIn('out of stock', quote.error)

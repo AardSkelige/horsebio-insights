@@ -1,6 +1,6 @@
 from django.contrib import admin
 
-from .models import OzonOAuthToken, OzonPickupPoint, OzonProduct
+from .models import OzonDeliveryQuote, OzonOAuthToken, OzonPickupPoint, OzonProduct
 
 
 @admin.register(OzonOAuthToken)
@@ -26,3 +26,12 @@ class OzonPickupPointAdmin(admin.ModelAdmin):
     list_display = ('map_point_id', 'address', 'latitude', 'longitude', 'details_synced_at')
     search_fields = ('map_point_id', 'address', 'name')
     readonly_fields = ('synced_at', 'details_synced_at', 'details')
+
+
+@admin.register(OzonDeliveryQuote)
+class OzonDeliveryQuoteAdmin(admin.ModelAdmin):
+    list_display = ('id', 'phone', 'status', 'delivery_cost', 'site_order_id',
+                    'order_number', 'created_at')
+    list_filter = ('status',)
+    search_fields = ('id', 'phone', 'site_order_id', 'order_number')
+    readonly_fields = ('created_at', 'ordered_at', 'checkout_response')
