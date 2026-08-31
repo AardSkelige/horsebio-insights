@@ -5,7 +5,8 @@ from urllib.parse import parse_qs, urlparse
 from django.test import TestCase, override_settings
 from django.utils import timezone
 
-from ozon_logistics.models import OzonAuthState, OzonOAuthToken
+from ozon_logistics.models import OzonAuthState, OzonOAuthToken, OzonProduct
+from ozon_logistics.services import catalog
 from ozon_logistics.services import client as client_module
 from ozon_logistics.services import oauth
 
@@ -507,3 +508,90 @@ class AccessControlTests(TestCase):
             response = self.client.get('/api/ozon-logistics/diag/', {'phone': '+79161112233'})
         self.assertEqual(response.status_code, 502)
         self.assertIn('no scope', response.json()['message'])
+
+
+class FakeCatalogClient:
+    """Клиент-заглушка: отдаёт страницы каталога по порядку."""
+
+    def __init__(self, pages):
+        self.pages = pages
+        self.calls = []
+
+    def product_list(self, *, limit=None, last_id=None, offer_ids=None):
+        self.calls.append({'limit': limit, 'last_id': last_id})
+        page = self.pages[len(self.calls) - 1]
+        return {'result': page}
+
+
+class CatalogSyncTests(TestCase):
+    def test_stores_offer_id_to_sku_mapping(self):
+        client = FakeCatalogClient([{
+            'items': [
+                {'offer_id': 'ART-1', 'sku': 111, 'product_id': 1, 'has_fbs_stocks': True},
+                {'offer_id': 'ART-2', 'sku': 222, 'product_id': 2, 'archived': True},
+            ],
+            'last_id': None,
+        }])
+        stats = catalog.sync_products(client=client)
+
+        self.assertEqual(stats['fetched'], 2)
+        self.assertEqual(stats['created'], 2)
+        self.assertEqual(OzonProduct.objects.get(offer_id='ART-1').sku, 111)
+        # Годен только товар с остатком FBS и не в архиве
+        self.assertEqual(stats['sellable'], 1)
+
+    def test_second_run_updates_instead_of_duplicating(self):
+        page = {'items': [{'offer_id': 'ART-1', 'sku': 111, 'has_fbs_stocks': False}], 'last_id': None}
+        catalog.sync_products(client=FakeCatalogClient([page]))
+
+        changed = {'items': [{'offer_id': 'ART-1', 'sku': 111, 'has_fbs_stocks': True}], 'last_id': None}
+        stats = catalog.sync_products(client=FakeCatalogClient([changed]))
+
+        self.assertEqual(stats['updated'], 1)
+        self.assertEqual(OzonProduct.objects.count(), 1)
+        self.assertTrue(OzonProduct.objects.get().has_fbs_stocks)
+
+    def test_item_without_sku_is_skipped(self):
+        """Товар без sku для Ozon Доставки бесполезен — заказ по нему не создать."""
+        client = FakeCatalogClient([{
+            'items': [
+                {'offer_id': 'ART-1', 'sku': None},
+                {'offer_id': '', 'sku': 333},
+            ],
+            'last_id': None,
+        }])
+        stats = catalog.sync_products(client=client)
+
+        self.assertEqual(stats['skipped_without_sku'], 2)
+        self.assertEqual(OzonProduct.objects.count(), 0)
+
+    def test_pagination_follows_last_id(self):
+        full_page = {
+            'items': [
+                {'offer_id': f'ART-{i}', 'sku': 1000 + i, 'has_fbs_stocks': True}
+                for i in range(catalog.PAGE_SIZE)
+            ],
+            'last_id': 'cursor-1',
+        }
+        tail = {'items': [{'offer_id': 'ART-LAST', 'sku': 9999}], 'last_id': None}
+        client = FakeCatalogClient([full_page, tail])
+
+        stats = catalog.sync_products(client=client)
+
+        self.assertEqual(len(client.calls), 2)
+        self.assertEqual(client.calls[1]['last_id'], 'cursor-1')
+        self.assertEqual(stats['fetched'], catalog.PAGE_SIZE + 1)
+
+    def test_empty_catalog_is_not_an_error(self):
+        stats = catalog.sync_products(client=FakeCatalogClient([{'items': [], 'last_id': None}]))
+        self.assertEqual(stats['fetched'], 0)
+        self.assertEqual(stats['total_stored'], 0)
+
+    def test_sellable_property(self):
+        product = OzonProduct(offer_id='A', sku=1, has_fbs_stocks=True, archived=False)
+        self.assertTrue(product.sellable_via_ozon_delivery)
+        product.archived = True
+        self.assertFalse(product.sellable_via_ozon_delivery)
+        product.archived = False
+        product.has_fbs_stocks = False
+        self.assertFalse(product.sellable_via_ozon_delivery)

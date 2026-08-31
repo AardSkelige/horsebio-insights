@@ -179,6 +179,16 @@ SCRIPTS_CONFIG = [
         'args': ['auto_sync_weekly'],
     },
     {
+        'id': 'horsebio_ozon_products',
+        'topic': 'Обновление данных',
+        'name': 'Товары Ozon',
+        'account': 'HorseBio',
+        'schedule': 'Ежедн. в 09:35',
+        'description': 'Сопоставление артикулов с sku в Ozon для Ozon Доставки (Django-команда sync_ozon_products)',
+        'script': '/app/manage.py',
+        'args': ['sync_ozon_products'],
+    },
+    {
         'id': 'horsebio_inventory_check',
         'topic': 'Обновление данных',
         'name': 'Инвентаризация',

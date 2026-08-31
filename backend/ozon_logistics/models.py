@@ -58,3 +58,39 @@ class OzonAuthState(models.Model):
     @classmethod
     def purge_expired(cls):
         cls.objects.filter(created_at__lt=timezone.now() - cls.LIFETIME).delete()
+
+
+class OzonProduct(models.Model):
+    """Сопоставление нашего артикула с идентификаторами товара в Ozon.
+
+    `sku` нужен и для расчёта доставки, и для создания заказа, а получить его
+    можно только у Ozon (`/v3/product/list`) — в МойСклад его нет. Дёргать API
+    на каждое открытие корзины нельзя, поэтому держим у себя и обновляем
+    периодически командой sync_ozon_products.
+    """
+
+    offer_id = models.CharField('Артикул (offer_id)', max_length=255, unique=True)
+    sku = models.BigIntegerField('SKU в Ozon')
+    product_id = models.BigIntegerField('product_id в Ozon', null=True, blank=True)
+    name = models.CharField('Название', max_length=500, blank=True)
+    has_fbs_stocks = models.BooleanField('Есть остатки FBS', default=False)
+    has_fbo_stocks = models.BooleanField('Есть остатки FBO', default=False)
+    archived = models.BooleanField('В архиве', default=False)
+    synced_at = models.DateTimeField('Обновлено из Ozon', auto_now=True)
+
+    class Meta:
+        verbose_name = 'Товар Ozon'
+        verbose_name_plural = 'Товары Ozon'
+        ordering = ['offer_id']
+        indexes = [models.Index(fields=['sku'])]
+
+    def __str__(self):
+        return f'{self.offer_id} → sku {self.sku}'
+
+    @property
+    def sellable_via_ozon_delivery(self):
+        """Годен ли товар для Ozon Доставки: нужен остаток FBS и не архив.
+
+        Без зарегистрированного в Ozon остатка заказ создать нельзя.
+        """
+        return self.has_fbs_stocks and not self.archived
