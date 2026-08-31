@@ -158,8 +158,47 @@ def diagnostics(request):
             'message': 'Укажите номер телефона: ?phone=79161112233',
         }, status=400)
 
+    return _call(lambda: OzonLogisticsClient().delivery_check(phone))
+
+
+def _call(fn, *, shape=None):
+    """Вызов Seller API с единообразной обёрткой ошибок для диагностики."""
     try:
-        result = OzonLogisticsClient().delivery_check(phone)
+        result = fn()
     except (oauth.OzonOAuthError, OzonLogisticsError) as exc:
         return JsonResponse({'status': 'error', 'message': str(exc)}, status=502)
-    return JsonResponse({'status': 'ok', 'result': result})
+    return JsonResponse({'status': 'ok', 'result': shape(result) if shape else result})
+
+
+def diag_points(request):
+    """Сколько всего точек самовывоза и как они выглядят.
+
+    Полный список бывает огромным, поэтому наружу отдаём счётчик и образец —
+    диагностике этого достаточно.
+    """
+    denied = _superuser_only(request)
+    if denied:
+        return denied
+
+    def sample(result):
+        points = result.get('points') or []
+        return {'points_total': len(points), 'sample': points[:5]}
+
+    return _call(OzonLogisticsClient().point_list, shape=sample)
+
+
+def diag_point_info(request):
+    """Подробности точек самовывоза: /diag/point/?ids=123,456"""
+    denied = _superuser_only(request)
+    if denied:
+        return denied
+
+    raw = request.GET.get('ids', '').strip()
+    ids = [part for part in raw.replace(' ', '').split(',') if part]
+    if not ids:
+        return JsonResponse({
+            'status': 'error',
+            'message': 'Укажите идентификаторы точек: ?ids=123,456',
+        }, status=400)
+
+    return _call(lambda: OzonLogisticsClient().point_info(ids))

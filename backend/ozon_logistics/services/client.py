@@ -102,3 +102,31 @@ class OzonLogisticsClient:
         сумме, категории и географии метод не учитывает.
         """
         return self.request('/v1/delivery/check', {'client_phone': normalize_phone(phone)})
+
+    def point_list(self):
+        """Координаты ВСЕХ точек самовывоза: {'points': [{coordinate, map_point_id}]}.
+
+        Ответ не постраничный и может быть большим, поэтому документация советует
+        кешировать его у себя, а не дёргать на каждое открытие корзины.
+        """
+        return self.request('/v1/delivery/point/list', {})
+
+    def point_info(self, map_point_ids):
+        """Подробности точек: адрес, часы работы, рейтинг. Не больше 100 за раз."""
+        ids = [str(i) for i in map_point_ids]
+        if not 0 < len(ids) <= 100:
+            raise OzonLogisticsError('Нужно от 1 до 100 идентификаторов точек')
+        return self.request('/v1/delivery/point/info', {'map_point_ids': ids})
+
+    def delivery_map(self, left_bottom, right_top, zoom):
+        """Кластеры точек в области карты — для отрисовки при мелком масштабе.
+
+        Координаты — пары (lat, long); zoom от 0 до 19.
+        """
+        return self.request('/v1/delivery/map', {
+            'viewport': {
+                'left_bottom': {'lat': left_bottom[0], 'long': left_bottom[1]},
+                'right_top': {'lat': right_top[0], 'long': right_top[1]},
+            },
+            'zoom': zoom,
+        })

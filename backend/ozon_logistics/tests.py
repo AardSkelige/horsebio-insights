@@ -369,6 +369,47 @@ class AccessControlTests(TestCase):
             response = self.client.get('/api/ozon-logistics/diag/', {'phone': '+79161112233'})
         self.assertEqual(response.json()['result'], {'result': ['w1']})
 
+    def test_point_info_rejects_empty_and_oversized_lists(self):
+        with self.assertRaises(client_module.OzonLogisticsError):
+            client_module.OzonLogisticsClient().point_info([])
+        with self.assertRaises(client_module.OzonLogisticsError):
+            client_module.OzonLogisticsClient().point_info(list(range(101)))
+
+    def test_diag_points_returns_count_and_sample(self):
+        """Полный список ПВЗ огромный — наружу отдаём счётчик и образец."""
+        OzonOAuthToken.objects.create(
+            pk=OzonOAuthToken.SINGLETON_PK,
+            access_token='access-1',
+            refresh_token='r',
+            expires_at=timezone.now() + timezone.timedelta(hours=1),
+        )
+        points = [{'map_point_id': i, 'coordinate': {'lat': 55.7, 'long': 37.6}} for i in range(12)]
+        self.client.force_login(self._user(superuser=True))
+        with patch('requests.post', return_value=FakeResponse(data={'points': points})):
+            body = self.client.get('/api/ozon-logistics/diag/points/').json()
+        self.assertEqual(body['result']['points_total'], 12)
+        self.assertEqual(len(body['result']['sample']), 5)
+
+    def test_diag_point_info_requires_ids(self):
+        self.client.force_login(self._user(superuser=True))
+        self.assertEqual(self.client.get('/api/ozon-logistics/diag/point/').status_code, 400)
+
+    def test_diag_point_info_passes_ids(self):
+        OzonOAuthToken.objects.create(
+            pk=OzonOAuthToken.SINGLETON_PK,
+            access_token='access-1',
+            refresh_token='r',
+            expires_at=timezone.now() + timezone.timedelta(hours=1),
+        )
+        self.client.force_login(self._user(superuser=True))
+        with patch('requests.post', return_value=FakeResponse(data={'points': []})) as post:
+            self.client.get('/api/ozon-logistics/diag/point/', {'ids': '12, 34'})
+        self.assertEqual(post.call_args.kwargs['json'], {'map_point_ids': ['12', '34']})
+
+    def test_diag_points_is_forbidden_for_regular_user(self):
+        self.client.force_login(self._user(superuser=False))
+        self.assertEqual(self.client.get('/api/ozon-logistics/diag/points/').status_code, 403)
+
     def test_diag_reports_seller_api_failure(self):
         OzonOAuthToken.objects.create(
             pk=OzonOAuthToken.SINGLETON_PK,
