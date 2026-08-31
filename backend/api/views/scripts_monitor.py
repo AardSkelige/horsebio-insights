@@ -199,6 +199,16 @@ SCRIPTS_CONFIG = [
         'args': ['sync_ozon_pickup_points'],
     },
     {
+        'id': 'horsebio_ozon_orders',
+        'topic': 'Обновление данных',
+        'name': 'Заказы Ozon Доставки',
+        'account': 'HorseBio',
+        'schedule': 'Каждые 5 мин',
+        'description': 'Создание заказов в Ozon по оплаченным заказам сайта (Django-команда create_ozon_orders)',
+        'script': '/app/manage.py',
+        'args': ['create_ozon_orders'],
+    },
+    {
         'id': 'horsebio_inventory_check',
         'topic': 'Обновление данных',
         'name': 'Инвентаризация',

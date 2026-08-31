@@ -1,5 +1,7 @@
 import json
+import tempfile
 from decimal import Decimal
+from pathlib import Path
 from unittest.mock import patch
 from urllib.parse import parse_qs, urlparse
 
@@ -14,6 +16,7 @@ from ozon_logistics.services import catalog
 from ozon_logistics import site_api
 from ozon_logistics.services import orders
 from ozon_logistics.services import pickup_points
+from ozon_logistics.services import site_orders
 from ozon_logistics.services import client as client_module
 from ozon_logistics.services import oauth
 
@@ -1116,3 +1119,114 @@ class SiteApiOriginTests(TestCase):
         self.assertLess(
             site_api.RATE_LIMITS['availability'], site_api.RATE_LIMITS['quote']
         )
+
+
+class SiteOrdersTests(TestCase):
+    """Создание заказов Ozon по оплаченным заказам сайта."""
+
+    def setUp(self):
+        self.product = OzonProduct.objects.create(
+            offer_id='13-12VP0100', sku=4797684627, has_fbs_stocks=True
+        )
+        self.quote = OzonDeliveryQuote.objects.create(
+            phone='79166229030',
+            items=[{'sku': 4797684627, 'quantity': 1}],
+            map_point_id=378617,
+            checkout_response=_checkout_response(sku=4797684627),
+        )
+
+    def _state(self, *, paid='1', quote_id=None, items=None):
+        """State демона 06 — по образцу живого письма заказа 12513118."""
+        return {'orders': {'12513118': {'latest': {
+            'order_id': '12513118',
+            'number': '2086',
+            'paid': paid,
+            'total': '1580',
+            'field': {
+                'fio': 'Сергей',
+                'familia': 'Сенькин',
+                'otcestvo': '',
+                'phone': '+79166229030',
+                'ozon_quote_id': quote_id if quote_id is not None else str(self.quote.id),
+            },
+            'items': items if items is not None else [{
+                'article': '13-12VP0100',
+                'name': 'Желатиновые капсулы',
+                'quantity': '1',
+                'price': '1580',
+            }],
+        }}}}
+
+    def _run(self, state, client=None):
+        path = Path(tempfile.mkdtemp()) / 'state.json'
+        path.write_text(json.dumps(state), encoding='utf-8')
+        return site_orders.process_paid_orders(state_path=path, client=client)
+
+    def test_creates_order_for_paid_site_order(self):
+        client = FakeOrderClient()
+        stats = self._run(self._state(), client=client)
+
+        self.assertEqual(stats['created'], 1)
+        self.quote.refresh_from_db()
+        self.assertEqual(self.quote.status, OzonDeliveryQuote.STATUS_ORDERED)
+        self.assertEqual(self.quote.site_order_id, '12513118')
+
+        # Цена берётся из письма, а не из расчёта — в нём цен нет вовсе
+        price = client.order_payloads[0]['splits'][0]['items'][0]['price']
+        self.assertEqual(price['units'], 1580)
+
+    def test_unpaid_order_is_skipped(self):
+        """Ozon запрещает создавать заказ до подтверждения оплаты."""
+        client = FakeOrderClient()
+        stats = self._run(self._state(paid=''), client=client)
+
+        self.assertEqual(stats['created'], 0)
+        self.assertEqual(stats['skipped'], 1)
+        self.assertEqual(client.order_payloads, [])
+
+    def test_order_without_quote_field_is_ignored(self):
+        state = self._state()
+        del state['orders']['12513118']['latest']['field']['ozon_quote_id']
+        stats = self._run(state, client=FakeOrderClient())
+
+        self.assertEqual(stats['checked'], 0)
+
+    def test_unknown_quote_id_is_reported(self):
+        stats = self._run(
+            self._state(quote_id='11111111-1111-1111-1111-111111111111'),
+            client=FakeOrderClient(),
+        )
+        self.assertEqual(stats['skipped'], 1)
+        self.assertEqual(stats['created'], 0)
+
+    def test_already_ordered_quote_is_not_repeated(self):
+        self.quote.status = OzonDeliveryQuote.STATUS_ORDERED
+        self.quote.order_number = 'OZ-1'
+        self.quote.save()
+
+        client = FakeOrderClient()
+        stats = self._run(self._state(), client=client)
+
+        self.assertEqual(stats['skipped'], 1)
+        self.assertEqual(client.order_payloads, [])
+
+    def test_unmatched_articles_are_reported_as_failure(self):
+        """Без цен заказ создавать нельзя — они обязательны в order/create."""
+        stats = self._run(
+            self._state(items=[{'article': 'НЕТ-ТАКОГО', 'quantity': '1', 'price': '100'}]),
+            client=FakeOrderClient(),
+        )
+        self.assertEqual(stats['failed'], 1)
+        self.assertEqual(stats['created'], 0)
+
+    def test_ozon_failure_is_counted_and_recorded(self):
+        client = FakeOrderClient(order_error='HTTP 400: out of stock')
+        stats = self._run(self._state(), client=client)
+
+        self.assertEqual(stats['failed'], 1)
+        self.quote.refresh_from_db()
+        self.assertEqual(self.quote.status, OzonDeliveryQuote.STATUS_FAILED)
+
+    def test_missing_state_file_is_not_an_error(self):
+        stats = site_orders.process_paid_orders(state_path='/nonexistent/state.json')
+        self.assertEqual(stats, {'checked': 0, 'created': 0, 'skipped': 0, 'failed': 0})
