@@ -495,8 +495,7 @@ class CsvExportTest(TestCase):
         cache.clear()
 
     def _get(self, positions, description='<p>Текст основной карточки</p>'):
-        data = {'positions': positions, 'summary': {}}
-        with patch('api.views.discounted._build_data', return_value=data), \
+        with patch('api.views.discounted.positions_snapshot', return_value=positions), \
              patch('api.views.discounted.site_feed.pictures_for',
                    return_value=['https://horse-bio.ru/d/a.png', 'https://horse-bio.ru/d/b.png']), \
              patch('api.views.discounted.site_feed.description_for', return_value=description):
@@ -505,7 +504,7 @@ class CsvExportTest(TestCase):
     @staticmethod
     def _position(**kwargs):
         base = {'article': '01-01AP0500-UC', 'name': 'Уценка // Хондро', 'price': 1176.0,
-                'price_full': 1680.0, 'quantity': 5, 'published': False}
+                'price_full': 1680.0, 'quantity': 5, 'published': False, 'state': STATE_OK}
         base.update(kwargs)
         return base
 
@@ -516,7 +515,8 @@ class CsvExportTest(TestCase):
         self.assertIn('attachment', response['Content-Disposition'])
         text = response.content.decode('cp1251')
         rows = text.splitlines()
-        # шапка и одна позиция: без остатка на сайт отправлять нечего
+        # шапка и одна позиция: карточки, которой нет ни на складе, ни на витрине,
+        # в файле делать нечего
         self.assertEqual(len(rows), 2)
         self.assertIn('article : Артикул', rows[0])
         self.assertIn('01-01AP0500-UC', rows[1])
@@ -534,6 +534,33 @@ class CsvExportTest(TestCase):
         columns = live.split(';')
         self.assertEqual(columns[3], '0')          # hidden
         self.assertEqual(new.split(';')[3], '1')
+
+    def test_hides_a_card_that_must_be_taken_off_sale(self):
+        """До конца срока меньше двух месяцев — файл снимает карточку с витрины.
+
+        Это единственный оставшийся способ: обмен, который делал бы это сам,
+        упёрся в демо-лимит.
+        """
+        for state in (STATE_DELIST, STATE_EXPIRED):
+            with self.subTest(state=state):
+                row = self._get([self._position(published=True, state=state)])
+                columns = row.content.decode('cp1251').splitlines()[1].split(';')
+                self.assertEqual(columns[3], '1')      # hidden
+
+    def test_zeroes_and_hides_a_sold_out_card(self):
+        """Раскупленная карточка обязана попасть в файл — иначе она останется в продаже."""
+        response = self._get([self._position(quantity=0, published=True)])
+        rows = response.content.decode('cp1251').splitlines()
+        self.assertEqual(len(rows), 2)
+        columns = rows[1].split(';')
+        self.assertEqual(columns[3], '1')              # hidden
+        self.assertEqual(columns[6], '0')              # amount
+
+    def test_refuses_to_build_when_the_site_feed_is_unknown(self):
+        """Не зная, что на витрине, файл снял бы с продажи весь раздел."""
+        response = self._get([self._position(published=None), self._position(article='B-UC')])
+        self.assertNotEqual(response.status_code, 200)
+        self.assertIn('Фид сайта не ответил', response.json()['message'])
 
     def test_leaves_description_empty_when_the_source_page_is_unreadable(self):
         """Пустое описание лучше, чем затёртое: восстанавливать его неоткуда."""

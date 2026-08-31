@@ -20,7 +20,13 @@ const tooltipStyle = (top) => ({
     animation: 'sidebar-tooltip-in 150ms ease forwards',
 });
 
-const UtilBtn = ({ icon: Icon, label, expanded, onClick, btnRef }) => {
+/**
+ * Кнопка нижней панели сайдбара.
+ *
+ * `badge` — значок с числом, виден только в развёрнутом сайдбаре; `marker` —
+ * точка в углу кнопки, которая заменяет его в свёрнутом, где цифре нет места.
+ */
+const UtilBtn = ({ icon: Icon, label, expanded, onClick, btnRef, badge, marker }) => {
     const [hov, setHov] = useState(false);
     const [tipTop, setTipTop] = useState(0);
     const ref = useRef(null);
@@ -41,6 +47,7 @@ const UtilBtn = ({ icon: Icon, label, expanded, onClick, btnRef }) => {
                 onMouseEnter={handleEnter}
                 onMouseLeave={() => setHov(false)}
                 style={{
+                    position: 'relative',
                     display: 'flex',
                     alignItems: 'center',
                     justifyContent: expanded ? 'flex-start' : 'center',
@@ -60,6 +67,7 @@ const UtilBtn = ({ icon: Icon, label, expanded, onClick, btnRef }) => {
                 }}
             >
                 <Icon style={{ width: 16, height: 16, flexShrink: 0 }} />
+                {!expanded && marker}
                 <span style={{
                     fontFamily: 'var(--sans)',
                     fontSize: '13px',
@@ -72,6 +80,7 @@ const UtilBtn = ({ icon: Icon, label, expanded, onClick, btnRef }) => {
                 }}>
                     {label}
                 </span>
+                {expanded && badge && <span style={{ marginLeft: 'auto', display: 'flex' }}>{badge}</span>}
             </button>
             {!expanded && hov && <div style={tooltipStyle(tipTop)}>{label}</div>}
         </>
@@ -84,6 +93,8 @@ UtilBtn.propTypes = {
     expanded: PropTypes.bool.isRequired,
     onClick: PropTypes.func.isRequired,
     btnRef: PropTypes.object,
+    badge: PropTypes.node,
+    marker: PropTypes.node,
 };
 
 export default UtilBtn;

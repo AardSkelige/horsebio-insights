@@ -6,6 +6,8 @@ import { clearAuthStatus } from '../../utils/authSession';
 import { useAuthStatus } from '../../hooks/useAuthStatus';
 import { authApi } from '../../api/authApi';
 import { useDataPanel } from '../../contexts/DataPanelContext';
+import { useNotifications } from '../../contexts/NotificationsContext';
+import NotificationsBell from '../notifications/NotificationsBell';
 import NavItem from './sidebar/NavItem';
 import UtilBtn from './sidebar/UtilBtn';
 import UserMenu from './sidebar/UserMenu';
@@ -23,6 +25,8 @@ export const Sidebar = ({ expanded, onToggle, isMobile, mobileOpen, onMobileClos
     const location = useLocation();
     const navigate = useNavigate();
     const { toggle: toggleDataPanel } = useDataPanel();
+    // Уведомления разделов: число у пункта меню и колокольчик внизу
+    const { bySource } = useNotifications();
     const auth = useAuthStatus();
     const isSuperuser = auth.isSuperuser === true;
     const allowedPages = auth.allowedPages;
@@ -259,6 +263,8 @@ export const Sidebar = ({ expanded, onToggle, isMobile, mobileOpen, onMobileClos
                                         pinned={pinnedPaths.includes(item.path)}
                                         pinDisabled={!pinnedPaths.includes(item.path) && pinnedPaths.length >= MAX_PINNED_SECTIONS}
                                         onTogglePin={item.path === '/' ? undefined : handleTogglePin}
+                                        unread={bySource[item.pageKey]?.unseen || 0}
+                                        unreadTone={bySource[item.pageKey]?.level || 'info'}
                                     />
                                 ))}
                             </div>
@@ -269,6 +275,7 @@ export const Sidebar = ({ expanded, onToggle, isMobile, mobileOpen, onMobileClos
 
             {/* Bottom utilities */}
             <div style={{ borderTop: '1px solid var(--on-dark-wash)', padding: '8px 0', flexShrink: 0 }}>
+                <NotificationsBell expanded={showExpanded} />
                 <UtilBtn
                     icon={RefreshCw}
                     label="Обновить данные"

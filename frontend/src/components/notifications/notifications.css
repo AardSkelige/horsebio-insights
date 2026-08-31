@@ -1,0 +1,229 @@
+/* Уведомления. Строка, а не карточка: список читается сверху вниз одним
+   движением глаза, а цветная плашка на каждом пункте мешала бы этому.
+
+   Цвет уровня — точка 5 px, тот же приём, что в карточке уценки («на витрине»).
+   Прочитанное отличается только весом заголовка, как в почте. */
+
+.nt-item {
+    display: flex;
+    align-items: flex-start;
+    gap: 9px;
+    padding: 9px 10px;
+    border-radius: 8px;
+    /* Непрочитанное лежит на подложке — этим строки и отделяются друг от друга,
+       и сразу видно, что новое. Прочитанное остаётся на пустом фоне. */
+    background: var(--surface-soft);
+}
+
+.nt-item + .nt-item { margin-top: 4px; }
+
+.nt-item--read { background: transparent; }
+
+/* На странице раздела подложка не нужна: там уведомление и так стоит в рамке
+   из цветной линии, а вложенные друг в друга фоны читаются как мусор */
+.nt-item--line { background: transparent; padding: 5px 0; }
+
+.nt-item__dot {
+    flex: none;
+    width: 7px;
+    height: 7px;
+    margin-top: 5px;
+    border-radius: 50%;
+    background: var(--muted-soft);
+}
+
+.nt-item__dot--critical { background: var(--error); }
+.nt-item__dot--warning  { background: var(--warning); }
+.nt-item__dot--info     { background: var(--info); }
+
+/* Прочитанное — точка контуром: цвет уровня остаётся, сигнала больше нет */
+.nt-item--read .nt-item__dot {
+    background: transparent;
+    box-shadow: inset 0 0 0 1.5px var(--muted-soft);
+}
+.nt-item--read .nt-item__dot--critical { box-shadow: inset 0 0 0 1.5px var(--error); }
+.nt-item--read .nt-item__dot--warning  { box-shadow: inset 0 0 0 1.5px var(--warning); }
+.nt-item--read .nt-item__dot--info     { box-shadow: inset 0 0 0 1.5px var(--info); }
+
+/* Кнопка отметки: тихая, но видна всегда — управление, которое появляется
+   только по наведению, невозможно найти */
+.nt-item__toggle {
+    flex: none;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 24px;
+    height: 24px;
+    margin-top: -2px;
+    border: 0;
+    border-radius: 6px;
+    background: transparent;
+    color: var(--muted-soft);
+    cursor: pointer;
+    transition: background 150ms ease, color 150ms ease;
+}
+.nt-item__toggle:hover { background: var(--surface-cream-strong); color: var(--ink); }
+
+.nt-item__main { display: flex; flex-direction: column; gap: 2px; min-width: 0; flex: 1; }
+
+.nt-item__title {
+    margin: 0;
+    font-family: var(--sans);
+    font-size: 12.5px;
+    font-weight: 500;
+    line-height: 1.4;
+    color: var(--ink);
+}
+
+/* Прочитанное: дело осталось, но человек о нём знает */
+.nt-item--read .nt-item__title { font-weight: 400; color: var(--body); }
+
+.nt-item__source {
+    font-family: var(--sans);
+    font-size: 10px;
+    font-weight: 600;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    color: var(--muted-soft);
+    margin-right: 6px;
+}
+
+.nt-item__body {
+    margin: 0;
+    font-size: 12px;
+    line-height: 1.45;
+    color: var(--muted);
+}
+
+/* Действие — единственная строка, ради которой уведомление показывают.
+   Отмечено стрелкой, а не рамкой: рамка на каждом пункте съедала список. */
+.nt-item__action {
+    margin: 1px 0 0;
+    font-size: 12px;
+    line-height: 1.45;
+    color: var(--body);
+}
+
+.nt-item__action::before {
+    content: '→ ';
+    color: var(--primary);
+}
+
+/* ── панель ────────────────────────────────────────────── */
+
+.nt-panel__bar {
+    display: flex;
+    justify-content: flex-end;
+    padding: 8px 16px 0;
+    flex-shrink: 0;
+}
+
+.nt-panel__all {
+    border: 0;
+    background: transparent;
+    padding: 0;
+    font-family: var(--sans);
+    font-size: 11.5px;
+    color: var(--primary);
+    cursor: pointer;
+}
+.nt-panel__all:hover { text-decoration: underline; }
+
+.nt-group + .nt-group { margin-top: 16px; }
+
+.nt-group__head {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: 8px;
+    padding: 12px 10px 5px;
+    border-bottom: 1px solid var(--hairline);
+}
+
+.nt-group__label {
+    font-family: var(--sans);
+    font-size: 10px;
+    font-weight: 600;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    color: var(--muted-soft);
+}
+
+.nt-group__link {
+    font-family: var(--sans);
+    font-size: 11.5px;
+    color: var(--primary);
+    text-decoration: none;
+}
+.nt-group__link:hover { text-decoration: underline; }
+
+.nt-panel__count {
+    font-family: var(--sans);
+    font-size: 11.5px;
+    color: var(--primary);
+    font-variant-numeric: tabular-nums;
+    white-space: nowrap;
+}
+
+.nt-panel__empty {
+    font-size: 12.5px;
+    color: var(--muted);
+    text-align: center;
+    padding: 40px 12px;
+}
+
+/* ── значок в сайдбаре ─────────────────────────────────── */
+
+/* На тёмном фоне тональные плашки дизайн-системы не читаются, поэтому здесь
+   тот же язык, что у остального сайдбара: точка семантическим цветом плюс
+   число текстом. Число — непрочитанные: прочитанное уже не сигнал. */
+.nt-count {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    font-family: var(--sans);
+    font-size: 11px;
+    font-variant-numeric: tabular-nums;
+    color: var(--on-dark-soft);
+}
+
+.nt-dot {
+    width: 5px;
+    height: 5px;
+    border-radius: 50%;
+    background: var(--muted-soft);
+    flex: none;
+}
+
+.nt-dot--critical { background: var(--error); }
+.nt-dot--warning  { background: var(--warning); }
+.nt-dot--info     { background: var(--info); }
+
+/* Точка у пункта меню и на иконке свёрнутого сайдбара.
+
+   position: relative обязателен: пилюли ховера и активного пункта — абсолютные
+   соседи с inset: 0, и статичная точка красилась бы под ними, то есть пропадала
+   на наведении и на текущей странице. По той же причине relative стоит у иконки
+   и подписи пункта. */
+.nt-dot--nav { margin-left: 6px; position: relative; }
+
+.nt-dot--corner {
+    position: absolute;
+    top: 6px;
+    right: 8px;
+    box-shadow: 0 0 0 2px var(--surface-dark);
+}
+
+/* ── строка на странице раздела ────────────────────────── */
+
+/* Тонкая полоса над содержимым: слева цветная линия, чтобы блок читался как
+   «требует внимания», но без фона и рамки — страница и так не пустая. */
+.nt-section {
+    border-left: 2px solid var(--hairline);
+    padding: 2px 0 2px 12px;
+    margin-bottom: 4px;
+}
+
+.nt-section--critical { border-left-color: var(--error); }
+.nt-section--warning  { border-left-color: var(--warning); }
+.nt-section--info     { border-left-color: var(--info); }

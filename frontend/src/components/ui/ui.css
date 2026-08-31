@@ -1236,6 +1236,57 @@
     padding: var(--space-4) var(--space-3);
 }
 
+/* ── Выдвижная панель ───────────────────────────────────── */
+
+.ui-drawer {
+    position: fixed;
+    top: 0;
+    right: 0;
+    bottom: 0;
+    z-index: 60;
+    display: flex;
+    flex-direction: column;
+    background: var(--canvas);
+    border-left: 1px solid var(--hairline);
+    box-shadow: var(--shadow-menu);
+    /* Панель едет от верхнего края экрана — на телефоне её шапка иначе уходит
+       под статус-бар, а низ содержимого за нижний край */
+    padding-top: env(safe-area-inset-top, 0px);
+    will-change: transform;
+}
+
+.ui-drawer__scrim {
+    position: fixed;
+    inset: 0;
+    z-index: 59;
+    background: var(--scrim-soft);
+}
+
+.ui-drawer__head {
+    display: flex;
+    align-items: center;
+    gap: var(--space-2);
+    padding: 14px 16px;
+    border-bottom: 1px solid var(--hairline);
+    flex-shrink: 0;
+}
+
+.ui-drawer__title {
+    font-family: var(--serif);
+    font-weight: 400;
+    font-size: 17px;
+    color: var(--ink);
+    margin: 0;
+    flex: 1;
+}
+
+.ui-drawer__body {
+    flex: 1;
+    overflow-y: auto;
+    overscroll-behavior: contain;
+    padding: 4px 16px calc(20px + env(safe-area-inset-bottom, 0px));
+}
+
 @media (prefers-reduced-motion: reduce) {
 
     .ui-disclosure__chevron,

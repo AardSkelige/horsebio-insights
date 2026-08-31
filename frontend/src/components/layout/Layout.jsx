@@ -6,6 +6,8 @@ import { useState, useEffect, useRef } from 'react';
 import FloatingLoadingCard from '../common/FloatingLoadingCard';
 import DataManagementCard from '../home/components/DataManagementCard';
 import { useDataPanel } from '../../contexts/DataPanelContext';
+import { NotificationsProvider } from '../../contexts/NotificationsContext';
+import { NotificationsBarButton, NotificationsPanel } from '../notifications';
 import Sidebar from './Sidebar';
 import { usePageTracking } from '../../hooks/usePageTracking';
 
@@ -121,6 +123,9 @@ const Layout = ({ children }) => {
     });
 
     return (
+        // Провайдер уведомлений здесь, а не в App: он нужен только на защищённых
+        // страницах — и сайдбару со значками, и самим страницам разделов
+        <NotificationsProvider>
         <div style={{ display: 'flex', height: '100vh', overflow: 'hidden', backgroundColor: 'var(--canvas)' }}>
 
             {/* Mobile backdrop */}
@@ -187,6 +192,7 @@ const Layout = ({ children }) => {
                         <span style={{ fontFamily: 'var(--serif)', fontSize: '15px', color: 'var(--ink)' }}>
                             HorseBio Insights
                         </span>
+                        <NotificationsBarButton />
                     </div>
                 )}
 
@@ -248,7 +254,9 @@ const Layout = ({ children }) => {
             </m.div>
 
             <FloatingLoadingCard />
+            <NotificationsPanel />
         </div>
+        </NotificationsProvider>
     );
 };
 

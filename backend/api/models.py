@@ -200,3 +200,34 @@ class CheckRunResult(models.Model):
 
     def __str__(self):
         return f'{self.script_id} {self.run_id} (exit={self.exit_code})'
+
+
+class NotificationState(models.Model):
+    """Прочитал ли пользователь уведомление.
+
+    Сами уведомления не хранятся — они каждый раз считаются заново по живым
+    данным (см. `api/notifications/core.py`). Здесь только отметка о прочтении.
+
+    Отпечаток (`fingerprint`) описывает суть уведомления. Пока он тот же,
+    отметка действует; изменился — уведомление снова непрочитанное. Поэтому
+    прочитанное не «прячет» проблему: изменились цифры — оно вернулось.
+    """
+
+    user = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.CASCADE,
+        related_name='notification_states',
+    )
+    key = models.CharField(max_length=200)
+    fingerprint = models.CharField(max_length=100, blank=True)
+    seen_at = models.DateTimeField(null=True, blank=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        constraints = [
+            models.UniqueConstraint(fields=['user', 'key'], name='uniq_notification_state'),
+        ]
+        indexes = [models.Index(fields=['user'])]
+
+    def __str__(self):
+        return f'{self.user} → {self.key} ({"прочитано" if self.seen_at else "новое"})'

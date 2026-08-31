@@ -12,6 +12,7 @@ from .views.discounted import (
     discounted_list, discounted_delist, discounted_publish, discounted_csv,
 )
 from .views import delivery
+from .views.notifications import notifications_list, notifications_read
 
 
 app_name = 'api'
@@ -124,6 +125,10 @@ urlpatterns = [
     path('discounted/<str:product_id>/delist/', discounted_delist, name='discounted_delist'),
     path('discounted/<str:product_id>/publish/', discounted_publish, name='discounted_publish'),
     path('discounted/export.csv', discounted_csv, name='discounted_csv'),
+
+    # Уведомления разделов: что требует внимания (см. api/notifications/)
+    path('notifications/', notifications_list, name='notifications_list'),
+    path('notifications/read/', notifications_read, name='notifications_read'),
 
     # Калькулятор стоимости доставки (раскладка по коробкам + тарифы ПЭК/СДЭК)
     path('delivery/estimate/', delivery.estimate, name='delivery_estimate'),

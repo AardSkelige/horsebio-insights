@@ -87,6 +87,12 @@ REFS_CACHE_TTL = 24 * 60 * 60
 DATA_CACHE_KEY = "discounted_report"
 DATA_CACHE_TTL = 5 * 60
 
+# Позиции без отчётов, которые нужны только самой странице (аналитика за период,
+# дни на складе). Их спрашивают уведомления — а их спрашивают из любого раздела,
+# поэтому запрос должен быть заметно дешевле открытия страницы.
+POSITIONS_CACHE_KEY = "discounted_positions"
+POSITIONS_CACHE_TTL = 10 * 60
+
 PAGE_LIMIT = 1000
 
 # За какой период считаем итоги, если период не задан явно
@@ -295,8 +301,28 @@ def _build_analytics(store_href, days):
     }
 
 
-def _build_data(period_days=DEFAULT_PERIOD_DAYS, refresh=False):
-    """Собрать отчёт из МойСклад. Тяжёлая часть — кешируется вызывающим."""
+def _invalidate_cache():
+    """Сбросить всё, что посчитано по складу «Уценка».
+
+    Кешей три: страница, облегчённые позиции для уведомлений и сами уведомления.
+    Разъехавшись, они показывают в колокольчике то, что человек уже исправил,
+    поэтому сбрасываются только вместе.
+    """
+    cache.delete(DATA_CACHE_KEY)
+    cache.delete(POSITIONS_CACHE_KEY)
+    # Локальный импорт: пакет уведомлений сам импортирует этот модуль ради
+    # провайдера, и на уровне модуля вышел бы круг
+    from api.notifications import core as notifications
+
+    notifications.invalidate("discounted")
+
+
+def _build_positions(refresh=False, with_days_on_stock=True):
+    """Позиции склада «Уценка»: остаток, срок, цена и что сейчас на витрине.
+
+    with_days_on_stock=False пропускает отчёт по документам — он идёт по одному
+    запросу на товар и нужен только странице, но не уведомлениям.
+    """
     store_href, folder_href, attribute_id = _resolve_refs()
     today = date.today()
 
@@ -364,7 +390,7 @@ def _build_data(period_days=DEFAULT_PERIOD_DAYS, refresh=False):
             "cost": round(cost, 2),
             "sum": round(retail * quantity, 2),
             "sum_cost": round(cost * quantity, 2),
-            "days_on_stock": _days_on_stock(product_id) if quantity > 0 else None,
+            "days_on_stock": _days_on_stock(product_id) if with_days_on_stock and quantity > 0 else None,
             # Ссылку для человека МойСклад отдаёт сам в meta.uuidHref: у веб-интерфейса
             # свой идентификатор, и адрес, собранный из id карточки, не открывается.
             "ms_url": (product.get("meta") or {}).get("uuidHref"),
@@ -375,6 +401,33 @@ def _build_data(period_days=DEFAULT_PERIOD_DAYS, refresh=False):
     # потом позиции без даты, потом остальные — внутри по возрастанию запаса.
     order = {STATE_EXPIRED: 0, STATE_DELIST: 1, STATE_NO_DATE: 2, STATE_OK: 3}
     positions.sort(key=lambda p: (order[p["state"]], p["days_left"] if p["days_left"] is not None else 10**6))
+    return positions
+
+
+def positions_snapshot(refresh=False):
+    """Позиции для тех, кому нужен только их состав — прежде всего уведомлений.
+
+    Если страница уже собрана, берём готовое: это те же самые позиции. Иначе
+    считаем облегчённо и кладём в свой кеш с более длинным сроком — уведомления
+    опрашиваются чаще, чем открывается раздел.
+    """
+    if not refresh:
+        data = cache.get(DATA_CACHE_KEY)
+        if data:
+            return data["positions"]
+        cached = cache.get(POSITIONS_CACHE_KEY)
+        if cached is not None:
+            return cached
+
+    positions = _build_positions(refresh=refresh, with_days_on_stock=False)
+    cache.set(POSITIONS_CACHE_KEY, positions, POSITIONS_CACHE_TTL)
+    return positions
+
+
+def _build_data(period_days=DEFAULT_PERIOD_DAYS, refresh=False):
+    """Собрать отчёт из МойСклад. Тяжёлая часть — кешируется вызывающим."""
+    store_href, _, _ = _resolve_refs()
+    positions = _build_positions(refresh=refresh)
 
     in_stock = [p for p in positions if p["quantity"] > 0]
     summary = {
@@ -402,7 +455,7 @@ def discounted_list(request):
     """Позиции на складе «Уценка» с расчётом, что пора снимать с продажи."""
     refresh = request.GET.get("refresh") == "1"
     if refresh:
-        cache.delete(DATA_CACHE_KEY)
+        _invalidate_cache()
 
     data = cache.get(DATA_CACHE_KEY)
     if data is None:
@@ -433,7 +486,7 @@ def discounted_delist(request, product_id):
 
     # Список считается из остатков и дат, а не из доступности на сайте, поэтому
     # кеш сбрасываем только чтобы страница перерисовалась свежей.
-    cache.delete(DATA_CACHE_KEY)
+    _invalidate_cache()
     return Response({"ok": True, "product_id": product_id}, status=status.HTTP_200_OK)
 
 
@@ -503,7 +556,7 @@ def discounted_publish(request, product_id):
         ],
     )
 
-    cache.delete(DATA_CACHE_KEY)
+    _invalidate_cache()
     return Response({
         "ok": True,
         "product_id": product_id,
@@ -511,6 +564,17 @@ def discounted_publish(request, product_id):
         "quantity": quantity,
         "price": int(round(price)),
     }, status=status.HTTP_200_OK)
+
+
+def _must_hide(position):
+    """Карточку нельзя оставлять на витрине.
+
+    Два случая из регламента: до конца срока осталось меньше двух месяцев
+    (продавать нечего — покупателю не хватит срока на курс и доставку) и товар
+    раскуплен. Обмен, который снимал бы такие карточки сам, упёрся в демо-лимит,
+    поэтому снятие делает тот же файл импорта.
+    """
+    return position["state"] in (STATE_EXPIRED, STATE_DELIST) or position["quantity"] <= 0
 
 
 def _csv_row(position, pictures, description=""):
@@ -524,9 +588,10 @@ def _csv_row(position, pictures, description=""):
         "article": position["article"],
         "name": name,
         "folder": SITE_FOLDER,
-        # Карточку, которой ещё нет на витрине, открывает человек — проверив её
-        # глазами. А ту, что уже продаётся, файл не должен скрывать.
-        "hidden": 0 if position.get("published") else 1,
+        # Скрытой карточка уходит в двух случаях: её ещё нет на витрине (открывает
+        # её человек, проверив глазами) или её пора снять — по сроку или потому,
+        # что товар кончился. Всё остальное, что уже продаётся, файл не трогает.
+        "hidden": 0 if position.get("published") and not _must_hide(position) else 1,
         "price": f"{position['price']:.2f}",
         # Зачёркнутая цена — РРЦ, от которой считали скидку
         "price_old": f"{position['price_full']:.2f}",
@@ -554,10 +619,24 @@ def discounted_csv(request):
     когда лимит выбран, он отвечает `success`, но часть полей не применяет.
     Импорт CSV лимитов не имеет, поэтому файл — надёжный запасной путь.
 
-    В файл идут позиции с остатком: карточки без товара на сайте не нужны.
+    Файл приводит витрину в соответствие со складом целиком, а не только заводит
+    карточки: позиции с остатком получают фактическое количество, а те, что пора
+    снять по сроку или раскуплены, — признак «скрыто». Поэтому в него идут ещё и
+    опубликованные позиции с нулевым остатком: без них раскупленная карточка
+    осталась бы в продаже.
+
+    Если фид сайта не ответил, файл не собирается вовсе. Колонка «Скрыто» считается
+    от того, что сейчас на витрине, а при недоступном фиде это неизвестно: карточки
+    вышли бы скрытыми все до одной, и импорт снял бы с продажи весь раздел.
     """
-    data = cache.get(DATA_CACHE_KEY) or _build_data()
-    positions = [p for p in data["positions"] if p["quantity"] > 0]
+    positions = positions_snapshot()
+    if any(p.get("published") is None for p in positions):
+        raise ExternalServiceError(
+            "Фид сайта не ответил — неизвестно, что сейчас на витрине, и файл"
+            " снял бы с продажи все карточки. Нажмите «Обновить» и попробуйте снова."
+        )
+
+    positions = [p for p in positions if p["quantity"] > 0 or p.get("published")]
 
     rows = []
     for position in positions:

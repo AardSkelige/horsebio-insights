@@ -3,6 +3,8 @@ import { Link } from 'react-router-dom';
 import PropTypes from 'prop-types';
 import { m } from 'motion/react';
 import { Star } from 'lucide-react';
+// Классы значков (.nt-badge / .nt-dot) живут вместе с уведомлениями
+import '../../notifications/notifications.css';
 
 const tooltipStyle = (top) => ({
     position: 'fixed',
@@ -22,9 +24,17 @@ const tooltipStyle = (top) => ({
     boxShadow: 'var(--shadow-on-dark)',
 });
 
+/**
+ * Пункт меню.
+ *
+ * `unread` — непрочитанные уведомления раздела. Показаны точкой семантического
+ * цвета (тот же приём, что «на витрине» в карточке уценки): видно, в каком
+ * разделе появилось дело, не открывая панель. Числа здесь нет намеренно —
+ * раздел в одном клике, а цифра в тёмном меню читается как счётчик писем.
+ */
 const NavItem = ({
     path, label, icon: Icon, expanded, active, onNavigate, hovered, onHover,
-    pinned, pinDisabled, onTogglePin,
+    pinned, pinDisabled, onTogglePin, unread = 0, unreadTone = 'info',
 }) => {
     const [tipTop, setTipTop] = useState(0);
     const ref = useRef(null);
@@ -94,6 +104,12 @@ const NavItem = ({
                 }}>
                     {label}
                 </span>
+                {unread > 0 && (
+                    <span
+                        className={`nt-dot nt-dot--${unreadTone}${expanded ? ' nt-dot--nav' : ' nt-dot--corner'}`}
+                        title={`${unread} непрочитанных`}
+                    />
+                )}
             </Link>
             {expanded && onTogglePin && (
                 <button
@@ -154,6 +170,8 @@ NavItem.propTypes = {
     pinned: PropTypes.bool.isRequired,
     pinDisabled: PropTypes.bool.isRequired,
     onTogglePin: PropTypes.func,
+    unread: PropTypes.number,
+    unreadTone: PropTypes.oneOf(['critical', 'warning', 'info']),
 };
 
 export default NavItem;
