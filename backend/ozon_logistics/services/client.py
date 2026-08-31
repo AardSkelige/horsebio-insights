@@ -37,6 +37,23 @@ def normalize_phone(phone):
     return digits
 
 
+def _checkout_item(item):
+    """Позиция для checkout: ровно один идентификатор товара.
+
+    Ozon отвергает запрос с обоими сразу — «either sku or offer_id should be
+    specified for each item». Предпочитаем sku: он числовой и однозначный,
+    offer_id остаётся запасным вариантом.
+    """
+    quantity = int(item['quantity'])
+    sku = item.get('sku')
+    if sku:
+        return {'sku': int(sku), 'quantity': quantity}
+    offer_id = item.get('offer_id')
+    if not offer_id:
+        raise OzonLogisticsError('У позиции нет ни sku, ни offer_id')
+    return {'offer_id': str(offer_id), 'quantity': quantity}
+
+
 class OzonLogisticsError(RuntimeError):
     """Seller API ответил ошибкой."""
 
@@ -143,7 +160,7 @@ class OzonLogisticsClient:
         return self.request('/v3/product/list', payload)
 
     def checkout(self, *, phone, items, map_point_id=None, coordinates=None,
-                 delivery_schema='FBS'):
+                 delivery_schema='MIX'):
         """Варианты доставки, сроки и стоимость логистики для набора товаров.
 
         Ровно один из `map_point_id` (самовывоз) и `coordinates` (курьер, пара
@@ -169,14 +186,7 @@ class OzonLogisticsClient:
             'buyer_phone': normalize_phone(phone),
             'delivery_schema': delivery_schema,
             'delivery_type': delivery_type,
-            'items': [
-                {
-                    'offer_id': str(item['offer_id']),
-                    'quantity': int(item['quantity']),
-                    'sku': int(item['sku']),
-                }
-                for item in items
-            ],
+            'items': [_checkout_item(item) for item in items],
         })
 
     def delivery_map(self, left_bottom, right_top, zoom):

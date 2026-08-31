@@ -230,8 +230,8 @@ def diag_products(request):
 def diag_checkout(request):
     """Пробный расчёт доставки — самая содержательная проверка цепочки.
 
-    /diag/checkout/?phone=79161112233&point=<map_point_id>&offer_id=ART&sku=123&qty=1
-    Вместо point можно передать coords=55.75,37.61 для курьерской доставки.
+    /diag/checkout/?phone=79161112233&point=<map_point_id>&sku=123&qty=1
+    Вместо sku можно передать offer_id, вместо point — coords=55.75,37.61 (курьер).
     """
     denied = _superuser_only(request)
     if denied:
@@ -243,10 +243,10 @@ def diag_checkout(request):
     point = request.GET.get('point', '').strip()
     coords = request.GET.get('coords', '').strip()
 
-    if not (phone and offer_id and sku):
+    if not phone or not (offer_id or sku):
         return JsonResponse({
             'status': 'error',
-            'message': 'Нужны phone, offer_id и sku; плюс point или coords',
+            'message': 'Нужны phone и sku (либо offer_id); плюс point или coords',
         }, status=400)
 
     kwargs = {}
@@ -272,5 +272,5 @@ def diag_checkout(request):
     except ValueError:
         return JsonResponse({'status': 'error', 'message': 'qty — целое число'}, status=400)
 
-    items = [{'offer_id': offer_id, 'sku': sku, 'quantity': quantity}]
+    items = [{'offer_id': offer_id, 'sku': sku, 'quantity': quantity}]  # sku в приоритете
     return _call(lambda: OzonLogisticsClient().checkout(phone=phone, items=items, **kwargs))

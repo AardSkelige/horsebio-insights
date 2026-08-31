@@ -436,9 +436,31 @@ class AccessControlTests(TestCase):
             )
         sent = post.call_args.kwargs['json']
         self.assertEqual(sent['buyer_phone'], '79161112233')
-        self.assertEqual(sent['delivery_schema'], 'FBS')
+        self.assertEqual(sent['delivery_schema'], 'MIX')
         self.assertEqual(sent['delivery_type'], {'pick_up': {'map_point_id': 7}})
-        self.assertEqual(sent['items'], [{'offer_id': 'ART-1', 'quantity': 2, 'sku': 42}])
+        # Ozon отвергает позицию с обоими идентификаторами сразу
+        self.assertEqual(sent['items'], [{'sku': 42, 'quantity': 2}])
+
+    def test_checkout_falls_back_to_offer_id(self):
+        OzonOAuthToken.objects.create(
+            pk=OzonOAuthToken.SINGLETON_PK,
+            access_token='access-1',
+            refresh_token='r',
+            expires_at=timezone.now() + timezone.timedelta(hours=1),
+        )
+        with patch('requests.post', return_value=FakeResponse(data={'splits': []})) as post:
+            client_module.OzonLogisticsClient().checkout(
+                phone='79161112233',
+                items=[{'offer_id': 'ART-1', 'quantity': 1}],
+                map_point_id=7,
+            )
+        self.assertEqual(post.call_args.kwargs['json']['items'], [{'offer_id': 'ART-1', 'quantity': 1}])
+
+    def test_checkout_item_without_identifiers_is_rejected(self):
+        with self.assertRaises(client_module.OzonLogisticsError):
+            client_module.OzonLogisticsClient().checkout(
+                phone='79161112233', items=[{'quantity': 1}], map_point_id=7
+            )
 
     def test_checkout_builds_courier_payload(self):
         OzonOAuthToken.objects.create(
