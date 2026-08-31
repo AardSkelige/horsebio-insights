@@ -49,7 +49,10 @@ class Command(BaseCommand):
                             help="доля от РРЦ, по умолчанию 0.7 (скидка 30 %%)")
 
     def handle(self, *args, **options):
-        self.headers = MoySkladAPIClient(settings.MOYSKLAD_TOKEN).headers
+        # Клиент отдаёт только авторизацию; на запись МойСклад требует ещё
+        # и Content-Type, без него отвечает 1037 «Неверно указан Content-Type»
+        self.headers = {**MoySkladAPIClient(settings.MOYSKLAD_TOKEN).headers,
+                        "Content-Type": "application/json"}
         article = options["article"]
         uc_article = article + UC_SUFFIX
 
