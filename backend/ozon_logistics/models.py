@@ -96,3 +96,52 @@ class OzonProduct(models.Model):
         заказ создать нельзя вовсе.
         """
         return (self.has_fbs_stocks or self.has_fbo_stocks) and not self.archived
+
+
+class OzonPickupPoint(models.Model):
+    """Пункт выдачи Ozon — локальная копия для карты в корзине.
+
+    Точек около 94 тысяч, и `/v1/delivery/point/list` отдаёт их одним куском без
+    пагинации, поэтому дёргать его на каждое открытие корзины нельзя. Держим
+    координаты у себя и обновляем раз в сутки.
+
+    Подробности (адрес, часы, рейтинг) живут в отдельном методе, до 100 точек за
+    запрос — на весь список это почти тысяча вызовов, поэтому подтягиваем их
+    лениво, когда покупатель выбрал конкретный пункт, и сохраняем сюда же.
+    """
+
+    map_point_id = models.BigIntegerField('ID точки на карте', primary_key=True)
+    latitude = models.FloatField('Широта')
+    longitude = models.FloatField('Долгота')
+
+    name = models.CharField('Название', max_length=500, blank=True)
+    address = models.CharField('Адрес', max_length=1000, blank=True)
+    details = models.JSONField('Подробности из Ozon', null=True, blank=True)
+    details_synced_at = models.DateTimeField('Подробности обновлены', null=True, blank=True)
+
+    # Не auto_now: оно не срабатывает в bulk_update, а массовое обновление —
+    # основной путь для 94 тысяч точек. Время проставляет сервис.
+    synced_at = models.DateTimeField('Координаты обновлены', default=timezone.now)
+
+    class Meta:
+        verbose_name = 'Пункт выдачи Ozon'
+        verbose_name_plural = 'Пункты выдачи Ozon'
+        indexes = [
+            # Выборка точек в границах видимой области карты
+            models.Index(fields=['latitude', 'longitude']),
+        ]
+
+    def __str__(self):
+        return self.address or f'Точка {self.map_point_id}'
+
+    @classmethod
+    def in_bounds(cls, *, south, west, north, east, limit=500):
+        """Точки внутри прямоугольника карты.
+
+        Лимит нужен, чтобы при сильном отдалении не отдать в браузер десятки
+        тысяч меток: столько на карте всё равно не показать.
+        """
+        return cls.objects.filter(
+            latitude__gte=south, latitude__lte=north,
+            longitude__gte=west, longitude__lte=east,
+        )[:limit]

@@ -189,6 +189,16 @@ SCRIPTS_CONFIG = [
         'args': ['sync_ozon_products'],
     },
     {
+        'id': 'horsebio_ozon_points',
+        'topic': 'Обновление данных',
+        'name': 'Пункты выдачи Ozon',
+        'account': 'HorseBio',
+        'schedule': 'Ежедн. в 09:40',
+        'description': 'Координаты ~94 тыс. ПВЗ для карты в корзине (Django-команда sync_ozon_pickup_points)',
+        'script': '/app/manage.py',
+        'args': ['sync_ozon_pickup_points'],
+    },
+    {
         'id': 'horsebio_inventory_check',
         'topic': 'Обновление данных',
         'name': 'Инвентаризация',

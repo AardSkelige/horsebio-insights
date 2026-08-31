@@ -5,8 +5,11 @@ from urllib.parse import parse_qs, urlparse
 from django.test import TestCase, override_settings
 from django.utils import timezone
 
-from ozon_logistics.models import OzonAuthState, OzonOAuthToken, OzonProduct
+from ozon_logistics.models import (
+    OzonAuthState, OzonOAuthToken, OzonPickupPoint, OzonProduct,
+)
 from ozon_logistics.services import catalog
+from ozon_logistics.services import pickup_points
 from ozon_logistics.services import client as client_module
 from ozon_logistics.services import oauth
 
@@ -629,3 +632,118 @@ class CatalogSyncTests(TestCase):
         product.archived = False
         product.has_fbo_stocks = False
         self.assertFalse(product.sellable_via_ozon_delivery)
+
+
+class FakePointsClient:
+    def __init__(self, points=None, info=None):
+        self._points = points or []
+        self._info = info or {'points': []}
+        self.info_calls = []
+
+    def point_list(self):
+        return {'points': self._points}
+
+    def point_info(self, ids):
+        self.info_calls.append(list(ids))
+        return self._info
+
+
+def _point(point_id, lat=55.7, long=37.6):
+    return {'map_point_id': point_id, 'coordinate': {'lat': lat, 'long': long}}
+
+
+class PickupPointSyncTests(TestCase):
+    def test_stores_coordinates(self):
+        client = FakePointsClient([_point(1), _point(2, 60.0, 30.3)])
+        stats = pickup_points.sync_pickup_points(client=client)
+
+        self.assertEqual(stats['fetched'], 2)
+        self.assertEqual(stats['created'], 2)
+        self.assertEqual(OzonPickupPoint.objects.get(pk=2).latitude, 60.0)
+
+    def test_second_run_updates_without_duplicating(self):
+        pickup_points.sync_pickup_points(client=FakePointsClient([_point(1)]))
+        stats = pickup_points.sync_pickup_points(client=FakePointsClient([_point(1, 10.0, 20.0)]))
+
+        self.assertEqual(stats['updated'], 1)
+        self.assertEqual(OzonPickupPoint.objects.count(), 1)
+        self.assertEqual(OzonPickupPoint.objects.get().latitude, 10.0)
+
+    def test_point_without_coordinates_is_skipped(self):
+        client = FakePointsClient([{'map_point_id': 5}, {'coordinate': {'lat': 1, 'long': 2}}])
+        stats = pickup_points.sync_pickup_points(client=client)
+
+        self.assertEqual(stats['skipped'], 2)
+        self.assertEqual(OzonPickupPoint.objects.count(), 0)
+
+    def test_empty_response_keeps_existing_points(self):
+        """Пустой ответ — повод не трогать таблицу, а не стереть все ПВЗ."""
+        pickup_points.sync_pickup_points(client=FakePointsClient([_point(1)]))
+        stats = pickup_points.sync_pickup_points(client=FakePointsClient([]))
+
+        self.assertEqual(stats['total_stored'], 1)
+        self.assertEqual(OzonPickupPoint.objects.count(), 1)
+
+
+class PickupPointBoundsTests(TestCase):
+    def setUp(self):
+        OzonPickupPoint.objects.bulk_create([
+            OzonPickupPoint(map_point_id=1, latitude=55.75, longitude=37.61),   # Москва
+            OzonPickupPoint(map_point_id=2, latitude=59.93, longitude=30.33),   # Петербург
+            OzonPickupPoint(map_point_id=3, latitude=55.80, longitude=37.50),   # Москва
+        ])
+
+    def test_returns_only_points_inside_viewport(self):
+        found = OzonPickupPoint.in_bounds(south=55.5, west=37.3, north=56.0, east=37.9)
+        self.assertEqual({p.map_point_id for p in found}, {1, 3})
+
+    def test_limit_caps_result(self):
+        found = OzonPickupPoint.in_bounds(south=0, west=0, north=90, east=90, limit=1)
+        self.assertEqual(len(list(found)), 1)
+
+
+class PickupPointDetailsTests(TestCase):
+    def setUp(self):
+        OzonPickupPoint.objects.create(map_point_id=7, latitude=55.7, longitude=37.6)
+
+    def test_fetches_and_stores_details(self):
+        client = FakePointsClient(info={'points': [{
+            'delivery_method': {
+                'map_point_id': 7,
+                'name': 'Пункт Ozon',
+                'address': 'Москва, Тверская, 1',
+            },
+            'enabled': True,
+        }]})
+
+        result = pickup_points.fetch_details([7], client=client)
+
+        point = OzonPickupPoint.objects.get(pk=7)
+        self.assertEqual(point.address, 'Москва, Тверская, 1')
+        self.assertIsNotNone(point.details_synced_at)
+        self.assertEqual(len(result), 1)
+
+    def test_known_details_are_not_refetched(self):
+        """Подробности берём у Ozon один раз — дальше отдаём из базы."""
+        client = FakePointsClient(info={'points': [{
+            'delivery_method': {'map_point_id': 7, 'address': 'Адрес'},
+        }]})
+        pickup_points.fetch_details([7], client=client)
+        pickup_points.fetch_details([7], client=client)
+
+        self.assertEqual(len(client.info_calls), 1)
+
+    def test_request_is_capped_at_hundred(self):
+        OzonPickupPoint.objects.bulk_create([
+            OzonPickupPoint(map_point_id=i, latitude=1.0, longitude=1.0)
+            for i in range(100, 250)
+        ])
+        client = FakePointsClient(info={'points': []})
+        pickup_points.fetch_details(range(100, 250), client=client)
+
+        self.assertEqual(len(client.info_calls[0]), 100)
+
+    def test_empty_input_makes_no_request(self):
+        client = FakePointsClient()
+        self.assertEqual(pickup_points.fetch_details([], client=client), [])
+        self.assertEqual(client.info_calls, [])
