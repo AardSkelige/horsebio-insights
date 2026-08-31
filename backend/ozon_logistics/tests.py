@@ -1230,3 +1230,122 @@ class SiteOrdersTests(TestCase):
     def test_missing_state_file_is_not_an_error(self):
         stats = site_orders.process_paid_orders(state_path='/nonexistent/state.json')
         self.assertEqual(stats, {'checked': 0, 'created': 0, 'skipped': 0, 'failed': 0})
+
+
+class DiscountedPricesTests(TestCase):
+    """Скидка сайта живёт только в total — позиции в письме идут по РРЦ."""
+
+    def setUp(self):
+        OzonProduct.objects.create(offer_id='ART-1', sku=101, has_fbs_stocks=True)
+        OzonProduct.objects.create(offer_id='ART-2', sku=102, has_fbs_stocks=True)
+
+    def test_discount_is_spread_over_positions(self):
+        latest = {
+            'total': '1880',
+            'delivery_cost': '0',
+            'items': [{'article': 'ART-1', 'quantity': '1', 'price': '2080'}],
+        }
+        prices = site_orders._prices_by_sku(latest)
+        # В Ozon должна уйти оплаченная сумма, а не РРЦ
+        self.assertEqual(prices[101], Decimal('1880.00'))
+
+    def test_delivery_is_excluded_from_discount(self):
+        latest = {
+            'total': '1100',
+            'delivery_cost': '100',
+            'items': [{'article': 'ART-1', 'quantity': '1', 'price': '1200'}],
+        }
+        prices = site_orders._prices_by_sku(latest)
+        self.assertEqual(prices[101], Decimal('1000.00'))
+
+    def test_order_without_discount_keeps_prices(self):
+        latest = {
+            'total': '3000',
+            'delivery_cost': '0',
+            'items': [
+                {'article': 'ART-1', 'quantity': '2', 'price': '1000'},
+                {'article': 'ART-2', 'quantity': '1', 'price': '1000'},
+            ],
+        }
+        prices = site_orders._prices_by_sku(latest)
+        self.assertEqual(prices[101], Decimal('1000.00'))
+        self.assertEqual(prices[102], Decimal('1000.00'))
+
+    def test_unknown_article_is_omitted(self):
+        latest = {
+            'total': '1000', 'delivery_cost': '0',
+            'items': [{'article': 'НЕТ', 'quantity': '1', 'price': '1000'}],
+        }
+        self.assertEqual(site_orders._prices_by_sku(latest), {})
+
+
+class MalformedQuoteIdTests(TestCase):
+    """Значение приходит из формы сайта — там может оказаться что угодно."""
+
+    def _run(self, quote_id):
+        state = {'orders': {'1': {'latest': {
+            'paid': '1', 'total': '100', 'items': [],
+            'field': {'ozon_quote_id': quote_id, 'phone': '79161112233'},
+        }}}}
+        path = Path(tempfile.mkdtemp()) / 'state.json'
+        path.write_text(json.dumps(state), encoding='utf-8')
+        return site_orders.process_paid_orders(state_path=path, client=FakeOrderClient())
+
+    def test_garbage_does_not_break_the_run(self):
+        stats = self._run('не-uuid-а-мусор')
+        self.assertEqual(stats['skipped'], 1)
+        self.assertEqual(stats['failed'], 0)
+
+    def test_null_value_is_treated_as_absent(self):
+        stats = self._run(None)
+        self.assertEqual(stats['checked'], 0)
+
+
+class OrderRetryPolicyTests(TestCase):
+    def _quote(self, **kwargs):
+        defaults = {
+            'phone': '79161112233',
+            'items': [{'sku': 758646053, 'quantity': 1}],
+            'map_point_id': 378617,
+            'checkout_response': _checkout_response(),
+        }
+        return OzonDeliveryQuote.objects.create(**{**defaults, **kwargs})
+
+    def test_timeout_marks_outcome_unknown(self):
+        """Ответ потерян — заказ мог создаться, повтор дал бы вторую посылку."""
+        quote = self._quote()
+
+        class TimingOutClient:
+            def order_create(self, payload):
+                raise client_module.OzonLogisticsTimeout('timed out')
+
+        with self.assertRaises(orders.OzonOrderError):
+            orders.create_order(
+                quote, buyer=BUYER, prices={758646053: Decimal('100')}, client=TimingOutClient()
+            )
+
+        quote.refresh_from_db()
+        self.assertEqual(quote.status, OzonDeliveryQuote.STATUS_UNKNOWN)
+        self.assertFalse(quote.needs_order)
+
+    def test_attempts_are_counted_and_capped(self):
+        quote = self._quote()
+        client = FakeOrderClient(order_error='HTTP 400: nope')
+
+        for _ in range(OzonDeliveryQuote.MAX_ATTEMPTS):
+            with self.assertRaises(orders.OzonOrderError):
+                orders.create_order(
+                    quote, buyer=BUYER, prices={758646053: Decimal('100')}, client=client
+                )
+
+        quote.refresh_from_db()
+        self.assertEqual(quote.attempts, OzonDeliveryQuote.MAX_ATTEMPTS)
+        self.assertFalse(quote.needs_order)
+
+    def test_successful_order_still_needs_no_retry(self):
+        quote = self._quote()
+        orders.create_order(
+            quote, buyer=BUYER, prices={758646053: Decimal('100')}, client=FakeOrderClient()
+        )
+        quote.refresh_from_db()
+        self.assertFalse(quote.needs_order)

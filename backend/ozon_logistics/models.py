@@ -161,11 +161,18 @@ class OzonDeliveryQuote(models.Model):
     STATUS_NEW = 'new'
     STATUS_ORDERED = 'ordered'
     STATUS_FAILED = 'failed'
+    # Ozon не ответил вовремя: заказ мог создаться, а мог и нет. Повторять
+    # вслепую нельзя — покупатель получит две посылки, поэтому нужен человек.
+    STATUS_UNKNOWN = 'unknown'
     STATUS_CHOICES = [
         (STATUS_NEW, 'Рассчитан'),
         (STATUS_ORDERED, 'Заказ создан в Ozon'),
         (STATUS_FAILED, 'Ошибка создания'),
+        (STATUS_UNKNOWN, 'Исход неизвестен — проверьте в Ozon'),
     ]
+
+    # Сколько раз пробуем создать заказ, прежде чем перестать долбить Ozon
+    MAX_ATTEMPTS = 5
 
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
     phone = models.CharField('Телефон покупателя', max_length=20)
@@ -183,6 +190,7 @@ class OzonDeliveryQuote(models.Model):
     site_order_id = models.CharField('Заказ сайта', max_length=64, blank=True, db_index=True)
     order_number = models.CharField('Номер заказа в Ozon', max_length=64, blank=True)
     error = models.TextField('Ошибка создания', blank=True)
+    attempts = models.PositiveSmallIntegerField('Попыток создания', default=0)
 
     created_at = models.DateTimeField(auto_now_add=True)
     ordered_at = models.DateTimeField('Заказ создан', null=True, blank=True)
@@ -198,6 +206,13 @@ class OzonDeliveryQuote(models.Model):
     @property
     def age(self):
         return timezone.now() - self.created_at
+
+    @property
+    def needs_order(self):
+        """Стоит ли ещё пытаться создать заказ по этому расчёту."""
+        if self.status in (self.STATUS_ORDERED, self.STATUS_UNKNOWN):
+            return False
+        return self.attempts < self.MAX_ATTEMPTS
 
     @property
     def splits(self):

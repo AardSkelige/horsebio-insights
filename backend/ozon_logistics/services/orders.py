@@ -11,7 +11,9 @@ from decimal import Decimal
 from django.utils import timezone
 
 from ozon_logistics.models import OzonDeliveryQuote
-from ozon_logistics.services.client import OzonLogisticsClient, OzonLogisticsError, normalize_phone
+from ozon_logistics.services.client import (
+    OzonLogisticsClient, OzonLogisticsError, OzonLogisticsTimeout, normalize_phone,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -159,13 +161,28 @@ def create_order(quote, *, buyer, recipient=None, prices, client=None):
     payload = build_order_payload(quote, buyer=buyer, recipient=recipient, prices=prices)
 
     client = client or OzonLogisticsClient()
+    quote.attempts += 1
     try:
         response = client.order_create(payload)
+    except OzonLogisticsTimeout as exc:
+        # Ответ потерян, но заказ мог создаться. Повтор дал бы вторую посылку,
+        # поэтому останавливаемся и зовём человека.
+        quote.status = OzonDeliveryQuote.STATUS_UNKNOWN
+        quote.error = f'Ozon не ответил вовремя, проверьте заказ в личном кабинете: {exc}'[:2000]
+        quote.save(update_fields=['status', 'error', 'attempts'])
+        logger.error(
+            'Ozon Доставка: неизвестный исход по расчёту %s — проверьте в ЛК Ozon: %s',
+            quote.id, exc,
+        )
+        raise OzonOrderError(quote.error) from exc
     except OzonLogisticsError as exc:
         quote.status = OzonDeliveryQuote.STATUS_FAILED
         quote.error = str(exc)[:2000]
-        quote.save(update_fields=['status', 'error'])
-        logger.error('Ozon Доставка: заказ по расчёту %s не создан: %s', quote.id, exc)
+        quote.save(update_fields=['status', 'error', 'attempts'])
+        logger.error(
+            'Ozon Доставка: заказ по расчёту %s не создан (попытка %s из %s): %s',
+            quote.id, quote.attempts, OzonDeliveryQuote.MAX_ATTEMPTS, exc,
+        )
         raise OzonOrderError(str(exc)) from exc
 
     order_number = response.get('order_number') or ''
@@ -173,7 +190,7 @@ def create_order(quote, *, buyer, recipient=None, prices, client=None):
     quote.order_number = order_number
     quote.ordered_at = timezone.now()
     quote.error = ''
-    quote.save(update_fields=['status', 'order_number', 'ordered_at', 'error'])
+    quote.save(update_fields=['status', 'order_number', 'ordered_at', 'error', 'attempts'])
 
     logger.info('Ozon Доставка: создан заказ %s по расчёту %s', order_number, quote.id)
     return quote

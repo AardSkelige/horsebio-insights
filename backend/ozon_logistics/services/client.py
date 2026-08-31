@@ -63,6 +63,11 @@ class OzonLogisticsError(RuntimeError):
         self.payload = payload
 
 
+class OzonLogisticsTimeout(OzonLogisticsError):
+    """Ответ не получен. Для читающих методов — просто ошибка, но для создающих
+    означает неизвестный исход: запрос мог дойти и выполниться."""
+
+
 class OzonLogisticsClient:
     """Тонкая обёртка: подставляет Bearer и переживает истёкший токен."""
 
@@ -82,6 +87,8 @@ class OzonLogisticsClient:
                 },
                 timeout=self.timeout,
             )
+        except requests.Timeout as exc:
+            raise OzonLogisticsTimeout(f'Seller API не ответил вовремя: {exc}') from exc
         except requests.RequestException as exc:
             raise OzonLogisticsError(f'Seller API недоступен: {exc}') from exc
 
