@@ -53,12 +53,17 @@ class PurchaseAnalysisTests(TestCase):
         self.create_test_orders()
 
     def create_test_orders(self):
-        """Создание тестовых заказов"""
+        """Создание тестовых заказов — по одному в каждом из трёх календарных месяцев.
+
+        Шаг 35 дней, а не 30: между заказами всегда больше длины месяца, поэтому
+        monthly_dynamics (группировка TruncMonth) в любой день года видит три разных
+        месяца. С шагом 30 дней два заказа схлопывались в один месяц, когда сегодня
+        29-31 число. Третий заказ (75 дней) заведомо вне окна period_months=2 (60 дней).
+        """
         current_date = timezone.now()
-        
-        # Создаем заказы за последние 3 месяца
-        for month_offset in range(3):
-            order_date = current_date - timedelta(days=30 * month_offset)
+
+        for month_offset, days_ago in enumerate((5, 40, 75)):
+            order_date = current_date - timedelta(days=days_ago)
             supply_date = order_date + timedelta(days=5)  # Просто добавляем 5 дней
             
             # Создаем заказ
