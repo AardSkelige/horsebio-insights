@@ -66,14 +66,24 @@ class PriceChecksMixin:
                 name = name[len(prefix) + 1:]
         return name.replace('"', '').replace('«', '').replace('»', '').strip()
 
-    @staticmethod
-    def _merge_supply_rows(rows):
+    # Строка приёмки дешевле основной примерно вдвое — заказана одна сторона
+    # этикетки, а не комплект. Границы с запасом на округление копеек.
+    HALF_LINE_MIN = 0.40
+    HALF_LINE_MAX = 0.60
+
+    @classmethod
+    def _merge_supply_rows(cls, rows):
         """Склеить строки одной приёмки в одну, цена — средневзвешенная по количеству.
 
         Один товар может стоять в приёмке несколькими строками с разной ценой
         (например комплект наклейки и отдельно задник к нему). Без склейки каждая
         строка считается самостоятельной приёмкой: одна попадает в «последнюю
         цену», другая в среднее по предыдущим — и получается скачок на пустом месте.
+
+        Исключение — «половинная» строка: если дешёвая строка стоит 40-60% от
+        дорогой, это одна сторона этикетки, а не другая цена товара. Средневзвешенная
+        размывала бы цену комплекта (150 шт по 16.40 + 120 шт по 8.20 → 12.76) и
+        давала ложный скачок, поэтому ценой документа берём дорогую строку.
 
         Возвращает строки от новых к старым.
         """
@@ -87,21 +97,36 @@ class PriceChecksMixin:
             sum_cost = r.get('sum', 0) or 0  # итог строки в копейках
             item = merged.get(key)
             if item is None:
-                merged[key] = {'operation': op, 'quantity': qty, 'sum_cost': sum_cost}
+                merged[key] = {'operation': op, 'quantity': qty, 'sum_cost': sum_cost,
+                               'units': []}
+                item = merged[key]
             else:
                 item['quantity'] += qty
                 item['sum_cost'] += sum_cost
+            if qty:
+                item['units'].append(sum_cost / qty)
 
         rows = [
             {
                 'operation': it['operation'],
                 'quantity': it['quantity'],
-                'cost': it['sum_cost'] / it['quantity'] if it['quantity'] else 0,
+                'cost': cls._doc_unit_cost(it),
             }
             for it in merged.values()
         ]
         rows.sort(key=lambda x: x['operation'].get('moment', ''), reverse=True)
         return rows
+
+    @classmethod
+    def _doc_unit_cost(cls, item):
+        """Цена товара в документе: средневзвешенная, но без «половинных» строк."""
+        units = item['units']
+        if len(units) > 1:
+            full = max(units)
+            if full and cls.HALF_LINE_MIN <= min(units) / full <= cls.HALF_LINE_MAX:
+                return full
+        qty = item['quantity']
+        return item['sum_cost'] / qty if qty else 0
 
     def check_supply_price(self, product_id, product_name):
         """Проверить скачок цены в приёмках одного товара.
