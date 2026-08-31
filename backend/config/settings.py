@@ -139,6 +139,9 @@ _BASE_CORS_ORIGINS = [
     "http://frontend:3001",
     "http://insight.horse-bio.ru",
     "https://insight.horse-bio.ru",
+    # Корзина сайта ходит в /api/ozon-logistics/site/ за расчётом доставки Ozon
+    "https://horse-bio.ru",
+    "https://www.horse-bio.ru",
 ]
 _extra_cors = os.getenv('CORS_ALLOWED_ORIGINS', '')
 CORS_ALLOWED_ORIGINS = _BASE_CORS_ORIGINS + [o.strip() for o in _extra_cors.split(',') if o.strip()]

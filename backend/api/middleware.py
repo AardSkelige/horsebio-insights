@@ -142,6 +142,7 @@ class APIAuthenticationMiddleware:
         '/api/auth/check/',
         '/api/scripts/',   # Auth проверяется внутри view (сессия или X-Cron-Secret)
         '/api/ozon-logistics/oauth/callback',  # Ozon возвращает продавца в браузере; защита — одноразовый state
+        '/api/ozon-logistics/site/',           # Корзина сайта: браузер покупателя, сессии нет; защита — предел частоты
         '/parser/csrf/',   # CSRF token needed before login
         '/admin/',
         '/static/',

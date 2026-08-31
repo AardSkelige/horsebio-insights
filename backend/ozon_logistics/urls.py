@@ -1,6 +1,6 @@
 from django.urls import path
 
-from . import views
+from . import site_api, views
 
 app_name = 'ozon_logistics'
 
@@ -14,4 +14,10 @@ urlpatterns = [
     path('diag/warehouses/', views.diag_warehouses, name='diag_warehouses'),
     path('diag/products/', views.diag_products, name='diag_products'),
     path('diag/checkout/', views.diag_checkout, name='diag_checkout'),
+
+    # Публичные — их вызывает корзина horse-bio.ru из браузера покупателя
+    path('site/availability/', site_api.availability, name='site_availability'),
+    path('site/points/', site_api.points, name='site_points'),
+    path('site/point/<int:map_point_id>/', site_api.point_details, name='site_point_details'),
+    path('site/quote/', site_api.quote, name='site_quote'),
 ]

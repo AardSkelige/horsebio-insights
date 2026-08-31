@@ -3,6 +3,7 @@ from decimal import Decimal
 from unittest.mock import patch
 from urllib.parse import parse_qs, urlparse
 
+from django.core.cache import cache
 from django.test import TestCase, override_settings
 from django.utils import timezone
 
@@ -10,6 +11,7 @@ from ozon_logistics.models import (
     OzonAuthState, OzonDeliveryQuote, OzonOAuthToken, OzonPickupPoint, OzonProduct,
 )
 from ozon_logistics.services import catalog
+from ozon_logistics import site_api
 from ozon_logistics.services import orders
 from ozon_logistics.services import pickup_points
 from ozon_logistics.services import client as client_module
@@ -925,3 +927,192 @@ class CreateOrderTests(TestCase):
         quote.refresh_from_db()
         self.assertEqual(quote.status, OzonDeliveryQuote.STATUS_FAILED)
         self.assertIn('out of stock', quote.error)
+
+
+@patch.dict('os.environ', CREDS)
+class SiteApiTests(TestCase):
+    """Публичные эндпоинты корзины: без сессии, но с пределом частоты."""
+
+    def setUp(self):
+        cache.clear()
+        OzonOAuthToken.objects.create(
+            pk=OzonOAuthToken.SINGLETON_PK,
+            access_token='access-1',
+            refresh_token='r',
+            expires_at=timezone.now() + timezone.timedelta(hours=1),
+        )
+
+    def tearDown(self):
+        cache.clear()
+
+    def test_availability_works_without_login(self):
+        with patch('requests.post', return_value=FakeResponse(data={'is_possible': True})):
+            response = self.client.post(
+                '/api/ozon-logistics/site/availability/',
+                data=json.dumps({'phone': '+7 (916) 111-22-33'}),
+                content_type='application/json',
+            )
+        self.assertEqual(response.status_code, 200)
+        self.assertTrue(response.json()['available'])
+
+    def test_availability_requires_phone(self):
+        response = self.client.post(
+            '/api/ozon-logistics/site/availability/',
+            data=json.dumps({}), content_type='application/json',
+        )
+        self.assertEqual(response.status_code, 400)
+
+    def test_upstream_error_is_not_leaked(self):
+        """Наружу не должны утекать подробности ответа Ozon."""
+        with patch('requests.post', return_value=FakeResponse(status_code=403, text='secret detail')):
+            response = self.client.post(
+                '/api/ozon-logistics/site/availability/',
+                data=json.dumps({'phone': '79161112233'}),
+                content_type='application/json',
+            )
+        self.assertEqual(response.status_code, 502)
+        self.assertNotIn('secret detail', response.content.decode())
+
+    def test_rate_limit_kicks_in(self):
+        with patch('requests.post', return_value=FakeResponse(data={'is_possible': True})):
+            for _ in range(site_api.RATE_LIMITS['availability']):
+                self.client.post(
+                    '/api/ozon-logistics/site/availability/',
+                    data=json.dumps({'phone': '79161112233'}),
+                    content_type='application/json',
+                )
+            response = self.client.post(
+                '/api/ozon-logistics/site/availability/',
+                data=json.dumps({'phone': '79161112233'}),
+                content_type='application/json',
+            )
+        self.assertEqual(response.status_code, 429)
+
+    def test_points_come_from_local_cache(self):
+        OzonPickupPoint.objects.create(map_point_id=1, latitude=55.75, longitude=37.61)
+        OzonPickupPoint.objects.create(map_point_id=2, latitude=59.93, longitude=30.33)
+
+        with patch('requests.post') as post:
+            response = self.client.get('/api/ozon-logistics/site/points/', {
+                'south': 55.5, 'west': 37.3, 'north': 56.0, 'east': 37.9,
+            })
+
+        post.assert_not_called()  # к Ozon не ходим
+        self.assertEqual([p['id'] for p in response.json()['points']], [1])
+
+    def test_points_validate_bounds(self):
+        response = self.client.get('/api/ozon-logistics/site/points/', {'south': 1})
+        self.assertEqual(response.status_code, 400)
+
+        response = self.client.get('/api/ozon-logistics/site/points/', {
+            'south': 60, 'west': 37, 'north': 55, 'east': 38,
+        })
+        self.assertEqual(response.status_code, 400)
+
+    def test_quote_translates_offer_id_to_sku(self):
+        OzonProduct.objects.create(offer_id='01-14AP0250', sku=758646053, has_fbs_stocks=True)
+        client = FakeOrderClient()
+
+        with patch('ozon_logistics.services.orders.OzonLogisticsClient', return_value=client):
+            response = self.client.post(
+                '/api/ozon-logistics/site/quote/',
+                data=json.dumps({
+                    'phone': '79161112233',
+                    'items': [{'offer_id': '01-14AP0250', 'quantity': 2}],
+                    'map_point_id': 378617,
+                }),
+                content_type='application/json',
+            )
+
+        body = response.json()
+        self.assertTrue(body['available'])
+        self.assertEqual(body['delivery_cost'], 100.0)
+        self.assertEqual(client.checkout_kwargs['items'], [{'sku': 758646053, 'quantity': 2}])
+        self.assertTrue(OzonDeliveryQuote.objects.filter(pk=body['quote_id']).exists())
+
+    def test_quote_reports_unknown_product(self):
+        response = self.client.post(
+            '/api/ozon-logistics/site/quote/',
+            data=json.dumps({
+                'phone': '79161112233',
+                'items': [{'offer_id': 'НЕТ-ТАКОГО', 'quantity': 1}],
+                'map_point_id': 1,
+            }),
+            content_type='application/json',
+        )
+        self.assertEqual(response.status_code, 400)
+        self.assertIn('НЕТ-ТАКОГО', response.json()['message'])
+
+    def test_quote_requires_destination(self):
+        OzonProduct.objects.create(offer_id='A', sku=1, has_fbs_stocks=True)
+        response = self.client.post(
+            '/api/ozon-logistics/site/quote/',
+            data=json.dumps({'phone': '79161112233', 'items': [{'offer_id': 'A', 'quantity': 1}]}),
+            content_type='application/json',
+        )
+        self.assertEqual(response.status_code, 400)
+
+    def test_quote_reports_unavailable_delivery(self):
+        OzonProduct.objects.create(offer_id='A', sku=1, has_fbs_stocks=True)
+        client = FakeOrderClient(checkout=_checkout_response(available=False, sku=1))
+
+        with patch('ozon_logistics.services.orders.OzonLogisticsClient', return_value=client):
+            response = self.client.post(
+                '/api/ozon-logistics/site/quote/',
+                data=json.dumps({
+                    'phone': '79161112233',
+                    'items': [{'offer_id': 'A', 'quantity': 1}],
+                    'map_point_id': 1,
+                }),
+                content_type='application/json',
+            )
+
+        body = response.json()
+        self.assertFalse(body['available'])
+        self.assertEqual(body['reasons'], ['OUT_OF_STOCK'])
+
+    def test_point_details_are_fetched_once(self):
+        OzonPickupPoint.objects.create(map_point_id=7, latitude=55.7, longitude=37.6)
+        info = {'points': [{'delivery_method': {'map_point_id': 7, 'address': 'Москва'}}]}
+
+        with patch('requests.post', return_value=FakeResponse(data=info)) as post:
+            self.client.get('/api/ozon-logistics/site/point/7/')
+            self.client.get('/api/ozon-logistics/site/point/7/')
+
+        self.assertEqual(post.call_count, 1)
+
+
+@patch.dict('os.environ', CREDS)
+class SiteApiOriginTests(TestCase):
+    """Чужой домен не должен встроить наш API в свою страницу."""
+
+    def setUp(self):
+        cache.clear()
+        OzonPickupPoint.objects.create(map_point_id=1, latitude=55.75, longitude=37.61)
+
+    def tearDown(self):
+        cache.clear()
+
+    def _points(self, **extra):
+        return self.client.get(
+            '/api/ozon-logistics/site/points/',
+            {'south': 55.5, 'west': 37.3, 'north': 56.0, 'east': 37.9},
+            **extra,
+        )
+
+    def test_foreign_origin_is_rejected(self):
+        response = self._points(HTTP_ORIGIN='https://evil.example')
+        self.assertEqual(response.status_code, 403)
+
+    def test_own_site_origin_passes(self):
+        response = self._points(HTTP_ORIGIN='https://horse-bio.ru')
+        self.assertEqual(response.status_code, 200)
+
+    def test_missing_origin_passes(self):
+        """Origin шлёт не каждый клиент — его отсутствие не повод отказывать."""
+        self.assertEqual(self._points().status_code, 200)
+
+    def test_availability_limit_is_stricter(self):
+        self.assertLess(
+            site_api.RATE_LIMITS['availability'], site_api.RATE_LIMITS['quote']
+        )
