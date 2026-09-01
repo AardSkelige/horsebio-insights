@@ -1705,3 +1705,150 @@ class MoyskladDuplicateReportTests(TestCase):
         output = out.getvalue()
         self.assertIn('08282', output)
         self.assertIn('Ничего не изменено', output)
+
+
+class DuplicateRemovalTests(TestCase):
+    """Удаление дублей: предохранители важнее удобства."""
+
+    def setUp(self):
+        self.quote = OzonDeliveryQuote.objects.create(
+            phone='79166229030',
+            items=[{'sku': 101, 'quantity': 1}],
+            map_point_id=378617,
+            checkout_response=_checkout_response(),
+            status=OzonDeliveryQuote.STATUS_ORDERED,
+            order_number='34742020-0375',
+            site_order_id='12811918',
+        )
+        OzonPosting.objects.create(
+            posting_number='34742020-0375-1',
+            order_number='34742020-0375',
+            quote=self.quote,
+            schema=OzonPosting.SCHEMA_FBS,
+            status='cancelled',
+        )
+        self.ours = {
+            'id': 'our-id', 'name': '08281', 'sum': 80000, 'payedSum': 80000,
+            'externalCode': '12811918',
+            'description': 'Способ доставки: Доставка OZON',
+            'salesChannel': {'name': 'Прочее | Сайт Horse-Bio'},
+            'agent': {'name': 'Сенькин Сергей'},
+        }
+        self.theirs = {
+            'id': 'their-id', 'name': '08282', 'sum': 55000, 'payedSum': 0,
+            'description': '34742020-0375-1 - номер отправления в Ozon\n'
+                           'Дата начала доставки: 04-09-2026',
+            'salesChannel': {'name': 'МП | ОЗОН (ФАРМ)'},
+            'agent': {'name': 'Озон'},
+        }
+
+    def _pair(self, duplicates):
+        return {
+            'posting_number': '34742020-0375-1',
+            'posting_status': 'cancelled',
+            'site_order_raw': self.ours,
+            'duplicates_raw': duplicates,
+        }
+
+    def test_dry_run_changes_nothing(self):
+        with patch('msapi.http.put') as put, patch('msapi.http.delete') as delete:
+            result = ms_duplicates.resolve_duplicate(self._pair([self.theirs]))
+
+        put.assert_not_called()
+        delete.assert_not_called()
+        self.assertEqual(result['deleted'], ['08282'])
+
+    def test_apply_transfers_then_deletes(self):
+        calls = []
+
+        def fake_put(url, headers=None, json=None):
+            calls.append(('put', url, json))
+
+            class Response:
+                @staticmethod
+                def json():
+                    return {}
+            return Response()
+
+        def fake_delete(url, headers=None):
+            calls.append(('delete', url, None))
+
+            class Response:
+                status_code = 200
+                text = ''
+            return Response()
+
+        with patch('msapi.http.put', side_effect=fake_put), \
+             patch('msapi.http.delete', side_effect=fake_delete):
+            result = ms_duplicates.resolve_duplicate(self._pair([self.theirs]), apply=True)
+
+        # Перенос обязан идти первым: иначе сведения об отправлении пропадут
+        self.assertEqual([c[0] for c in calls], ['put', 'delete'])
+        self.assertIn('34742020-0375-1', calls[0][2]['description'])
+        self.assertIn('our-id', calls[0][1])
+        self.assertIn('their-id', calls[1][1])
+        self.assertTrue(result['transferred'])
+
+    def test_our_own_order_is_never_deleted(self):
+        with patch('msapi.http.delete') as delete:
+            result = ms_duplicates.resolve_duplicate(
+                self._pair([self.ours]), apply=True
+            )
+
+        delete.assert_not_called()
+        self.assertEqual(result['deleted'], [])
+
+    def test_foreign_document_without_posting_number_is_kept(self):
+        stranger = dict(self.theirs, id='x', name='09999', description='другой заказ')
+
+        with patch('msapi.http.delete') as delete:
+            result = ms_duplicates.resolve_duplicate(self._pair([stranger]), apply=True)
+
+        delete.assert_not_called()
+        self.assertIn('нет номера отправления', result['skipped'][0][1])
+
+    def test_non_ozon_channel_is_kept(self):
+        """Совпадение по тексту ещё не повод удалять чужой документ."""
+        stranger = dict(
+            self.theirs, id='x', name='09998',
+            salesChannel={'name': 'МП | ВБ (ФАРМ)'}, agent={'name': 'Вайлдберриз'},
+        )
+
+        with patch('msapi.http.delete') as delete:
+            result = ms_duplicates.resolve_duplicate(self._pair([stranger]), apply=True)
+
+        delete.assert_not_called()
+        self.assertIn('не из канала Ozon', result['skipped'][0][1])
+
+    @staticmethod
+    def _deleted_ok():
+        class Response:
+            status_code = 200
+            text = ''
+        return Response()
+
+    def test_transfer_is_not_repeated(self):
+        already = dict(
+            self.ours,
+            description=f'Способ доставки\n\n{ms_duplicates.TRANSFER_MARKER}\nстарое',
+        )
+        pair = self._pair([self.theirs])
+        pair['site_order_raw'] = already
+
+        with patch('msapi.http.put') as put, \
+             patch('msapi.http.delete', return_value=self._deleted_ok()) as delete:
+            result = ms_duplicates.resolve_duplicate(pair, apply=True)
+
+        put.assert_not_called()          # второй раз тот же текст не дописываем
+        delete.assert_called_once()      # а дубль всё равно убираем
+        self.assertFalse(result['transferred'])
+
+    def test_missing_site_order_still_deletes_but_reports(self):
+        pair = self._pair([self.theirs])
+        pair['site_order_raw'] = None
+
+        with patch('msapi.http.delete', return_value=self._deleted_ok()) as delete:
+            result = ms_duplicates.resolve_duplicate(pair, apply=True)
+
+        delete.assert_called_once()
+        self.assertIn('перенос невозможен', result['skipped'][0][1])

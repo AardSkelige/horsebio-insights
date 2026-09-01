@@ -219,6 +219,16 @@ SCRIPTS_CONFIG = [
         'args': ['sync_ozon_postings'],
     },
     {
+        'id': 'horsebio_ozon_duplicates',
+        'topic': 'Обновление данных',
+        'name': 'Дубли заказов Ozon',
+        'account': 'HorseBio',
+        'schedule': 'Каждые 5 мин',
+        'description': 'Переносит сведения об отправлении в заказ сайта и удаляет дубль, созданный синхронизацией МойСклад ↔ Ozon (Django-команда resolve_ozon_ms_duplicates)',
+        'script': '/app/manage.py',
+        'args': ['resolve_ozon_ms_duplicates', '--apply'],
+    },
+    {
         'id': 'horsebio_inventory_check',
         'topic': 'Обновление данных',
         'name': 'Инвентаризация',

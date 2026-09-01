@@ -6,9 +6,10 @@
 оплаты). Второй мешает учёту, но полезное в нём есть: номер отправления, дата
 отгрузки, статус от Ozon.
 
-Модуль только читает и сравнивает. Ничего не удаляет и не правит: сначала надо
-посмотреть на живых данных, что находится, и понять, не пересоздаст ли
-синхронизация удалённый документ.
+Порядок работы: сначала переносим полезное из дубля в наш заказ, только потом
+удаляем дубль. Удаление идёт с тремя предохранителями — в комментарии документа
+должен стоять номер именно нашего отправления, документ должен принадлежать
+каналу Ozon, и он не должен совпадать с нашим заказом сайта.
 """
 
 import logging
@@ -35,6 +36,10 @@ class MoyskladError(RuntimeError):
     """МойСклад недоступен или ответил ошибкой."""
 
 
+# Метка, по которой видно, что данные из дубля уже перенесены
+TRANSFER_MARKER = 'Ozon Доставка (из отправления):'
+
+
 def _get(path, params=None):
     try:
         data = ms_http.get(f'{BASE}{path}', headers=HEADERS, params=params).json()
@@ -46,9 +51,47 @@ def _get(path, params=None):
 
 
 def _orders_by_text(text, *, limit=10):
-    """Заказы покупателя, где встречается текст (ищем номер отправления)."""
-    rows = _get('/entity/customerorder', {'search': text, 'limit': limit}).get('rows', [])
-    return rows
+    """Заказы покупателя, где встречается текст (ищем номер отправления).
+
+    Раскрываем канал продаж и контрагента: по ним отличаем документ
+    синхронизации Ozon от нашего заказа сайта.
+    """
+    return _get('/entity/customerorder', {
+        'search': text, 'limit': limit, 'expand': 'salesChannel,agent',
+    }).get('rows', [])
+
+
+def _put(path, payload):
+    try:
+        data = ms_http.put(f'{BASE}{path}', headers=HEADERS, json=payload).json()
+    except Exception as exc:
+        raise MoyskladError(f'МойСклад недоступен: {exc}') from exc
+    if isinstance(data, dict) and data.get('errors'):
+        raise MoyskladError(f'МойСклад отказал в изменении: {data["errors"]}')
+    return data
+
+
+def _delete(path):
+    try:
+        response = ms_http.delete(f'{BASE}{path}', headers=HEADERS)
+    except Exception as exc:
+        raise MoyskladError(f'МойСклад недоступен: {exc}') from exc
+    if response.status_code not in (200, 204):
+        raise MoyskladError(
+            f'МойСклад отказал в удалении ({response.status_code}): {response.text[:300]}'
+        )
+    return True
+
+
+def _is_ozon_document(order):
+    """Документ создан синхронизацией Ozon, а не нами.
+
+    Смотрим и канал продаж, и контрагента: у заказа сайта канал «Сайт Horse-Bio»
+    и контрагент — живой покупатель.
+    """
+    channel = ((order.get('salesChannel') or {}).get('name') or '').upper()
+    agent = ((order.get('agent') or {}).get('name') or '').upper()
+    return 'ОЗОН' in channel or 'OZON' in channel or agent in ('ОЗОН', 'OZON')
 
 
 def _order_by_external_code(external_code):
@@ -103,7 +146,9 @@ def find_duplicates(*, limit=50):
             'posting_number': posting.posting_number,
             'posting_status': posting.status,
             'site_order': _summary(site_order),
+            'site_order_raw': site_order,
             'duplicates': [_summary(row) for row in candidates],
+            'duplicates_raw': candidates,
             'transferable': {
                 'Номер отправления Ozon': posting.posting_number,
                 'Статус отправления': posting.status,
@@ -112,3 +157,79 @@ def find_duplicates(*, limit=50):
         })
 
     return pairs
+
+
+def _transfer_text(pair):
+    """Что дописать в наш заказ: сведения об отправлении из дубля."""
+    lines = [TRANSFER_MARKER]
+    for duplicate in pair['duplicates_raw']:
+        description = (duplicate.get('description') or '').strip()
+        if description:
+            lines.append(description)
+    if len(lines) == 1:
+        # Комментария у дубля нет — переносим хотя бы то, что знаем сами
+        lines.append(f"Номер отправления: {pair['posting_number']}")
+        lines.append(f"Статус: {pair['posting_status'] or 'неизвестен'}")
+    return '\n'.join(lines)
+
+
+def resolve_duplicate(pair, *, apply=False):
+    """Переносит сведения в заказ сайта и удаляет дубль.
+
+    Без `apply` только сообщает, что было бы сделано. Удаляем лишь документы,
+    прошедшие все проверки: номер нашего отправления в комментарии, канал Ozon,
+    не наш заказ сайта.
+    """
+    result = {
+        'posting_number': pair['posting_number'],
+        'transferred': False,
+        'deleted': [],
+        'skipped': [],
+    }
+
+    site_order = pair.get('site_order_raw')
+    duplicates = pair.get('duplicates_raw') or []
+    if not duplicates:
+        return result
+
+    safe_to_delete = []
+    for duplicate in duplicates:
+        name = duplicate.get('name')
+        if site_order and duplicate.get('id') == site_order.get('id'):
+            result['skipped'].append((name, 'это наш заказ сайта'))
+            continue
+        if pair['posting_number'] not in (duplicate.get('description') or ''):
+            result['skipped'].append((name, 'в комментарии нет номера отправления'))
+            continue
+        if not _is_ozon_document(duplicate):
+            result['skipped'].append((name, 'документ не из канала Ozon'))
+            continue
+        safe_to_delete.append(duplicate)
+
+    if not safe_to_delete:
+        return result
+
+    # Сначала перенос: если удалить раньше, сведения об отправлении потеряются
+    if site_order:
+        description = site_order.get('description') or ''
+        if TRANSFER_MARKER not in description:
+            addition = _transfer_text(pair)
+            result['transfer_text'] = addition
+            if apply:
+                _put(f"/entity/customerorder/{site_order['id']}", {
+                    'description': f'{description}\n\n{addition}'.strip(),
+                })
+            result['transferred'] = True
+    else:
+        result['skipped'].append((None, 'наш заказ сайта не найден — перенос невозможен'))
+
+    for duplicate in safe_to_delete:
+        if apply:
+            _delete(f"/entity/customerorder/{duplicate['id']}")
+            logger.info(
+                'Ozon Доставка: удалён дубль №%s (отправление %s)',
+                duplicate.get('name'), pair['posting_number'],
+            )
+        result['deleted'].append(duplicate.get('name'))
+
+    return result
