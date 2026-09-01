@@ -99,6 +99,23 @@ describe('SiteOrdersTable — доставка Ozon', () => {
         expect(screen.queryByText('Отменить доставку Ozon')).not.toBeInTheDocument();
     });
 
+    // Статусов у Ozon больше, чем в словаре подписей: незнакомый должен
+    // остаться собой, а не превратиться в подпись расчёта.
+    it('незнакомый статус отправления показывается как есть', () => {
+        renderTable({ ozon: { ...OZON, posting_status: 'arbitration' } });
+
+        expect(screen.getByText('Ozon: arbitration')).toBeInTheDocument();
+        expect(screen.queryByText(/Заказ создан в Ozon/)).not.toBeInTheDocument();
+    });
+
+    it('без отправления показывается состояние расчёта', () => {
+        renderTable({
+            ozon: { ...OZON, posting_number: null, posting_status: null },
+        });
+
+        expect(screen.getByText('Ozon: Заказ создан в Ozon')).toBeInTheDocument();
+    });
+
     it('невыкуп подсвечивается как проблема', () => {
         renderTable({
             ozon: { ...OZON, posting_status: 'not_accepted', needs_attention: true, cancellable: false },

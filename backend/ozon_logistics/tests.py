@@ -1081,6 +1081,106 @@ class SiteApiTests(TestCase):
         self.assertFalse(body['available'])
         self.assertEqual(body['reasons'], ['OUT_OF_STOCK'])
 
+    def test_forwarded_header_cannot_reset_the_limit(self):
+        """Подделанный X-Forwarded-For не должен обнулять счётчик.
+
+        nginx дописывает свой адрес к присланному браузером, поэтому первый
+        элемент цепочки принадлежит клиенту: если считать по нему, достаточно
+        менять заголовок на каждом запросе, чтобы предела не существовало.
+        """
+        with patch('requests.post', return_value=FakeResponse(data={'is_possible': True})):
+            for attempt in range(site_api.RATE_LIMITS['availability']):
+                self.client.post(
+                    '/api/ozon-logistics/site/availability/',
+                    data=json.dumps({'phone': '79161112233'}),
+                    content_type='application/json',
+                    HTTP_X_FORWARDED_FOR=f'10.0.0.{attempt}, 127.0.0.1',
+                )
+            response = self.client.post(
+                '/api/ozon-logistics/site/availability/',
+                data=json.dumps({'phone': '79161112233'}),
+                content_type='application/json',
+                HTTP_X_FORWARDED_FOR='10.0.0.250, 127.0.0.1',
+            )
+        self.assertEqual(response.status_code, 429)
+
+    # Цепочка такая же, как на проде: подделка клиента, настоящий адрес от
+    # внешнего прокси и два наших внутренних nginx в приватной сети.
+    def _chain(self, client_ip, spoof='8.8.8.8'):
+        return f'{spoof}, {client_ip}, 10.20.0.3, 172.18.0.5'
+
+    def test_clients_behind_the_proxy_do_not_share_a_limit(self):
+        """Внутренние адреса одинаковы у всех — считать по ним нельзя."""
+        with patch('requests.post', return_value=FakeResponse(data={'is_possible': True})):
+            for _ in range(site_api.RATE_LIMITS['availability']):
+                self.client.post(
+                    '/api/ozon-logistics/site/availability/',
+                    data=json.dumps({'phone': '79161112233'}),
+                    content_type='application/json',
+                    HTTP_X_FORWARDED_FOR=self._chain('95.10.10.1'),
+                )
+            response = self.client.post(
+                '/api/ozon-logistics/site/availability/',
+                data=json.dumps({'phone': '79161112233'}),
+                content_type='application/json',
+                HTTP_X_FORWARDED_FOR=self._chain('95.10.10.2'),
+            )
+        self.assertEqual(response.status_code, 200)
+
+    def test_public_address_in_the_spoof_does_not_help_either(self):
+        """Подделка остаётся левее настоящего адреса — до неё очередь не доходит."""
+        with patch('requests.post', return_value=FakeResponse(data={'is_possible': True})):
+            for attempt in range(site_api.RATE_LIMITS['availability']):
+                self.client.post(
+                    '/api/ozon-logistics/site/availability/',
+                    data=json.dumps({'phone': '79161112233'}),
+                    content_type='application/json',
+                    HTTP_X_FORWARDED_FOR=self._chain('95.10.10.1', spoof=f'8.8.8.{attempt}'),
+                )
+            response = self.client.post(
+                '/api/ozon-logistics/site/availability/',
+                data=json.dumps({'phone': '79161112233'}),
+                content_type='application/json',
+                HTTP_X_FORWARDED_FOR=self._chain('95.10.10.1', spoof='8.8.4.4'),
+            )
+        self.assertEqual(response.status_code, 429)
+
+    def _quote_to(self, **destination):
+        OzonProduct.objects.get_or_create(
+            offer_id='A', defaults={'sku': 1, 'has_fbs_stocks': True}
+        )
+        payload = {
+            'phone': '79161112233',
+            'items': [{'offer_id': 'A', 'quantity': 1}],
+            **destination,
+        }
+        return self.client.post(
+            '/api/ozon-logistics/site/quote/',
+            data=json.dumps(payload), content_type='application/json',
+        )
+
+    def test_non_numeric_point_is_a_bad_request(self):
+        """Мусор в поле пункта — отказ с объяснением, а не 500 у покупателя."""
+        response = self._quote_to(map_point_id='выбери сам')
+        self.assertEqual(response.status_code, 400)
+        self.assertIn('числовым', response.json()['message'])
+
+    def test_coordinates_must_be_a_pair_of_numbers(self):
+        for bad in ('55.7', [55.7], ['север', 'юг'], {'lat': 55.7}):
+            with self.subTest(bad=bad):
+                response = self._quote_to(coordinates=bad)
+                self.assertEqual(response.status_code, 400)
+
+    def test_coordinates_out_of_range_are_rejected(self):
+        response = self._quote_to(coordinates=[955.7, 37.6])
+        self.assertEqual(response.status_code, 400)
+        self.assertIn('пределов', response.json()['message'])
+
+    def test_both_destinations_at_once_are_rejected(self):
+        """Ozon требует ровно одно из двух: это ошибка запроса, а не авария."""
+        response = self._quote_to(map_point_id=1, coordinates=[55.7, 37.6])
+        self.assertEqual(response.status_code, 400)
+
     def test_point_details_are_fetched_once(self):
         OzonPickupPoint.objects.create(map_point_id=7, latitude=55.7, longitude=37.6)
         info = {'points': [{'delivery_method': {'map_point_id': 7, 'address': 'Москва'}}]}
@@ -1090,6 +1190,41 @@ class SiteApiTests(TestCase):
             self.client.get('/api/ozon-logistics/site/point/7/')
 
         self.assertEqual(post.call_count, 1)
+
+
+class StaleQuotePurgeTests(TestCase):
+    """Брошенные корзины: расчёт создаётся на каждый заход, а оплаты не будет."""
+
+    def _quote(self, *, age_days, **extra):
+        quote = OzonDeliveryQuote.objects.create(
+            phone='79166229030', items=[], checkout_response=_checkout_response(), **extra
+        )
+        OzonDeliveryQuote.objects.filter(pk=quote.pk).update(
+            created_at=timezone.now() - timezone.timedelta(days=age_days)
+        )
+        return quote
+
+    def test_abandoned_quote_is_removed(self):
+        self._quote(age_days=40)
+        self.assertEqual(orders.purge_stale_quotes(), 1)
+        self.assertEqual(OzonDeliveryQuote.objects.count(), 0)
+
+    def test_fresh_quote_is_kept(self):
+        """Между расчётом и письмом об оплате проходят минуты, изредка часы."""
+        self._quote(age_days=1)
+        self.assertEqual(orders.purge_stale_quotes(), 0)
+
+    def test_quote_tied_to_a_site_order_is_kept(self):
+        self._quote(age_days=40, site_order_id='12811918')
+        self.assertEqual(orders.purge_stale_quotes(), 0)
+
+    def test_ordered_quote_is_kept(self):
+        """По созданному заказу живут отправления и возвраты — его не трогаем."""
+        self._quote(
+            age_days=400, status=OzonDeliveryQuote.STATUS_ORDERED,
+            order_number='34742020-0375',
+        )
+        self.assertEqual(orders.purge_stale_quotes(), 0)
 
 
 @patch.dict('os.environ', CREDS)
@@ -1552,6 +1687,73 @@ class PostingTrackingTests(TestCase):
         tracking.sync_postings(client=client)
         self.assertEqual(client.fbs_calls[0]['order_numbers'], ['34742020-0375'])
 
+    def test_link_to_quote_survives_entry_without_order_number(self):
+        """Пустой номер заказа в ответе не должен обнулять связь с расчётом."""
+        OzonPosting.objects.create(
+            posting_number='34742020-0375-1', order_number='34742020-0375',
+            quote=self.quote, schema=OzonPosting.SCHEMA_FBS, status='delivering',
+        )
+        client = self._client(fbo={'postings': [{
+            'posting_number': '34742020-0375-1', 'status': 'delivered',
+        }], 'has_next': False})
+
+        tracking.sync_postings(client=client)
+
+        posting = OzonPosting.objects.get(pk='34742020-0375-1')
+        self.assertEqual(posting.quote, self.quote)          # связь на месте
+        self.assertEqual(posting.order_number, '34742020-0375')
+        self.assertEqual(posting.status, 'delivered')        # а статус обновлён
+
+    def test_filters_are_split_into_chunks(self):
+        """Фильтры Ozon не резиновые: номера уходят пачками, а не одним списком."""
+        for index in range(tracking.CHUNK_SIZE + 5):
+            OzonDeliveryQuote.objects.create(
+                phone='79166229030', items=[], checkout_response=_checkout_response(),
+                status=OzonDeliveryQuote.STATUS_ORDERED,
+                order_number=f'34742020-2{index:03d}',
+                postings=[f'34742020-2{index:03d}-1'],
+            )
+
+        client = self._client()
+        tracking.sync_postings(client=client)
+
+        self.assertEqual(len(client.fbs_calls), 2)
+        self.assertTrue(
+            all(len(call['order_numbers']) <= tracking.CHUNK_SIZE
+                for call in client.fbs_calls)
+        )
+
+    def test_order_out_of_tracking_window_is_dropped(self):
+        """Заказ без отправлений не должен висеть в фильтре вечно."""
+        OzonDeliveryQuote.objects.filter(pk=self.quote.pk).update(
+            created_at=timezone.now() - timezone.timedelta(days=tracking.TRACK_DAYS + 1)
+        )
+        client = self._client()
+        stats = tracking.sync_postings(client=client)
+        self.assertEqual(stats['quotes'], 0)
+
+    def test_stuck_posting_is_tracked_past_the_window(self):
+        """Застрявшая посылка может отмениться и на сотый день — деньги те же."""
+        OzonDeliveryQuote.objects.filter(pk=self.quote.pk).update(
+            created_at=timezone.now() - timezone.timedelta(days=tracking.TRACK_DAYS + 10)
+        )
+        OzonPosting.objects.create(
+            posting_number='34742020-0375-1', order_number='34742020-0375',
+            quote=self.quote, schema=OzonPosting.SCHEMA_FBS, status='delivering',
+        )
+
+        stats = tracking.sync_postings(client=self._client())
+
+        self.assertEqual(stats['quotes'], 1)
+
+    def test_finished_order_leaves_tracking_regardless_of_age(self):
+        OzonPosting.objects.create(
+            posting_number='34742020-0375-1', order_number='34742020-0375',
+            quote=self.quote, schema=OzonPosting.SCHEMA_FBS, status='delivered',
+        )
+        stats = tracking.sync_postings(client=self._client())
+        self.assertEqual(stats['quotes'], 0)
+
     def test_fbo_is_searched_by_posting_number(self):
         """У FBO фильтра по номеру заказа нет — только по отправлениям."""
         client = self._client()
@@ -1829,9 +2031,12 @@ class DuplicateRemovalTests(TestCase):
         return Response()
 
     def test_transfer_is_not_repeated(self):
+        """Текст дубля уже в нашем заказе — второй раз его не дописываем."""
         already = dict(
             self.ours,
-            description=f'Способ доставки\n\n{ms_duplicates.TRANSFER_MARKER}\nстарое',
+            description='Способ доставки\n\n'
+                        f'{ms_duplicates.TRANSFER_MARKER} 34742020-0375-1\n'
+                        + self.theirs['description'],
         )
         pair = self._pair([self.theirs])
         pair['site_order_raw'] = already
@@ -1844,15 +2049,134 @@ class DuplicateRemovalTests(TestCase):
         delete.assert_called_once()      # а дубль всё равно убираем
         self.assertFalse(result['transferred'])
 
-    def test_missing_site_order_still_deletes_but_reports(self):
+    def test_missing_site_order_keeps_the_duplicate(self):
+        """Переносить некуда — дубль остаётся: он единственный с номером отправления."""
         pair = self._pair([self.theirs])
         pair['site_order_raw'] = None
 
-        with patch('msapi.http.delete', return_value=self._deleted_ok()) as delete:
+        with patch('msapi.http.delete') as delete:
             result = ms_duplicates.resolve_duplicate(pair, apply=True)
 
+        delete.assert_not_called()
+        self.assertEqual(result['deleted'], [])
+        self.assertIn('переносить некуда', result['skipped'][0][1])
+
+    def test_second_posting_of_a_split_order_is_transferred_too(self):
+        """Ozon дробит заказ: у каждого отправления свой перенос, метка с номером."""
+        already = dict(
+            self.ours,
+            description='Способ доставки\n\n'
+                        f'{ms_duplicates.TRANSFER_MARKER} 34742020-0375-1\nпервое',
+        )
+        second = dict(
+            self.theirs, id='their-2', name='08283',
+            description='34742020-0375-2 - номер отправления в Ozon',
+        )
+        pair = self._pair([second])
+        pair['posting_number'] = '34742020-0375-2'
+        pair['site_order_raw'] = already
+
+        with patch('msapi.http.put') as put, \
+             patch('msapi.http.delete', return_value=self._deleted_ok()) as delete:
+            result = ms_duplicates.resolve_duplicate(pair, apply=True)
+
+        self.assertTrue(result['transferred'])
+        put.assert_called_once()
         delete.assert_called_once()
-        self.assertIn('перенос невозможен', result['skipped'][0][1])
+        written = put.call_args.kwargs['json']['description']
+        self.assertIn('34742020-0375-1', written)   # первый перенос на месте
+        self.assertIn('34742020-0375-2', written)   # и второй дописан
+
+    def test_transfer_text_takes_only_documents_we_delete(self):
+        """В наш заказ не должно попасть описание чужого документа из выдачи поиска."""
+        stranger = dict(
+            self.theirs, id='wb', name='09998',
+            description='34742020-0375-1 упомянут, но это заказ Вайлдберриз',
+            salesChannel={'name': 'МП | ВБ (ФАРМ)'}, agent={'name': 'Вайлдберриз'},
+        )
+
+        with patch('msapi.http.put') as put, \
+             patch('msapi.http.delete', return_value=self._deleted_ok()):
+            ms_duplicates.resolve_duplicate(
+                self._pair([self.theirs, stranger]), apply=True
+            )
+
+        written = put.call_args.kwargs['json']['description']
+        self.assertIn('Дата начала доставки', written)      # из настоящего дубля
+        self.assertNotIn('Вайлдберриз', written)            # чужое не переносим
+
+    def test_marker_of_another_posting_does_not_count_as_transferred(self):
+        """Метка «…-0375-11» не должна выдать «…-0375-1» за уже перенесённое."""
+        already = dict(
+            self.ours,
+            description='Способ доставки\n\n'
+                        f'{ms_duplicates.TRANSFER_MARKER} 34742020-0375-11\nодиннадцатое',
+        )
+        pair = self._pair([self.theirs])
+        pair['site_order_raw'] = already
+
+        with patch('msapi.http.put') as put, \
+             patch('msapi.http.delete', return_value=self._deleted_ok()):
+            result = ms_duplicates.resolve_duplicate(pair, apply=True)
+
+        self.assertTrue(result['transferred'])
+        put.assert_called_once()
+        self.assertIn('34742020-0375-1\n', put.call_args.kwargs['json']['description'])
+
+    def test_recreated_duplicate_is_transferred_again(self):
+        """Синхронизация завела дубль заново — новый комментарий тоже переносим."""
+        already = dict(
+            self.ours,
+            description='Способ доставки\n\n'
+                        f'{ms_duplicates.TRANSFER_MARKER} 34742020-0375-1\n'
+                        + self.theirs['description'],
+        )
+        recreated = dict(
+            self.theirs, id='their-again', name='08290',
+            description='34742020-0375-1 - номер отправления в Ozon\n'
+                        'Трек-номер: 80123456789',
+        )
+        pair = self._pair([recreated])
+        pair['site_order_raw'] = already
+
+        with patch('msapi.http.put') as put, \
+             patch('msapi.http.delete', return_value=self._deleted_ok()) as delete:
+            result = ms_duplicates.resolve_duplicate(pair, apply=True)
+
+        self.assertTrue(result['transferred'])
+        self.assertIn('80123456789', put.call_args.kwargs['json']['description'])
+        delete.assert_called_once()
+
+    def test_posting_number_must_match_whole(self):
+        """«…-0375-1» — префикс «…-0375-11»: по подстроке удалили бы чужое отправление."""
+        eleventh = dict(
+            self.theirs, id='their-11', name='08292',
+            description='34742020-0375-11 - номер отправления в Ozon',
+        )
+
+        with patch('msapi.http.put'), patch('msapi.http.delete') as delete:
+            result = ms_duplicates.resolve_duplicate(self._pair([eleventh]), apply=True)
+
+        delete.assert_not_called()
+        self.assertIn('нет номера отправления', result['skipped'][0][1])
+
+    def test_checked_posting_is_not_rescanned(self):
+        """Просмотренное отправление не дёргает МойСклад до следующих суток."""
+        with patch('msapi.http.put'), patch('msapi.http.delete', return_value=self._deleted_ok()):
+            ms_duplicates.resolve_duplicate(self._pair([self.theirs]), apply=True)
+
+        posting = OzonPosting.objects.get(posting_number='34742020-0375-1')
+        self.assertIsNotNone(posting.duplicates_checked_at)
+
+        with patch('msapi.http.get') as get:
+            self.assertEqual(ms_duplicates.find_duplicates(include_resolved=False), [])
+        get.assert_not_called()
+
+    def test_unchecked_posting_is_still_scanned(self):
+        """Пока отправление не смотрели, из выборки оно не выпадает."""
+        with patch('msapi.http.get', side_effect=RuntimeError('дошли до сети')):
+            with self.assertRaises(ms_duplicates.MoyskladError):
+                ms_duplicates.find_duplicates(include_resolved=False)
 
 
 class OzonDeliveryNotificationTests(TestCase):
@@ -1984,13 +2308,34 @@ class SiteOrderOzonViewTests(TestCase):
         )
 
     def _row(self):
-        from api.views.site_orders import _ozon_delivery
-        return _ozon_delivery('12811918')
+        from api.views.site_orders import _ozon_by_order
+        return _ozon_by_order(['12811918'])['12811918']
 
     def test_row_has_no_ozon_block_for_plain_order(self):
         """Обычный заказ — колонка пустая, а не «доставки нет»."""
-        from api.views.site_orders import _ozon_delivery
-        self.assertIsNone(_ozon_delivery('99999999'))
+        from api.views.site_orders import _ozon_by_order
+        self.assertEqual(_ozon_by_order(['99999999']), {})
+
+    def test_page_is_fetched_in_two_queries(self):
+        """Сколько бы заказов ни было на странице, выборок остаётся две."""
+        from api.views.site_orders import _ozon_by_order
+
+        for index in range(5):
+            quote = OzonDeliveryQuote.objects.create(
+                phone='79166229030', items=[], checkout_response=_checkout_response(),
+                status=OzonDeliveryQuote.STATUS_ORDERED,
+                order_number=f'34742020-100{index}', site_order_id=f'9000{index}',
+            )
+            OzonPosting.objects.create(
+                posting_number=f'34742020-100{index}-1',
+                order_number=quote.order_number, quote=quote,
+                schema=OzonPosting.SCHEMA_FBS, status='delivering',
+            )
+
+        order_ids = ['12811918'] + [f'9000{index}' for index in range(5)]
+        with self.assertNumQueries(2):
+            blocks = _ozon_by_order(order_ids)
+        self.assertEqual(len(blocks), 6)
 
     def test_row_shows_posting_status(self):
         OzonPosting.objects.create(
@@ -2003,6 +2348,34 @@ class SiteOrderOzonViewTests(TestCase):
         self.assertEqual(row['posting_status'], 'delivering')
         self.assertEqual(row['delivery_cost'], 97.0)
         self.assertTrue(row['cancellable'])
+
+    def test_split_order_shows_the_posting_that_needs_attention(self):
+        """Одно отправление доставлено, второе отменено — строка не должна молчать."""
+        OzonPosting.objects.create(
+            posting_number='34742020-0375-1', order_number='34742020-0375',
+            quote=self.quote, schema=OzonPosting.SCHEMA_FBS, status='cancelled',
+            cancel_reason='Покупатель не забрал заказ',
+        )
+        # Второе синхронизировано позже, то есть свежее по updated_at
+        OzonPosting.objects.create(
+            posting_number='34742020-0375-2', order_number='34742020-0375',
+            quote=self.quote, schema=OzonPosting.SCHEMA_FBO, status='delivered',
+        )
+
+        row = self._row()
+
+        self.assertEqual(row['posting_status'], 'cancelled')
+        self.assertEqual(row['posting_number'], '34742020-0375-1')
+        self.assertTrue(row['needs_attention'])
+
+    def test_split_order_is_cancellable_while_one_posting_moves(self):
+        for number, status in (('34742020-0375-1', 'delivered'),
+                               ('34742020-0375-2', 'delivering')):
+            OzonPosting.objects.create(
+                posting_number=number, order_number='34742020-0375',
+                quote=self.quote, schema=OzonPosting.SCHEMA_FBS, status=status,
+            )
+        self.assertTrue(self._row()['cancellable'])
 
     def test_delivered_order_is_not_cancellable(self):
         OzonPosting.objects.create(
@@ -2025,6 +2398,19 @@ class SiteOrderOzonViewTests(TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertEqual(calls['cancelled'], '34742020-0375')
         self.assertIn('верните после подтверждения', response.json()['message'].lower())
+
+    def test_cancel_succeeds_even_if_state_is_unavailable(self):
+        """Ozon отмену принял — недоступность cancel_status не делает её провалом."""
+        from ozon_logistics.services.client import OzonLogisticsError
+
+        with patch('ozon_logistics.services.orders.cancel_order', return_value={'result': True}), \
+             patch('ozon_logistics.services.orders.cancellation_state',
+                   side_effect=OzonLogisticsError('таймаут')):
+            response = self.client.post('/api/site-orders/12811918/ozon/cancel/')
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.json()['status'], 'success')
+        self.assertIsNone(response.json()['state'])
 
     def test_cancel_endpoint_reports_refusal(self):
         from ozon_logistics.services.orders import OzonOrderError
@@ -2101,6 +2487,24 @@ class OzonReturnsTests(TestCase):
         returns_service.sync_returns(client=client)
 
         self.assertEqual(client.calls[0]['posting_numbers'], ['34742020-0375-1'])
+
+    def test_postings_are_asked_in_chunks(self):
+        """За 90 дней отправлений набирается больше, чем влезает в один фильтр."""
+        for index in range(returns_service.CHUNK_SIZE + 5):
+            OzonPosting.objects.create(
+                posting_number=f'34742020-3{index:03d}-1',
+                order_number=f'34742020-3{index:03d}',
+                schema=OzonPosting.SCHEMA_FBS, status='delivered',
+            )
+
+        client = self._client([])
+        returns_service.sync_returns(client=client)
+
+        self.assertEqual(len(client.calls), 2)
+        self.assertTrue(
+            all(len(call['posting_numbers']) <= returns_service.CHUNK_SIZE
+                for call in client.calls)
+        )
 
     def test_pagination_follows_last_id(self):
         first = {'returns': [self.ENTRY], 'has_next': True}

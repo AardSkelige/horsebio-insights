@@ -18,22 +18,48 @@ logger = logging.getLogger(__name__)
 
 MAX_PAGES = 20
 PAGE_SIZE = 100
+# Сколько номеров кладём в один фильтр Ozon. Списки в фильтрах не резиновые, а
+# заказов со временем становится больше, чем помещается в один запрос.
+CHUNK_SIZE = 50
+# Заказ, у которого за это время так и не появилось ни одного отправления,
+# из наблюдения выходит: иначе он остаётся в фильтре навсегда и список растёт
+# сам по себе. Такой случай виден в уведомлениях, им занимается человек.
+TRACK_DAYS = 90
+
+
+def _chunks(values, size=CHUNK_SIZE):
+    for start in range(0, len(values), size):
+        yield values[start:start + size]
 
 
 def _active_quotes():
     """Заказы, за которыми ещё есть смысл следить.
 
     Отслеживаем, пока хоть одно отправление не дошло до конечного статуса —
-    либо пока отправлений вообще не видели.
+    либо пока отправлений вообще не видели, но заказ ещё свежий.
     """
-    quotes = OzonDeliveryQuote.objects.filter(
-        status=OzonDeliveryQuote.STATUS_ORDERED
-    ).exclude(order_number='')
+    quotes = (
+        OzonDeliveryQuote.objects
+        .filter(status=OzonDeliveryQuote.STATUS_ORDERED)
+        .exclude(order_number='')
+        .prefetch_related('postings_tracked')
+    )
+    # По created_at, а не по ordered_at: он проставляется только тем, что прошло
+    # через create_order, и у заведённых иначе пуст.
+    cutoff = timezone.now() - timezone.timedelta(days=TRACK_DAYS)
 
     active = []
     for quote in quotes:
         tracked = list(quote.postings_tracked.all())
-        if not tracked or any(not p.is_final for p in tracked):
+        if tracked:
+            # Отправление видели: следим, пока хоть одно не в конечном статусе.
+            # Срок здесь не при чём — застрявшая посылка может отмениться и на
+            # сотый день, а деньги за неё всё те же наши.
+            if any(not posting.is_final for posting in tracked):
+                active.append(quote)
+        elif quote.created_at >= cutoff:
+            # Отправлений не видели вовсе: ждём, но не вечно — иначе такой
+            # заказ остаётся в фильтре навсегда.
             active.append(quote)
     return active
 
@@ -48,16 +74,24 @@ def _store(entry, *, schema, quote_by_order):
     cancellation = entry.get('cancellation') or {}
     cancel_reason = (cancellation.get('cancel_reason') or '')[:500]
 
+    defaults = {
+        'schema': schema,
+        'cancel_reason': cancel_reason,
+        'details': entry,
+    }
+    # Пустое значение — не новость, а её отсутствие: записывать его поверх
+    # известного нельзя. Так у отправления пропадала связь с расчётом, а вместе
+    # с ней — и заказ сайта в уведомлениях.
+    if order_number:
+        defaults['order_number'] = order_number
+        quote = quote_by_order.get(order_number)
+        if quote is not None:
+            defaults['quote'] = quote
+    if status:
+        defaults['status'] = status
+
     posting, _ = OzonPosting.objects.update_or_create(
-        posting_number=posting_number,
-        defaults={
-            'order_number': order_number,
-            'quote': quote_by_order.get(order_number),
-            'schema': schema,
-            'status': status,
-            'cancel_reason': cancel_reason,
-            'details': entry,
-        },
+        posting_number=posting_number, defaults=defaults,
     )
     return posting
 
@@ -78,10 +112,18 @@ def _collect(fetch, *, schema, quote_by_order, stats):
             cursor = response.get('cursor')
             has_next = response.get('has_next')
 
-        for entry in entries:
-            posting = _store(entry, schema=schema, quote_by_order=quote_by_order)
-            if posting is None:
-                continue
+        # Транзакция только вокруг записи: держать её открытой на время похода
+        # в Ozon значит занимать соединение к базе на все двадцать страниц.
+        with transaction.atomic():
+            stored = [
+                posting for posting in (
+                    _store(entry, schema=schema, quote_by_order=quote_by_order)
+                    for entry in entries
+                )
+                if posting is not None
+            ]
+
+        for posting in stored:
             stats['seen'] += 1
             if posting.needs_attention:
                 stats['need_attention'] += 1
@@ -107,24 +149,24 @@ def sync_postings(*, client=None):
     order_numbers = list(quote_by_order)
     posting_numbers = [n for q in quotes for n in (q.postings or [])]
 
-    with transaction.atomic():
-        # FBS ищется по номерам заказов — это и есть наш ключ
+    # FBS ищется по номерам заказов — это и есть наш ключ
+    for batch in _chunks(order_numbers):
         _collect(
-            lambda cursor: client.posting_fbs_list(
-                order_numbers=order_numbers, limit=PAGE_SIZE, cursor=cursor
+            lambda cursor, batch=batch: client.posting_fbs_list(
+                order_numbers=batch, limit=PAGE_SIZE, cursor=cursor
             ),
             schema=OzonPosting.SCHEMA_FBS, quote_by_order=quote_by_order, stats=stats,
         )
 
-        # FBO фильтруется только по номерам отправлений, поэтому нужны те, что
-        # Ozon вернул при создании заказа
-        if posting_numbers:
-            _collect(
-                lambda cursor: client.posting_fbo_list(
-                    posting_numbers=posting_numbers, limit=PAGE_SIZE, cursor=cursor
-                ),
-                schema=OzonPosting.SCHEMA_FBO, quote_by_order=quote_by_order, stats=stats,
-            )
+    # FBO фильтруется только по номерам отправлений, поэтому нужны те, что
+    # Ozon вернул при создании заказа
+    for batch in _chunks(posting_numbers):
+        _collect(
+            lambda cursor, batch=batch: client.posting_fbo_list(
+                posting_numbers=batch, limit=PAGE_SIZE, cursor=cursor
+            ),
+            schema=OzonPosting.SCHEMA_FBO, quote_by_order=quote_by_order, stats=stats,
+        )
 
     logger.info(
         'Ozon Доставка: статусы обновлены — заказов %(quotes)s, отправлений %(seen)s, '

@@ -19,6 +19,11 @@ logger = logging.getLogger(__name__)
 
 CURRENCY = 'RUB'
 NANOS_IN_UNIT = Decimal('1000000000')
+# Сколько храним расчёт, за которым так и не пришла оплата. Расчёт создаёт любой
+# заход в корзину, вместе с полным ответом Ozon, — без чистки таблица растёт
+# бесконечно. Письмо об оплате приходит за минуты, изредка за часы, так что
+# месяц — заведомо с запасом.
+QUOTE_TTL = timezone.timedelta(days=30)
 
 
 class OzonOrderError(RuntimeError):
@@ -200,6 +205,18 @@ def create_order(quote, *, buyer, recipient=None, prices, client=None):
 
     logger.info('Ozon Доставка: создан заказ %s по расчёту %s', order_number, quote.id)
     return quote
+
+
+def purge_stale_quotes():
+    """Убирает брошенные корзины: расчёт есть, а заказа по нему так и не было."""
+    deleted, _ = OzonDeliveryQuote.objects.filter(
+        status=OzonDeliveryQuote.STATUS_NEW,
+        site_order_id='',
+        created_at__lt=timezone.now() - QUOTE_TTL,
+    ).delete()
+    if deleted:
+        logger.info('Ozon Доставка: удалено брошенных расчётов: %s', deleted)
+    return deleted
 
 
 def cancel_order(quote, *, reason_id=None, reason_message='', client=None):

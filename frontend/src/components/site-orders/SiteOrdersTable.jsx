@@ -48,7 +48,10 @@ const POSTING_LABELS = {
 function OzonChip({ ozon }) {
     if (!ozon) return null;
 
-    const label = POSTING_LABELS[ozon.posting_status] || ozon.status_label;
+    // Статусов у Ozon больше, чем в словаре. Незнакомый показываем как есть:
+    // подставить сюда подпись расчёта значит выдать состояние заказа за
+    // состояние посылки — «Заказ создан» вместо «в арбитраже».
+    const label = POSTING_LABELS[ozon.posting_status] || ozon.posting_status || ozon.status_label;
     const tone = ozon.needs_attention || ozon.status === 'unknown' || ozon.status === 'failed'
         ? 'err'
         : ozon.posting_status === 'delivered' ? 'ok' : 'processing';

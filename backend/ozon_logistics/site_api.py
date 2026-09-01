@@ -8,6 +8,7 @@
     исчерпать наши лимиты к API.
 """
 
+import ipaddress
 import json
 import logging
 
@@ -39,9 +40,35 @@ MAX_ITEMS = 100
 
 
 def _client_ip(request):
+    """Адрес, по которому считаем частоту запросов.
+
+    Ни один готовый заголовок здесь не годится:
+
+    * первый элемент X-Forwarded-For пишет сам браузер — nginx стоит
+      `$proxy_add_x_forwarded_for` и **дописывает** свой адрес к присланному.
+      Считать по нему значит не считать вовсе: клиент меняет заголовок на
+      каждом запросе;
+    * X-Real-IP и последний элемент цепочки — адрес нашего же внутреннего
+      прокси. Запрос идёт `nginx фронтенда → nginx бэкенда → Django`, и
+      внутренний nginx перетирает X-Real-IP своим $remote_addr. Он одинаков
+      для всех покупателей, то есть весь сайт делил бы один лимит на всех.
+
+    Поэтому идём по цепочке справа налево и берём первый публичный адрес:
+    внутренние прокси сидят в приватных сетях и отсеиваются сами, а подделка
+    клиента остаётся левее настоящего адреса, который дописал внешний прокси,
+    и до неё очередь не доходит. Считать хопы не нужно — топология может
+    поменяться, а это правило переживает и лишний прокси, и его исчезновение.
+    """
     forwarded = request.META.get('HTTP_X_FORWARDED_FOR', '')
-    if forwarded:
-        return forwarded.split(',')[0].strip()
+    for candidate in reversed([part.strip() for part in forwarded.split(',')]):
+        try:
+            address = ipaddress.ip_address(candidate)
+        except ValueError:
+            continue
+        if address.is_global:
+            return candidate
+    # Ни одного публичного адреса: прокси нет вовсе или покупатель в той же
+    # сети, что и мы, — тогда правду знает только сам сокет.
     return request.META.get('REMOTE_ADDR', '')
 
 
@@ -51,6 +78,11 @@ def _rate_limited(request, bucket):
     ip = _client_ip(request)
     key = f'ozon_site:{bucket}:{ip}'
     try:
+        # Счётчик приблизительный: у файлового кеша нет атомарного инкремента
+        # (cache.incr — это тот же get + set, да ещё и со сбросом срока на
+        # общий TIMEOUT), поэтому параллельные запросы могут насчитать себе
+        # общий первый. Для грубого предела это допустимо: он отсекает перебор,
+        # а не выдаёт точную квоту.
         hits = cache.get(key, 0) + 1
         cache.set(key, hits, RATE_LIMIT_WINDOW)
     except Exception:
@@ -208,6 +240,37 @@ def point_details(request, map_point_id):
     })
 
 
+def _parse_destination(data):
+    """Куда везём: пункт выдачи или координаты курьера. Ровно одно из двух.
+
+    Разбираем здесь, а не в клиенте: там любая нечисловая строка обрывается
+    ValueError и покупатель получает 500 вместо внятного отказа.
+    """
+    map_point_id = data.get('map_point_id')
+    coordinates = data.get('coordinates')
+
+    if map_point_id in (None, '') and not coordinates:
+        raise ValueError('Выберите пункт выдачи или укажите адрес')
+    if map_point_id not in (None, '') and coordinates:
+        raise ValueError('Укажите либо пункт выдачи, либо координаты — не оба сразу')
+
+    if map_point_id not in (None, ''):
+        try:
+            return int(map_point_id), None
+        except (TypeError, ValueError):
+            raise ValueError('Пункт выдачи задаётся числовым идентификатором')
+
+    if not isinstance(coordinates, (list, tuple)) or len(coordinates) != 2:
+        raise ValueError('Координаты задаются парой: широта и долгота')
+    try:
+        latitude, longitude = (float(value) for value in coordinates)
+    except (TypeError, ValueError):
+        raise ValueError('Координаты должны быть числами')
+    if not -90 <= latitude <= 90 or not -180 <= longitude <= 180:
+        raise ValueError('Координаты вне допустимых пределов')
+    return None, (latitude, longitude)
+
+
 def _parse_items(raw):
     """Позиции корзины → список для Ozon. Артикулы переводим в sku по своей таблице."""
     if not isinstance(raw, list) or not raw:
@@ -264,17 +327,17 @@ def quote(request):
     except ValueError as exc:
         return _bad_request(str(exc))
 
-    map_point_id = data.get('map_point_id')
-    coordinates = data.get('coordinates')
-    if not map_point_id and not coordinates:
-        return _bad_request('Выберите пункт выдачи или укажите адрес')
+    try:
+        map_point_id, coordinates = _parse_destination(data)
+    except ValueError as exc:
+        return _bad_request(str(exc))
 
     try:
         saved = orders.create_quote(
             phone=phone,
             items=items,
             map_point_id=map_point_id,
-            coordinates=tuple(coordinates) if coordinates else None,
+            coordinates=coordinates,
             courier_address=data.get('address'),
         )
     except (OzonOAuthError, OzonLogisticsError) as exc:

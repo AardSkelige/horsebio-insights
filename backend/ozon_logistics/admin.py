@@ -47,7 +47,7 @@ class OzonPostingAdmin(admin.ModelAdmin):
                     'needs_attention', 'handled_at', 'updated_at')
     list_filter = ('status', 'schema')
     search_fields = ('posting_number', 'order_number')
-    readonly_fields = ('created_at', 'updated_at', 'details')
+    readonly_fields = ('created_at', 'updated_at', 'details', 'duplicates_checked_at')
     actions = ['mark_handled']
 
     @admin.display(boolean=True, description='Нужен возврат денег')

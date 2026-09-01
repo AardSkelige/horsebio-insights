@@ -20,7 +20,7 @@ class Command(BaseCommand):
     def handle(self, *args, **options):
         apply = options['apply']
         try:
-            pairs = find_duplicates(limit=options['limit'])
+            pairs = find_duplicates(limit=options['limit'], include_resolved=False)
         except MoyskladError as exc:
             self.stderr.write(self.style.ERROR(str(exc)))
             return

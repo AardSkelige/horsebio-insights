@@ -2,6 +2,7 @@
 
 from django.core.management.base import BaseCommand
 
+from ozon_logistics.services.orders import purge_stale_quotes
 from ozon_logistics.services.site_orders import process_paid_orders
 
 
@@ -10,6 +11,9 @@ class Command(BaseCommand):
 
     def handle(self, *args, **options):
         stats = process_paid_orders()
+        purged = purge_stale_quotes()
+        if purged:
+            self.stdout.write(f'Удалено брошенных расчётов: {purged}')
 
         self.stdout.write(
             'Заказов сайта с доставкой Ozon: {checked}, '

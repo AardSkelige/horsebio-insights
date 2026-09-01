@@ -2,13 +2,14 @@ import json
 import logging
 import os
 import sys
+from collections import defaultdict
 from datetime import datetime
 from pathlib import Path
 
 from rest_framework.decorators import api_view
 from rest_framework.response import Response
 
-from ozon_logistics.models import OzonDeliveryQuote
+from ozon_logistics.models import OzonDeliveryQuote, OzonPosting
 
 from .scripts_monitor import scripts_auth
 
@@ -150,25 +151,49 @@ def _build_row(order_id, order):
         'cancel_text': ms.get('cancel_reason') if status == 'cancelled' else None,
         'site_link': latest.get('order_link') or None,
         'ms_link': MOYSKLAD_ORDER_URL.format(ms['customerorder_id']) if ms.get('customerorder_id') else None,
-        'ozon': _ozon_delivery(order_id),
+        # Заполняется после пагинации, одной парой запросов на страницу
+        'ozon': None,
     }
 
 
-def _ozon_delivery(order_id):
-    """Состояние доставки Ozon по заказу сайта, если она выбиралась.
+def _ozon_by_order(order_ids):
+    """Состояние доставки Ozon по заказам страницы — двумя запросами на всю.
 
-    Возвращает None для обычных заказов — колонка тогда пустая, а не «нет».
+    Считать построчно нельзя: строки строятся для всех заказов из state-файла,
+    то есть на двадцать показанных приходились сотни выборок.
     """
-    quote = (
-        OzonDeliveryQuote.objects
-        .filter(site_order_id=str(order_id))
-        .order_by('-created_at')
-        .first()
-    )
-    if quote is None:
-        return None
+    if not order_ids:
+        return {}
 
-    posting = quote.postings_tracked.order_by('-updated_at').first()
+    latest = {}
+    for quote in (OzonDeliveryQuote.objects
+                  .filter(site_order_id__in=order_ids)
+                  .order_by('site_order_id', '-created_at')):
+        latest.setdefault(quote.site_order_id, quote)
+    if not latest:
+        return {}
+
+    postings = defaultdict(list)
+    for posting in (OzonPosting.objects
+                    .filter(quote_id__in=[quote.id for quote in latest.values()])
+                    .order_by('-updated_at')):
+        postings[posting.quote_id].append(posting)
+
+    return {
+        order_id: _ozon_block(quote, postings.get(quote.id, []))
+        for order_id, quote in latest.items()
+    }
+
+
+def _ozon_block(quote, postings):
+    """Состояние доставки Ozon одного заказа для строки таблицы.
+
+    Заказ дробится на отправления по складам, поэтому показываем то, что
+    требует вмешательства, а не просто самое свежее: иначе доставленное второе
+    отправление прятало бы отменённое первое, и строка выглядела бы благополучно.
+    """
+    alarming = next((posting for posting in postings if posting.needs_attention), None)
+    shown = alarming or (postings[0] if postings else None)
     return {
         'quote_id': str(quote.id),
         'status': quote.status,
@@ -176,14 +201,14 @@ def _ozon_delivery(order_id):
         'order_number': quote.order_number or None,
         'delivery_cost': float(quote.delivery_cost or 0),
         'error': (quote.error or '')[:300] or None,
-        'posting_number': posting.posting_number if posting else None,
-        'posting_status': posting.status if posting else None,
-        'needs_attention': bool(posting and posting.needs_attention),
-        # Отменять есть смысл, только пока заказ жив
+        'posting_number': shown.posting_number if shown else None,
+        'posting_status': shown.status if shown else None,
+        'needs_attention': alarming is not None,
+        # Отменять есть смысл, пока хоть одно отправление ещё в пути
         'cancellable': (
             quote.status == OzonDeliveryQuote.STATUS_ORDERED
             and bool(quote.order_number)
-            and not (posting and posting.is_final)
+            and not (postings and all(posting.is_final for posting in postings))
         ),
     }
 
@@ -251,7 +276,9 @@ def site_orders_list(request):
         limit, offset = 20, 0
 
     page = rows[offset:offset + limit]
+    ozon_by_order = _ozon_by_order([row['order_id'] for row in page])
     for row in page:
+        row['ozon'] = ozon_by_order.get(row['order_id'])
         row['timeline'] = _build_timeline(orders_by_id[row['order_id']], orders_by_id[row['order_id']].get('ms') or {})
 
     last_checked = datetime.fromtimestamp(STATE_FILE.stat().st_mtime).isoformat()
@@ -326,13 +353,23 @@ def site_order_ozon_cancel(request, order_id):
         ozon_orders.cancel_order(
             quote, reason_message=request.data.get('message', '') if hasattr(request, 'data') else ''
         )
-        state = ozon_orders.cancellation_state(quote)
     except ozon_orders.OzonOrderError as e:
         return Response({'status': 'error', 'message': str(e)}, status=409)
     except (OzonOAuthError, OzonLogisticsError) as e:
         logger.error('Отмена доставки Ozon по заказу %s не удалась: %s', order_id, e)
         return Response(
             {'status': 'error', 'message': 'Ozon недоступен, попробуйте позже'}, status=502
+        )
+
+    # Отмена уже принята. Если состояние узнать не вышло — это не повод
+    # объявлять отмену несостоявшейся: повторная попытка упрётся в cancel_check
+    # с «заказ уже собран», и человек так и не узнает, что отменять нечего.
+    state = None
+    try:
+        state = ozon_orders.cancellation_state(quote)
+    except (ozon_orders.OzonOrderError, OzonOAuthError, OzonLogisticsError) as e:
+        logger.warning(
+            'Состояние отмены Ozon по заказу %s недоступно: %s', order_id, e
         )
 
     logger.info('Отменена доставка Ozon по заказу сайта %s (%s)', order_id, quote.order_number)

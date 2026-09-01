@@ -19,9 +19,17 @@ logger = logging.getLogger(__name__)
 
 PAGE_SIZE = 100
 MAX_PAGES = 20
+# Сколько номеров отправлений кладём в один фильтр: за 90 дней их набирается
+# больше, чем Ozon готов принять одним запросом.
+CHUNK_SIZE = 50
 # Возврат ищем только по свежим отправлениям: по доставленным год назад Ozon
 # ничего не вернёт, а запрос стоит времени.
 TRACK_DAYS = 90
+
+
+def _chunks(values, size=CHUNK_SIZE):
+    for start in range(0, len(values), size):
+        yield values[start:start + size]
 
 
 def _tracked_postings():
@@ -74,32 +82,33 @@ def sync_returns(*, client=None):
     quote_by_posting = {p.posting_number: p.quote for p in postings}
     posting_numbers = list(quote_by_posting)
 
-    last_id = None
-    for _ in range(MAX_PAGES):
-        response = client.returns_list(
-            posting_numbers=posting_numbers, limit=PAGE_SIZE, last_id=last_id
-        )
-        entries = response.get('returns') or []
-        if not entries:
-            break
+    for batch in _chunks(posting_numbers):
+        last_id = None
+        for _ in range(MAX_PAGES):
+            response = client.returns_list(
+                posting_numbers=batch, limit=PAGE_SIZE, last_id=last_id
+            )
+            entries = response.get('returns') or []
+            if not entries:
+                break
 
-        for entry in entries:
-            stored = _store(entry, quote_by_posting=quote_by_posting)
-            if stored is None:
-                continue
-            stats['seen'] += 1
-            if stored.needs_attention:
-                stats['need_attention'] += 1
-                logger.warning(
-                    'Ozon Доставка: возврат %s по отправлению %s (%s) — принять товар '
-                    'и вернуть деньги',
-                    stored.return_id, stored.posting_number,
-                    stored.reason or 'причина не указана',
-                )
+            for entry in entries:
+                stored = _store(entry, quote_by_posting=quote_by_posting)
+                if stored is None:
+                    continue
+                stats['seen'] += 1
+                if stored.needs_attention:
+                    stats['need_attention'] += 1
+                    logger.warning(
+                        'Ozon Доставка: возврат %s по отправлению %s (%s) — принять товар '
+                        'и вернуть деньги',
+                        stored.return_id, stored.posting_number,
+                        stored.reason or 'причина не указана',
+                    )
 
-        if not response.get('has_next'):
-            break
-        last_id = entries[-1].get('id')
+            if not response.get('has_next'):
+                break
+            last_id = entries[-1].get('id')
 
     logger.info(
         'Ozon Доставка: возвраты обновлены — отправлений %(postings)s, возвратов '

@@ -268,6 +268,12 @@ class OzonPosting(models.Model):
     details = models.JSONField('Ответ Ozon', null=True, blank=True)
 
     handled_at = models.DateTimeField('Отработано человеком', null=True, blank=True)
+    # Когда по отправлению последний раз смотрели дубли в МойСклад: задача
+    # ходит каждые пять минут и тратит два запроса на каждое отправление —
+    # по этой метке уже просмотренные пропускаются до следующих суток.
+    duplicates_checked_at = models.DateTimeField(
+        'Дубли МойСклад проверены', null=True, blank=True
+    )
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 
