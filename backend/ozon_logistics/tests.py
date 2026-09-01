@@ -21,6 +21,7 @@ from ozon_logistics import site_api
 from ozon_logistics.services import orders
 from ozon_logistics.services import pickup_points
 from ozon_logistics.services import site_orders
+from ozon_logistics.services import ms_duplicates
 from ozon_logistics.services import tracking
 from ozon_logistics.services import client as client_module
 from ozon_logistics.services import oauth
@@ -1612,3 +1613,95 @@ class PostingTrackingTests(TestCase):
         }})
         tracking.sync_postings(client=client)
         self.assertEqual(OzonPosting.objects.get(pk='34742020-0375-1').status, 'delivering')
+
+
+class MoyskladDuplicateReportTests(TestCase):
+    """Отчёт по дублям: только читает, ничего не меняет в МойСклад."""
+
+    def setUp(self):
+        self.quote = OzonDeliveryQuote.objects.create(
+            phone='79166229030',
+            items=[{'sku': 101, 'quantity': 1}],
+            map_point_id=378617,
+            checkout_response=_checkout_response(),
+            status=OzonDeliveryQuote.STATUS_ORDERED,
+            order_number='34742020-0375',
+            site_order_id='12811918',
+        )
+        OzonPosting.objects.create(
+            posting_number='34742020-0375-1',
+            order_number='34742020-0375',
+            quote=self.quote,
+            schema=OzonPosting.SCHEMA_FBS,
+            status='cancelled',
+        )
+
+    def _responses(self, *, site_order=None, found=()):
+        """МойСклад отвечает по-разному на фильтр и на поиск."""
+        def fake_get(url, headers=None, params=None):
+            params = params or {}
+            if 'filter' in params:
+                rows = [site_order] if site_order else []
+            else:
+                rows = list(found)
+
+            class Response:
+                @staticmethod
+                def json():
+                    return {'rows': rows}
+
+            return Response()
+
+        return fake_get
+
+    def test_finds_duplicate_by_posting_number(self):
+        ours = {'id': 'our-id', 'name': '08281', 'sum': 80000, 'payedSum': 80000,
+                'externalCode': '12811918', 'description': 'Способ доставки: Доставка OZON'}
+        theirs = {'id': 'their-id', 'name': '08282', 'sum': 55000, 'payedSum': 0,
+                  'description': '34742020-0375-1 - номер отправления'}
+
+        with patch('msapi.http.get', side_effect=self._responses(site_order=ours, found=[ours, theirs])):
+            pairs = ms_duplicates.find_duplicates()
+
+        self.assertEqual(len(pairs), 1)
+        pair = pairs[0]
+        self.assertEqual(pair['site_order']['name'], '08281')
+        # Наш же заказ не должен попасть в список дублей
+        self.assertEqual([d['name'] for d in pair['duplicates']], ['08282'])
+
+    def test_no_duplicate_is_reported_cleanly(self):
+        ours = {'id': 'our-id', 'name': '08281', 'sum': 80000, 'payedSum': 80000,
+                'externalCode': '12811918'}
+
+        with patch('msapi.http.get', side_effect=self._responses(site_order=ours, found=[ours])):
+            pairs = ms_duplicates.find_duplicates()
+
+        self.assertEqual(pairs[0]['duplicates'], [])
+
+    def test_missing_site_order_does_not_break_report(self):
+        theirs = {'id': 'their-id', 'name': '08282', 'sum': 55000, 'payedSum': 0}
+
+        with patch('msapi.http.get', side_effect=self._responses(site_order=None, found=[theirs])):
+            pairs = ms_duplicates.find_duplicates()
+
+        self.assertIsNone(pairs[0]['site_order'])
+        self.assertEqual(len(pairs[0]['duplicates']), 1)
+
+    def test_moysklad_error_is_wrapped(self):
+        with patch('msapi.http.get', side_effect=RuntimeError('сеть упала')):
+            with self.assertRaises(ms_duplicates.MoyskladError):
+                ms_duplicates.find_duplicates()
+
+    def test_command_reports_without_changing_anything(self):
+        ours = {'id': 'our-id', 'name': '08281', 'sum': 80000, 'payedSum': 80000,
+                'externalCode': '12811918'}
+        theirs = {'id': 'their-id', 'name': '08282', 'sum': 55000, 'payedSum': 0,
+                  'description': '34742020-0375-1 - номер отправления'}
+
+        out = StringIO()
+        with patch('msapi.http.get', side_effect=self._responses(site_order=ours, found=[ours, theirs])):
+            call_command('report_ozon_ms_duplicates', stdout=out)
+
+        output = out.getvalue()
+        self.assertIn('08282', output)
+        self.assertIn('Ничего не изменено', output)
