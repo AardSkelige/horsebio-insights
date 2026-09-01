@@ -38,6 +38,11 @@ CDEK_BASE_URLS = {
     'prod': 'https://api.cdek.ru',
 }
 
+# Код города СДЭК для проверок направления (Москва). Ошибка «локация получателя
+# не распознана» от города отправления не зависит, поэтому для валидации адреса
+# получателя достаточно любого корректного from_location.
+DEFAULT_FROM_CITY_CODE = 44
+
 
 class CdekError(Exception):
     """Ошибка запроса к СДЭК — текст содержит код/описание из ответа API."""
@@ -140,6 +145,28 @@ class CdekClient:
         }
         return self._post("/v2/calculator/tarifflist", body)
 
+    def location_error(self, to_location: dict, packages: list[dict],
+                       from_code: int = None) -> str | None:
+        """Проверить, понимает ли СДЭК адрес получателя, НЕ создавая заказ.
+
+        Тот же калькулятор тарифов, что и в /delivery: он отвечает ошибкой
+        v2_recipient_location_not_recognized на ровно те локации, которые потом
+        забракует создание заказа. Возвращает None, если локация распознана,
+        иначе текст ошибки СДЭК.
+
+        Нужно, чтобы не плодить в СДЭК заказы со статусом «Некорректный»: такой
+        заказ не превратится в накладную, а висит в договоре и мешает повторам."""
+        body = {
+            "from_location": {"code": from_code or DEFAULT_FROM_CITY_CODE},
+            "to_location": to_location,
+            "packages": packages,
+        }
+        try:
+            self._post("/v2/calculator/tarifflist", body)
+        except CdekError as e:
+            return str(e)
+        return None
+
     # ─── Заказы ─────────────────────────────────────────────────────────────
 
     def create_order(self, order: dict) -> dict:
@@ -164,7 +191,21 @@ class CdekClient:
         except CdekError:
             return None
         entity = resp.get("entity") if isinstance(resp, dict) else None
-        return resp if entity and entity.get("uuid") else None
+        if not (entity and entity.get("uuid")):
+            return None
+        # Отклонённый заказ подхватывать нельзя: накладной по нему не будет никогда,
+        # а мы бы спрашивали про него каждый прогон. Считаем, что заказа нет —
+        # исправив данные, вызывающий создаст новый с тем же номером (СДЭК
+        # запрещает дубли только среди активных заказов).
+        if self._is_invalid(resp):
+            return None
+        return resp
+
+    @staticmethod
+    def _is_invalid(order_resp: dict) -> bool:
+        """Заказ забракован СДЭК: запрос CREATE в состоянии INVALID."""
+        return any(r.get("type") == "CREATE" and r.get("state") == "INVALID"
+                   for r in order_resp.get("requests", []))
 
     def poll_order(self, uuid: str, attempts: int = 10, delay: float = 2.0) -> dict:
         """Дождаться, пока запрос CREATE перейдёт в финальное состояние.

@@ -18,9 +18,20 @@
   • ещё нет накладной (нет пометки в комментарии и нет записи в state).
 
 Данные для СДЭК берём целиком из МойСклад: получатель (агент), позиция (артикул,
-цена, вес), габариты упаковки — из доп-полей карточки товара. Код ПВЗ получателя
-— первым токеном адреса доставки (напр. «MSK2323»); если кода нет — курьерский
-тариф по адресу. Отправитель/продавец СДЭК подставляет сам из договора.
+цена, вес), габариты упаковки — из доп-полей карточки товара.
+Отправитель/продавец СДЭК подставляет сам из договора.
+
+Способ доставки сайт не передаёт (в письме о заказе всегда просто «СДЭК»),
+поэтому читаем его из адреса и текста заказа:
+  • адрес начинается с кода ПВЗ («MSK2323, Москва, …») — тариф склад-склад;
+  • кода нет, а в тексте заказа написано «ПВЗ» — данных не хватает: заказ
+    блокируем с причиной, чтобы вместо пункта выдачи не уехал курьер;
+  • кода нет и про ПВЗ ничего не сказано — курьерский тариф по адресу.
+Адрес получателя отдаём СДЭК с городом (или индексом) отдельным полем: строку
+целиком он геокодит буквально и спотыкается на опечатках вроде «Мневники»
+вместо «Мнёвники». Перед созданием заказа локацию проверяем калькулятором
+тарифов — иначе СДЭК плодит заказы «Некорректный», по которым накладной не
+будет никогда.
 
 Идемпотентность — свой state-файл data/.cdek_waybill_state.json (прогресс по
 каждому заказу) + пометка в комментарии заказа + поиск в СДЭК по номеру перед
@@ -81,6 +92,16 @@ TRACK_URL = "https://www.cdek.ru/ru/tracking?order_id={number}"
 
 # Первый токен адреса доставки — код ПВЗ СДЭК (латиница + цифры), напр. MSK2323
 PVZ_CODE_RE = re.compile(r"^\s*([A-Z]{2,5}\d+)\b")
+# Явная пометка «пункт выдачи» в тексте заказа. Сайт способ доставки не уточняет
+# (в письме всегда просто «СДЭК»), а менеджеры при ручном заведении пишут «СДЭК
+# ПВЗ» или «СДЭК КУРЬЕР» — на это и опираемся, когда кода ПВЗ в адресе нет.
+PVZ_WORD_RE = re.compile(r"ПВЗ|ПУНКТ\s+ВЫДАЧИ", re.I)
+# Служебные сегменты адреса, которые не могут быть городом
+POSTAL_CODE_RE = re.compile(r"^\d{6}$")
+CITY_PREFIX_RE = re.compile(
+    r"^(?:г\.?|город|пос\.?|пгт|посёлок|поселок|рп|р\.?\s*п\.?|с\.?|село|"
+    r"ст-ца|станица|д\.?|деревня)\s+", re.I)
+COUNTRY_SEGMENTS = {"россия", "рф"}
 
 
 class WaybillError(Exception):
@@ -232,6 +253,20 @@ class WaybillCreator:
         if not address:
             return "blocked", "нет адреса доставки в заказе"
 
+        package = {"weight": int(weight), "length": int(length),
+                   "width": int(width), "height": int(height)}
+        pvz = PVZ_CODE_RE.match(address)
+        to_location = None
+        if not pvz:
+            if PVZ_WORD_RE.search(self._delivery_text(order)):
+                # Пункт выдачи выбран, но кода нет — курьером отправлять нельзя
+                return "blocked", ("указан пункт выдачи, но в адресе нет его кода СДЭК "
+                                   "(напр. «MSK2323, Москва, …») — впишите код ПВЗ "
+                                   "или замените пометку на «СДЭК КУРЬЕР»")
+            to_location, loc_error = self._resolve_to_location(address, package)
+            if not to_location:
+                return "blocked", f"СДЭК не распознал адрес «{address}»: {loc_error}"
+
         return "ready", {
             "order": order,
             "product": product,
@@ -241,7 +276,57 @@ class WaybillCreator:
             "agent_name": agent.get("name") or "Покупатель",
             "phone": phone,
             "address": address,
+            "pvz_code": pvz.group(1) if pvz else None,
+            "to_location": to_location,
         }
+
+    # ─── Адрес получателя ───────────────────────────────────────────────────
+
+    def _delivery_text(self, order: dict) -> str:
+        """Текст заказа, в котором менеджер пишет способ доставки.
+
+        Свои строки (причина «не создана» и т.п.) выбрасываем: в причине про
+        отсутствующий код тоже написано «ПВЗ», и, прочитав её на следующем
+        прогоне, робот блокировал бы заказ вечно — даже после правки менеджера."""
+        saf = order.get("shipmentAddressFull") or {}
+        own = [ln for ln in (order.get("description") or "").split("\n")
+               if not self._is_managed_line(ln)]
+        return " ".join(own) + " " + (saf.get("comment") or "")
+
+    @staticmethod
+    def _to_location_candidates(address: str) -> list:
+        """Варианты to_location для курьерской доставки — от точного к общему.
+
+        Строку целиком СДЭК геокодит буквально, поэтому сначала пробуем отдать
+        индекс или город отдельным полем — так адрес распознаётся даже с
+        опечаткой в улице."""
+        parts = [p.strip() for p in address.split(",") if p.strip()]
+        meaningful = [p for p in parts
+                      if not POSTAL_CODE_RE.match(p) and p.lower() not in COUNTRY_SEGMENTS]
+        candidates = []
+
+        index = next((p for p in parts if POSTAL_CODE_RE.match(p)), None)
+        if index:
+            candidates.append({"postal_code": index,
+                               "address": ", ".join(meaningful) or address})
+        if meaningful:
+            city = CITY_PREFIX_RE.sub("", meaningful[0]).strip()
+            rest = ", ".join(meaningful[1:])
+            if city and rest:
+                candidates.append({"city": city, "address": rest})
+
+        candidates.append({"address": address})
+        return candidates
+
+    def _resolve_to_location(self, address: str, package: dict):
+        """→ (to_location, None) для первого варианта, который СДЭК распознал,
+        либо (None, текст ошибки), если не распознал ни один."""
+        last_error = None
+        for candidate in self._to_location_candidates(address):
+            last_error = self.cdek.location_error(candidate, [package])
+            if last_error is None:
+                return candidate, None
+        return None, last_error
 
     # ─── Сборка payload СДЭК ────────────────────────────────────────────────
 
@@ -277,14 +362,13 @@ class WaybillCreator:
             }],
         }
 
-        # Код ПВЗ в адресе → тариф склад-склад; иначе курьер по адресу
-        pvz = PVZ_CODE_RE.match(ctx["address"])
-        if pvz:
+        # Код ПВЗ в адресе → тариф склад-склад; иначе курьер по разобранному адресу
+        if ctx.get("pvz_code"):
             payload["tariff_code"] = TARIFF_PVZ
-            payload["delivery_point"] = pvz.group(1)
+            payload["delivery_point"] = ctx["pvz_code"]
         else:
             payload["tariff_code"] = TARIFF_COURIER
-            payload["to_location"] = {"address": ctx["address"]}
+            payload["to_location"] = ctx["to_location"]
         return payload
 
     # ─── Создание накладной по одному заказу ────────────────────────────────
@@ -321,7 +405,14 @@ class WaybillCreator:
             st["created_at"] = datetime.now().isoformat()
 
         if not cdek_number:
-            info = self.cdek.poll_order(cdek_uuid)
+            try:
+                info = self.cdek.poll_order(cdek_uuid)
+            except CdekError:
+                # Забракованный заказ помнить нельзя: иначе каждый прогон
+                # спрашиваем про него же и получаем ту же ошибку. Забываем — после
+                # исправления данных отправление создастся заново.
+                st.pop("cdek_uuid", None)
+                raise
             cdek_number = (info.get("entity") or {}).get("cdek_number")
             st["cdek_number"] = cdek_number
             print(f"  Заказ {number}: номер СДЭК {cdek_number}")
@@ -443,7 +534,14 @@ class WaybillCreator:
                 # Одиночка, но данных не хватает — пишем причину в комментарий заказа
                 counts["blocked"] += 1
                 print(f"  Заказ {order.get('name')}: не могу создать — {detail}")
-                self._touch(order, status="blocked", reason=detail)
+                st = self._touch(order, status="blocked", reason=detail)
+                # Забракованное СДЭК отправление помнить незачем: номера у него нет
+                # и не будет, а после правки данных нужно создавать новое. Иначе
+                # исправленный заказ сначала потратит цикл на ту же ошибку.
+                if not st.get("cdek_number"):
+                    st.pop("cdek_uuid", None)
+                    st.pop("last_error", None)
+                    st.pop("last_error_at", None)
                 try:
                     self._write_order_note(order_id, reason=detail)
                 except Exception as e:
