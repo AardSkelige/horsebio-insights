@@ -494,11 +494,15 @@ class CsvExportTest(TestCase):
     def tearDown(self):
         cache.clear()
 
-    def _get(self, positions, description='<p>Текст основной карточки</p>'):
+    def _get(self, positions, description='<p>Текст основной карточки</p>',
+             fields=None):
+        fields = {'sostav': '<h3>Состав</h3><ul><li>Лён</li></ul>',
+                  'naznacenie': 'Пищеварение'} if fields is None else fields
         with patch('api.views.discounted.positions_snapshot', return_value=positions), \
              patch('api.views.discounted.site_feed.pictures_for',
                    return_value=['https://horse-bio.ru/d/a.png', 'https://horse-bio.ru/d/b.png']), \
-             patch('api.views.discounted.site_feed.description_for', return_value=description):
+             patch('api.views.discounted.site_feed.description_for', return_value=description), \
+             patch('api.views.discounted.site_feed.rich_fields_for', return_value=fields):
             return self.client.get('/api/discounted/export.csv')
 
     @staticmethod
@@ -566,6 +570,23 @@ class CsvExportTest(TestCase):
         """Пустое описание лучше, чем затёртое: восстанавливать его неоткуда."""
         row = self._get([self._position()], description='').content.decode('cp1251').splitlines()[1]
         self.assertNotIn('истекающим сроком годности', row)
+
+    def test_carries_the_extra_fields_of_the_source_card(self):
+        """Состав, применение и назначение на сайте обязательные — без них не сохранить."""
+        response = self._get([self._position()])
+        rows = response.content.decode('cp1251').splitlines()
+
+        self.assertIn('cf_sostav', rows[0])
+        self.assertIn('cf_naznacenie', rows[0])
+        # вёрстка сохраняется: в фиде значения приходят без тегов, поэтому
+        # берём их со страницы товара
+        self.assertIn('<h3>Состав</h3>', rows[1])
+
+    def test_columns_follow_the_fields_that_actually_came(self):
+        """Набор доп. полей задаётся в админке и у товаров разный."""
+        header = self._get([self._position()], fields={'ves': '1600 г'}).content.decode('cp1251').splitlines()[0]
+        self.assertIn('cf_ves', header)
+        self.assertNotIn('cf_sostav', header)
 
 
 class RefreshTest(TestCase):

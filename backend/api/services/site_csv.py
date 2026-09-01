@@ -47,12 +47,20 @@ COLUMNS = [
 
 
 def build(rows):
-    """Собрать файл импорта. rows — список словарей с ключами из COLUMNS."""
+    """Собрать файл импорта. rows — список словарей с ключами из COLUMNS.
+
+    Дополнительные поля карточки (`cf_*`) в COLUMNS не перечислены: их набор
+    задаётся в админке сайта и у разных товаров разный. Поэтому колонки под них
+    добавляются по факту — какие пришли в данных, такие и будут в файле.
+    """
+    extra = sorted({key for row in rows for key in row if key.startswith("cf_")})
+    columns = COLUMNS + [(key, key) for key in extra]
+
     buffer = io.StringIO(newline="")
     writer = csv.writer(buffer, delimiter=";", quoting=csv.QUOTE_MINIMAL)
-    writer.writerow([f"{field} : {title}" for field, title in COLUMNS])
+    writer.writerow([f"{field} : {title}" for field, title in columns])
     for row in rows:
-        writer.writerow([row.get(field, "") for field, _ in COLUMNS])
+        writer.writerow([row.get(field, "") for field, _ in columns])
     # errors="replace": в описаниях попадаются символы, которых нет в cp1251
     # (длинное тире, неразрывный пробел). Уронить выгрузку из-за них хуже,
     # чем потерять один знак.

@@ -44,7 +44,7 @@ def _position(**kwargs):
 
 
 class RulesTest(TestCase):
-    """Три повода из регламента — и тишина, когда всё в порядке."""
+    """Поводы из регламента — и тишина, когда всё в порядке."""
 
     def setUp(self):
         cache.clear()
@@ -135,6 +135,30 @@ class RulesTest(TestCase):
         second, = self._run([_position(state=STATE_NO_DATE, expires=None, days_left=None,
                                        quantity=6, site_quantity=6)])
         self.assertEqual(first.fingerprint, second.fingerprint)
+
+    def test_stock_without_a_card_on_the_site_asks_to_publish(self):
+        """Товар лежит, карточки нет — срок идёт, а продаж нет."""
+        items = self._run([_position(published=False, site_quantity=None)])
+        self.assertEqual(len(items), 1)
+        self.assertIn('не выложено на сайт', items[0].title)
+        self.assertIn('32 шт', items[0].body)
+
+    def test_publishing_is_not_suggested_while_the_feed_is_silent(self):
+        """published=None значит «не проверили», а не «не выложено»."""
+        self.assertEqual(self._run([_position(published=None, site_quantity=None)]), [])
+
+    def test_publishing_is_not_suggested_for_what_should_be_withdrawn(self):
+        """Товар с истекающим сроком выкладывать нельзя — его снимают."""
+        items = self._run([_position(published=False, site_quantity=None,
+                                     state=STATE_DELIST, days_left=40)])
+        self.assertEqual(len(items), 1)
+        self.assertIn('пора снимать', items[0].title)
+
+    def test_quantity_does_not_change_the_not_published_fingerprint(self):
+        """Продажи со склада идут и без витрины, но дело от этого не меняется."""
+        first = self._run([_position(published=False, site_quantity=None, quantity=40)])
+        second = self._run([_position(published=False, site_quantity=None, quantity=38)])
+        self.assertEqual(first[0].fingerprint, second[0].fingerprint)
 
     def test_one_position_gives_one_notification(self):
         """Пора снимать и остаток разошёлся — действие одно, значит и повод один."""

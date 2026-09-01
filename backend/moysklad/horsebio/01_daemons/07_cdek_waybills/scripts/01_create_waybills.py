@@ -58,6 +58,10 @@ from pathlib import Path
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', '..', '..', '_shared'))
 from api_client import ProductionHelper, MOYSKLAD_TOKEN, BASE_URL
 from cdek_client import CdekClient, CdekError
+from waybill_rules import (
+    MARKER_PREFIX, REASON_MARKER_PREFIX, TRACK_LINE_PREFIX,
+    delivery_text, is_managed_line, resolve_delivery,
+)
 
 STATE_FILE = Path(__file__).parent.parent / "data" / ".cdek_waybill_state.json"
 
@@ -80,28 +84,12 @@ BARCODE_FORMAT = "A6"           # формат ШК места (A4/A5/A6/A7) —
 # Причина: почему накладная НЕ создана (не заполнены габариты и т.п.) — чтобы
 # сотрудник видел в самом заказе, почему накладной нет. Обе строки — «управляемые»:
 # при следующем прогоне они переписываются/снимаются в зависимости от состояния.
-MARKER_PREFIX = "Накладная СДЭК №"
 # Имена прикрепляемых PDF. По этим же префиксам проверяем, что накладная реально
 # лежит в заказе: сотрудник, сохранив карточку, открытую до прихода накладной,
 # затирает и файлы, и пометку (МойСклад шлёт полное состояние формы).
 WAYBILL_FILE_PREFIX = "Накладная СДЭК"
 BARCODE_FILE_PREFIX = "ШК места СДЭК"
-REASON_MARKER_PREFIX = "⚠ Накладная СДЭК не создана:"
-TRACK_LINE_PREFIX = "Отслеживание: https://www.cdek.ru"
 TRACK_URL = "https://www.cdek.ru/ru/tracking?order_id={number}"
-
-# Первый токен адреса доставки — код ПВЗ СДЭК (латиница + цифры), напр. MSK2323
-PVZ_CODE_RE = re.compile(r"^\s*([A-Z]{2,5}\d+)\b")
-# Явная пометка «пункт выдачи» в тексте заказа. Сайт способ доставки не уточняет
-# (в письме всегда просто «СДЭК»), а менеджеры при ручном заведении пишут «СДЭК
-# ПВЗ» или «СДЭК КУРЬЕР» — на это и опираемся, когда кода ПВЗ в адресе нет.
-PVZ_WORD_RE = re.compile(r"ПВЗ|ПУНКТ\s+ВЫДАЧИ", re.I)
-# Служебные сегменты адреса, которые не могут быть городом
-POSTAL_CODE_RE = re.compile(r"^\d{6}$")
-CITY_PREFIX_RE = re.compile(
-    r"^(?:г\.?|город|пос\.?|пгт|посёлок|поселок|рп|р\.?\s*п\.?|с\.?|село|"
-    r"ст-ца|станица|д\.?|деревня)\s+", re.I)
-COUNTRY_SEGMENTS = {"россия", "рф"}
 
 
 class WaybillError(Exception):
@@ -255,17 +243,10 @@ class WaybillCreator:
 
         package = {"weight": int(weight), "length": int(length),
                    "width": int(width), "height": int(height)}
-        pvz = PVZ_CODE_RE.match(address)
-        to_location = None
-        if not pvz:
-            if PVZ_WORD_RE.search(self._delivery_text(order)):
-                # Пункт выдачи выбран, но кода нет — курьером отправлять нельзя
-                return "blocked", ("указан пункт выдачи, но в адресе нет его кода СДЭК "
-                                   "(напр. «MSK2323, Москва, …») — впишите код ПВЗ "
-                                   "или замените пометку на «СДЭК КУРЬЕР»")
-            to_location, loc_error = self._resolve_to_location(address, package)
-            if not to_location:
-                return "blocked", f"СДЭК не распознал адрес «{address}»: {loc_error}"
+        kind, value = resolve_delivery(address, delivery_text(order), package,
+                                       self.cdek.location_error)
+        if kind == "blocked":
+            return "blocked", value
 
         return "ready", {
             "order": order,
@@ -276,57 +257,9 @@ class WaybillCreator:
             "agent_name": agent.get("name") or "Покупатель",
             "phone": phone,
             "address": address,
-            "pvz_code": pvz.group(1) if pvz else None,
-            "to_location": to_location,
+            "pvz_code": value if kind == "pvz" else None,
+            "to_location": value if kind == "courier" else None,
         }
-
-    # ─── Адрес получателя ───────────────────────────────────────────────────
-
-    def _delivery_text(self, order: dict) -> str:
-        """Текст заказа, в котором менеджер пишет способ доставки.
-
-        Свои строки (причина «не создана» и т.п.) выбрасываем: в причине про
-        отсутствующий код тоже написано «ПВЗ», и, прочитав её на следующем
-        прогоне, робот блокировал бы заказ вечно — даже после правки менеджера."""
-        saf = order.get("shipmentAddressFull") or {}
-        own = [ln for ln in (order.get("description") or "").split("\n")
-               if not self._is_managed_line(ln)]
-        return " ".join(own) + " " + (saf.get("comment") or "")
-
-    @staticmethod
-    def _to_location_candidates(address: str) -> list:
-        """Варианты to_location для курьерской доставки — от точного к общему.
-
-        Строку целиком СДЭК геокодит буквально, поэтому сначала пробуем отдать
-        индекс или город отдельным полем — так адрес распознаётся даже с
-        опечаткой в улице."""
-        parts = [p.strip() for p in address.split(",") if p.strip()]
-        meaningful = [p for p in parts
-                      if not POSTAL_CODE_RE.match(p) and p.lower() not in COUNTRY_SEGMENTS]
-        candidates = []
-
-        index = next((p for p in parts if POSTAL_CODE_RE.match(p)), None)
-        if index:
-            candidates.append({"postal_code": index,
-                               "address": ", ".join(meaningful) or address})
-        if meaningful:
-            city = CITY_PREFIX_RE.sub("", meaningful[0]).strip()
-            rest = ", ".join(meaningful[1:])
-            if city and rest:
-                candidates.append({"city": city, "address": rest})
-
-        candidates.append({"address": address})
-        return candidates
-
-    def _resolve_to_location(self, address: str, package: dict):
-        """→ (to_location, None) для первого варианта, который СДЭК распознал,
-        либо (None, текст ошибки), если не распознал ни один."""
-        last_error = None
-        for candidate in self._to_location_candidates(address):
-            last_error = self.cdek.location_error(candidate, [package])
-            if last_error is None:
-                return candidate, None
-        return None, last_error
 
     # ─── Сборка payload СДЭК ────────────────────────────────────────────────
 
@@ -456,14 +389,6 @@ class WaybillCreator:
             [{"filename": filename, "content": base64.b64encode(content).decode()}],
         )
 
-    @staticmethod
-    def _is_managed_line(line: str) -> bool:
-        """Строки комментария, которыми управляет робот (успех/трек/причина)."""
-        s = line.strip()
-        return (s.startswith(MARKER_PREFIX)
-                or s.startswith(REASON_MARKER_PREFIX)
-                or s.startswith(TRACK_LINE_PREFIX))
-
     def _write_order_note(self, order_id: str, *, success_number: str = None, reason: str = None) -> None:
         """Единая точка правки комментария заказа. Снимает прежние управляемые строки
         и ставит нужную: успех (номер+трек) ИЛИ причину «не создана». Пишем в МойСклад
@@ -483,7 +408,7 @@ class WaybillCreator:
 
         fresh = self.ms._get(f"/entity/customerorder/{order_id}")
         description = fresh.get("description") or ""
-        kept = [ln for ln in description.split("\n") if not self._is_managed_line(ln)]
+        kept = [ln for ln in description.split("\n") if not is_managed_line(ln)]
         base = "\n".join(kept).rstrip()
         new_description = "\n".join(([base] if base else []) + block).strip()
         if new_description != description:

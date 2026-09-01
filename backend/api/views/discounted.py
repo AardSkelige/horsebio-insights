@@ -577,11 +577,15 @@ def _must_hide(position):
     return position["state"] in (STATE_EXPIRED, STATE_DELIST) or position["quantity"] <= 0
 
 
-def _csv_row(position, pictures, description=""):
+def _csv_row(position, pictures, description="", fields=None):
     """Строка файла импорта по позиции склада «Уценка».
 
     description — текст основной карточки. Пустой оставляем поле пустым: импорт
     затрёт описание, которое уже стоит в карточке, а восстанавливать его неоткуда.
+
+    fields — дополнительные поля основной карточки (состав, применение,
+    противопоказания и прочее). На сайте они обязательные, без них карточку
+    не сохранить, а руками это несколько тысяч знаков на позицию.
     """
     name = position["name"]
     return {
@@ -608,6 +612,7 @@ def _csv_row(position, pictures, description=""):
         "seo_title": f"{name} — уценка со скидкой 30 % | Horse-Bio",
         "seo_description": ANNOUNCE,
         "seo_keywords": _keywords(name),
+        **{f"cf_{key}": value for key, value in (fields or {}).items()},
     }
 
 
@@ -646,6 +651,7 @@ def discounted_csv(request):
             position,
             site_feed.pictures_for(source),
             site_feed.description_for(source),
+            site_feed.rich_fields_for(source),
         ))
 
     response = HttpResponse(site_csv.build(rows), content_type="text/csv; charset=windows-1251")
