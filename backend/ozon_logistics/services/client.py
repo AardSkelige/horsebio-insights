@@ -242,9 +242,16 @@ class OzonLogisticsClient:
             payload['cursor'] = cursor
         return self.request('/v3/posting/fbo/list', payload)
 
-    def returns_list(self, *, limit=100, last_id=None):
-        """Возвраты FBO и FBS: невыкупы и возвраты после получения."""
+    def returns_list(self, *, posting_numbers=None, limit=100, last_id=None):
+        """Возвраты FBO и FBS: невыкупы и возвраты после получения.
+
+        Фильтруем по номерам отправлений — так забираем только свои. Фильтры по
+        датам взаимоисключающие (документация запрещает больше одного), поэтому
+        их здесь нет вовсе.
+        """
         payload = {'limit': limit}
+        if posting_numbers:
+            payload['filter'] = {'posting_numbers': [str(n) for n in posting_numbers]}
         if last_id:
             payload['last_id'] = last_id
         return self.request('/v1/returns/list', payload)

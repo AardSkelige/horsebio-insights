@@ -219,6 +219,16 @@ SCRIPTS_CONFIG = [
         'args': ['sync_ozon_postings'],
     },
     {
+        'id': 'horsebio_ozon_returns',
+        'topic': 'Обновление данных',
+        'name': 'Возвраты Ozon Доставки',
+        'account': 'HorseBio',
+        'schedule': 'Каждые 5 мин',
+        'description': 'Возвраты по нашим отправлениям Ozon: товар едет обратно, надо принять и вернуть деньги (Django-команда sync_ozon_returns)',
+        'script': '/app/manage.py',
+        'args': ['sync_ozon_returns'],
+    },
+    {
         'id': 'horsebio_ozon_duplicates',
         'topic': 'Обновление данных',
         'name': 'Дубли заказов Ozon',

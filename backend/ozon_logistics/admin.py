@@ -3,6 +3,7 @@ from django.utils import timezone
 
 from .models import (
     OzonDeliveryQuote, OzonOAuthToken, OzonPickupPoint, OzonPosting, OzonProduct,
+    OzonReturn,
 )
 
 
@@ -57,3 +58,22 @@ class OzonPostingAdmin(admin.ModelAdmin):
     def mark_handled(self, request, queryset):
         updated = queryset.update(handled_at=timezone.now())
         self.message_user(request, f'Отмечено отправлений: {updated}')
+
+
+@admin.register(OzonReturn)
+class OzonReturnAdmin(admin.ModelAdmin):
+    list_display = ('return_id', 'posting_number', 'return_type', 'status_name',
+                    'needs_attention', 'return_date', 'handled_at')
+    list_filter = ('return_type', 'schema', 'status_sys_name')
+    search_fields = ('return_id', 'posting_number', 'order_number')
+    readonly_fields = ('created_at', 'updated_at', 'details')
+    actions = ['mark_handled']
+
+    @admin.display(boolean=True, description='Не разобран')
+    def needs_attention(self, obj):
+        return obj.needs_attention
+
+    @admin.action(description='Отметить: товар принят, деньги возвращены')
+    def mark_handled(self, request, queryset):
+        updated = queryset.update(handled_at=timezone.now())
+        self.message_user(request, f'Отмечено возвратов: {updated}')

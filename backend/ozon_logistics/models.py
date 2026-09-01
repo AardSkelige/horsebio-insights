@@ -287,3 +287,53 @@ class OzonPosting(models.Model):
     def needs_attention(self):
         """Отправление не доехало, а деньги покупателя у нас — нужен возврат."""
         return self.status in self.ALARMING_STATUSES and self.handled_at is None
+
+
+class OzonReturn(models.Model):
+    """Возврат по нашему отправлению: товар физически едет обратно.
+
+    Это не то же самое, что отменённое отправление: отмена — статус доставки, а
+    возврат — конкретная посылка, которую надо принять на складе. Полный возврат
+    означает, что покупателю причитается вся сумма, частичный — только за
+    отказанные позиции.
+    """
+
+    TYPE_FULL = 'FullReturn'
+    TYPE_PARTIAL = 'PartialReturn'
+
+    return_id = models.CharField('ID возврата в Ozon', max_length=64, primary_key=True)
+    posting_number = models.CharField('Отправление', max_length=64, db_index=True)
+    order_number = models.CharField('Заказ Ozon', max_length=64, blank=True)
+    quote = models.ForeignKey(
+        OzonDeliveryQuote, on_delete=models.SET_NULL, null=True, blank=True,
+        related_name='returns', verbose_name='Расчёт',
+    )
+
+    return_type = models.CharField('Тип возврата', max_length=32, blank=True)
+    schema = models.CharField('Схема', max_length=16, blank=True)
+    reason = models.CharField('Причина', max_length=500, blank=True)
+    status_name = models.CharField('Статус', max_length=200, blank=True)
+    status_sys_name = models.CharField('Системный статус', max_length=100, blank=True)
+    return_date = models.DateTimeField('Дата возврата', null=True, blank=True)
+    details = models.JSONField('Ответ Ozon', null=True, blank=True)
+
+    handled_at = models.DateTimeField('Отработано человеком', null=True, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        verbose_name = 'Возврат Ozon'
+        verbose_name_plural = 'Возвраты Ozon'
+        ordering = ['-created_at']
+
+    def __str__(self):
+        return f'{self.return_id} · {self.posting_number}'
+
+    @property
+    def is_full(self):
+        return self.return_type == self.TYPE_FULL
+
+    @property
+    def needs_attention(self):
+        """Возврат ещё не разобран: товар принять, деньги вернуть."""
+        return self.handled_at is None

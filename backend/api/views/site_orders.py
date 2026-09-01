@@ -8,6 +8,8 @@ from pathlib import Path
 from rest_framework.decorators import api_view
 from rest_framework.response import Response
 
+from ozon_logistics.models import OzonDeliveryQuote
+
 from .scripts_monitor import scripts_auth
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', '..', 'moysklad', 'horsebio', '_shared'))
@@ -148,6 +150,41 @@ def _build_row(order_id, order):
         'cancel_text': ms.get('cancel_reason') if status == 'cancelled' else None,
         'site_link': latest.get('order_link') or None,
         'ms_link': MOYSKLAD_ORDER_URL.format(ms['customerorder_id']) if ms.get('customerorder_id') else None,
+        'ozon': _ozon_delivery(order_id),
+    }
+
+
+def _ozon_delivery(order_id):
+    """Состояние доставки Ozon по заказу сайта, если она выбиралась.
+
+    Возвращает None для обычных заказов — колонка тогда пустая, а не «нет».
+    """
+    quote = (
+        OzonDeliveryQuote.objects
+        .filter(site_order_id=str(order_id))
+        .order_by('-created_at')
+        .first()
+    )
+    if quote is None:
+        return None
+
+    posting = quote.postings_tracked.order_by('-updated_at').first()
+    return {
+        'quote_id': str(quote.id),
+        'status': quote.status,
+        'status_label': quote.get_status_display(),
+        'order_number': quote.order_number or None,
+        'delivery_cost': float(quote.delivery_cost or 0),
+        'error': (quote.error or '')[:300] or None,
+        'posting_number': posting.posting_number if posting else None,
+        'posting_status': posting.status if posting else None,
+        'needs_attention': bool(posting and posting.needs_attention),
+        # Отменять есть смысл, только пока заказ жив
+        'cancellable': (
+            quote.status == OzonDeliveryQuote.STATUS_ORDERED
+            and bool(quote.order_number)
+            and not (posting and posting.is_final)
+        ),
     }
 
 
@@ -257,3 +294,51 @@ def site_order_delete(request, order_id):
         return Response({'status': 'error', 'message': str(e)}, status=500)
 
     return Response({'status': 'success'})
+
+
+@scripts_auth
+@api_view(['POST'])
+def site_order_ozon_cancel(request, order_id):
+    """
+    POST /api/site-orders/{order_id}/ozon/cancel/ — отменить доставку Ozon.
+
+    Отмена у Ozon асинхронная: успешный ответ значит «запрос принят», а не
+    «отменено». Поэтому возвращаем и состояние отмены — деньги покупателю
+    возвращают только после подтверждения (кнопкой «Полный возврат» в админке
+    сайта).
+    """
+    from ozon_logistics.services import orders as ozon_orders
+    from ozon_logistics.services.client import OzonLogisticsError
+    from ozon_logistics.services.oauth import OzonOAuthError
+
+    quote = (
+        OzonDeliveryQuote.objects
+        .filter(site_order_id=str(order_id))
+        .order_by('-created_at')
+        .first()
+    )
+    if quote is None:
+        return Response(
+            {'status': 'error', 'message': 'У этого заказа нет доставки Ozon'}, status=404
+        )
+
+    try:
+        ozon_orders.cancel_order(
+            quote, reason_message=request.data.get('message', '') if hasattr(request, 'data') else ''
+        )
+        state = ozon_orders.cancellation_state(quote)
+    except ozon_orders.OzonOrderError as e:
+        return Response({'status': 'error', 'message': str(e)}, status=409)
+    except (OzonOAuthError, OzonLogisticsError) as e:
+        logger.error('Отмена доставки Ozon по заказу %s не удалась: %s', order_id, e)
+        return Response(
+            {'status': 'error', 'message': 'Ozon недоступен, попробуйте позже'}, status=502
+        )
+
+    logger.info('Отменена доставка Ozon по заказу сайта %s (%s)', order_id, quote.order_number)
+    return Response({
+        'status': 'success',
+        'order_number': quote.order_number,
+        'state': state.get('state') if isinstance(state, dict) else None,
+        'message': 'Отмена принята Ozon. Деньги верните после подтверждения.',
+    })

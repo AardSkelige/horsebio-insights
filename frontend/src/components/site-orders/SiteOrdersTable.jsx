@@ -1,6 +1,7 @@
 import PropTypes from 'prop-types';
 import { SkeletonRows } from '../ui';
-import { Globe, Package, Trash2, Loader2 } from 'lucide-react';
+import { useState } from 'react';
+import { Globe, Package, Trash2, Loader2, Truck, XCircle } from 'lucide-react';
 import { siteOrdersApi } from '../../api/siteOrdersApi';
 import { useConfirmDelete } from '../../hooks/useConfirmDelete';
 import './SiteOrdersTable.css';
@@ -34,6 +35,84 @@ function DiscountNote({ row }) {
     );
 }
 DiscountNote.propTypes = { row: PropTypes.object.isRequired };
+
+const POSTING_LABELS = {
+    awaiting_packaging: 'Ожидает сборки',
+    awaiting_deliver: 'Ожидает отгрузки',
+    delivering: 'В пути',
+    delivered: 'Доставлено',
+    cancelled: 'Отменено',
+    not_accepted: 'Не принято',
+};
+
+function OzonChip({ ozon }) {
+    if (!ozon) return null;
+
+    const label = POSTING_LABELS[ozon.posting_status] || ozon.status_label;
+    const tone = ozon.needs_attention || ozon.status === 'unknown' || ozon.status === 'failed'
+        ? 'err'
+        : ozon.posting_status === 'delivered' ? 'ok' : 'processing';
+
+    return (
+        <div className="status-wrap" tabIndex={0} style={{ marginTop: 4 }}>
+            <span className={`chip ${tone}`}>
+                <Truck size={11} style={{ marginRight: 4 }} />
+                Ozon: {label}
+            </span>
+            <div className="tip">
+                {ozon.order_number && (
+                    <div className="step-line"><span className="m">Заказ</span><span>{ozon.order_number}</span></div>
+                )}
+                {ozon.posting_number && (
+                    <div className="step-line"><span className="m">Отправление</span><span>{ozon.posting_number}</span></div>
+                )}
+                {ozon.delivery_cost > 0 && (
+                    <div className="step-line"><span className="m">Логистика</span><span>{formatRub(ozon.delivery_cost)}</span></div>
+                )}
+                {ozon.error && (
+                    <div className="step-line"><span className="m">Ошибка</span><span>{ozon.error}</span></div>
+                )}
+            </div>
+        </div>
+    );
+}
+OzonChip.propTypes = { ozon: PropTypes.object };
+
+function CancelOzonButton({ row, onDone }) {
+    const [busy, setBusy] = useState(false);
+
+    if (!row.ozon?.cancellable) return null;
+
+    const handleCancel = async () => {
+        const confirmed = window.confirm(
+            `Отменить доставку Ozon по заказу №${row.number}?\n\n` +
+            'Посылка не поедет. Деньги покупателю верните кнопкой «Полный возврат» ' +
+            'в админке сайта — после того, как Ozon подтвердит отмену.'
+        );
+        if (!confirmed) return;
+
+        setBusy(true);
+        try {
+            const { data } = await siteOrdersApi.cancelOzon(row.order_id);
+            window.alert(data?.message || 'Отмена принята Ozon');
+            onDone?.();
+        } catch (e) {
+            window.alert(e?.response?.data?.message || 'Не удалось отменить доставку');
+        } finally {
+            setBusy(false);
+        }
+    };
+
+    return (
+        <span className="act-wrap" tabIndex={0}>
+            <button type="button" className="icon-btn danger" onClick={handleCancel} disabled={busy}>
+                {busy ? <Loader2 size={15} className="animate-spin" /> : <XCircle size={15} />}
+            </button>
+            <span className="tip act-tip">Отменить доставку Ozon</span>
+        </span>
+    );
+}
+CancelOzonButton.propTypes = { row: PropTypes.object.isRequired, onDone: PropTypes.func };
 
 function StatusChip({ row }) {
     const cls = STATUS_CLASS[row.status] || 'processing';
@@ -87,6 +166,7 @@ function RowActions({ row, onDeleted, canDelete }) {
                 </a>
                 <span className="tip act-tip">{row.ms_link ? 'Открыть в МойСклад' : 'Черновик ещё не создан'}</span>
             </span>
+            <CancelOzonButton row={row} onDone={onDeleted} />
             {canDelete && (
                 <span className="act-wrap" tabIndex={0}>
                     <button
@@ -144,6 +224,7 @@ function OrderCard({ row, onDeleted, canDelete }) {
                 <span style={{ fontFamily: 'var(--mono)', fontSize: 11.5, color: 'var(--muted)' }}>№{row.number} · {row.date_label}</span>
                 <StatusChip row={row} />
             </div>
+            {row.ozon && <div style={{ marginTop: 6 }}><OzonChip ozon={row.ozon} /></div>}
             <div style={{ marginTop: 8 }}><RowActions row={row} onDeleted={onDeleted} canDelete={canDelete} /></div>
         </div>
     );
@@ -196,7 +277,10 @@ export default function SiteOrdersTable({ rows, loading, sort, onSortChange, onD
                                 {formatRub(row.sum)}
                                 <DiscountNote row={row} />
                             </td>
-                            <td><StatusChip row={row} /></td>
+                            <td>
+                                <StatusChip row={row} />
+                                <OzonChip ozon={row.ozon} />
+                            </td>
                             <td><RowActions row={row} onDeleted={onDeleted} canDelete={canDelete} /></td>
                         </tr>
                     ))}

@@ -2,7 +2,9 @@ import { describe, it, expect, vi } from 'vitest';
 import { render, screen } from '@testing-library/react';
 import SiteOrdersTable from './SiteOrdersTable';
 
-vi.mock('../../api/siteOrdersApi', () => ({ siteOrdersApi: { remove: vi.fn() } }));
+vi.mock('../../api/siteOrdersApi', () => ({
+    siteOrdersApi: { remove: vi.fn(), cancelOzon: vi.fn() },
+}));
 
 const BASE_ROW = {
     order_id: '4428118', number: '2074', name: 'Алла Носова', phone: '+79630948363',
@@ -50,5 +52,58 @@ describe('SiteOrdersTable — скидка', () => {
         renderTable({}, true);
 
         expect(screen.getByText('−1 500 ₽')).toBeInTheDocument();
+    });
+});
+
+
+describe('SiteOrdersTable — доставка Ozon', () => {
+    const OZON = {
+        quote_id: 'f91bf49c-078d-4fec-8096-09bc49638a6a',
+        status: 'ordered', status_label: 'Заказ создан в Ozon',
+        order_number: '34742020-0375', posting_number: '34742020-0375-1',
+        posting_status: 'awaiting_packaging', delivery_cost: 97,
+        needs_attention: false, cancellable: true,
+    };
+
+    // У обычных заказов доставки Ozon нет — колонка должна молчать, а не
+    // сообщать «нет доставки».
+    it('у заказа без доставки Ozon чипа нет', () => {
+        renderTable({});
+
+        expect(screen.queryByText(/Ozon:/)).not.toBeInTheDocument();
+    });
+
+    it('показывает статус отправления, а не расчёта', () => {
+        renderTable({ ozon: OZON });
+
+        expect(screen.getByText('Ozon: Ожидает сборки')).toBeInTheDocument();
+    });
+
+    it('в подсказке — номер отправления и стоимость логистики', () => {
+        renderTable({ ozon: OZON });
+
+        expect(screen.getByText('34742020-0375-1')).toBeInTheDocument();
+        expect(screen.getByText('97 ₽')).toBeInTheDocument();
+    });
+
+    it('пока заказ живой — кнопка отмены есть', () => {
+        renderTable({ ozon: OZON });
+
+        expect(screen.getByText('Отменить доставку Ozon')).toBeInTheDocument();
+    });
+
+    it('у доставленного заказа отменять нечего', () => {
+        renderTable({ ozon: { ...OZON, posting_status: 'delivered', cancellable: false } });
+
+        expect(screen.getByText('Ozon: Доставлено')).toBeInTheDocument();
+        expect(screen.queryByText('Отменить доставку Ozon')).not.toBeInTheDocument();
+    });
+
+    it('невыкуп подсвечивается как проблема', () => {
+        renderTable({
+            ozon: { ...OZON, posting_status: 'not_accepted', needs_attention: true, cancellable: false },
+        });
+
+        expect(screen.getByText('Ozon: Не принято').closest('.chip')).toHaveClass('err');
     });
 });

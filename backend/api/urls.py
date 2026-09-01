@@ -7,7 +7,7 @@ from .views.cash_flow import cash_flow_report, cash_flow_export  # импорт 
 from .views import scripts_monitor, checks
 from .views.inventory_tracking import inventory_current, inventory_refresh, inventory_history, inventory_upload_cells, inventory_cells_log
 from .views.deadlines import get_deadlines
-from .views.site_orders import site_orders_list, site_order_delete
+from .views.site_orders import site_orders_list, site_order_delete, site_order_ozon_cancel
 from .views.discounted import (
     discounted_list, discounted_delist, discounted_publish, discounted_csv,
 )
@@ -119,6 +119,8 @@ urlpatterns = [
     # Заказы сайта (horse-bio.ru) и их путь в МойСклад
     path('site-orders/', site_orders_list, name='site_orders_list'),
     path('site-orders/<str:order_id>/', site_order_delete, name='site_order_delete'),
+    path('site-orders/<str:order_id>/ozon/cancel/', site_order_ozon_cancel,
+         name='site_order_ozon_cancel'),
 
     # Уценка по сроку годности (склад «Уценка» в МойСклад)
     path('discounted/', discounted_list, name='discounted_list'),

@@ -14,7 +14,7 @@ from django.utils import timezone
 
 from ozon_logistics.models import (
     OzonAuthState, OzonDeliveryQuote, OzonOAuthToken, OzonPickupPoint, OzonPosting,
-    OzonProduct,
+    OzonProduct, OzonReturn,
 )
 from ozon_logistics.services import catalog
 from ozon_logistics import site_api
@@ -22,6 +22,7 @@ from ozon_logistics.services import orders
 from ozon_logistics.services import pickup_points
 from ozon_logistics.services import site_orders
 from ozon_logistics.services import ms_duplicates
+from ozon_logistics.services import returns as returns_service
 from ozon_logistics.services import tracking
 from ozon_logistics.services import client as client_module
 from ozon_logistics.services import oauth
@@ -1852,3 +1853,294 @@ class DuplicateRemovalTests(TestCase):
 
         delete.assert_called_once()
         self.assertIn('перенос невозможен', result['skipped'][0][1])
+
+
+class OzonDeliveryNotificationTests(TestCase):
+    """Уведомления: деньги покупателя у нас, а товар до него не дошёл."""
+
+    def setUp(self):
+        cache.clear()
+        self.quote = OzonDeliveryQuote.objects.create(
+            phone='79166229030',
+            items=[{'sku': 101, 'quantity': 1}],
+            map_point_id=378617,
+            checkout_response=_checkout_response(),
+            status=OzonDeliveryQuote.STATUS_ORDERED,
+            order_number='34742020-0375',
+            site_order_id='12811918',
+        )
+
+    def tearDown(self):
+        cache.clear()
+
+    def _collect(self):
+        from api.notifications import ozon_delivery
+        return list(ozon_delivery.ozon_delivery_notifications())
+
+    def test_cancelled_posting_raises_notification(self):
+        OzonPosting.objects.create(
+            posting_number='34742020-0375-1', order_number='34742020-0375',
+            quote=self.quote, schema=OzonPosting.SCHEMA_FBS,
+            status='cancelled', cancel_reason='Покупатель не забрал заказ',
+        )
+
+        found = self._collect()
+
+        self.assertEqual(len(found), 1)
+        self.assertIn('12811918', found[0].title)
+        self.assertIn('не забрал', found[0].body)
+        self.assertIn('Полный возврат', found[0].action)
+
+    def test_handled_posting_is_silent(self):
+        """Деньги вернули — повод исчез сам."""
+        OzonPosting.objects.create(
+            posting_number='p-1', order_number='34742020-0375', quote=self.quote,
+            schema=OzonPosting.SCHEMA_FBS, status='cancelled',
+            handled_at=timezone.now(),
+        )
+        self.assertEqual(self._collect(), [])
+
+    def test_delivered_posting_is_silent(self):
+        OzonPosting.objects.create(
+            posting_number='p-2', order_number='34742020-0375', quote=self.quote,
+            schema=OzonPosting.SCHEMA_FBS, status='delivered',
+        )
+        self.assertEqual(self._collect(), [])
+
+    def test_failed_order_notifies_only_after_attempts_run_out(self):
+        self.quote.status = OzonDeliveryQuote.STATUS_FAILED
+        self.quote.attempts = 1
+        self.quote.error = 'HTTP 400: out of stock'
+        self.quote.save()
+        self.assertEqual(self._collect(), [])
+
+        self.quote.attempts = OzonDeliveryQuote.MAX_ATTEMPTS
+        self.quote.save()
+
+        found = self._collect()
+        self.assertEqual(len(found), 1)
+        self.assertEqual(found[0].level, 'critical')
+        self.assertIn('out of stock', found[0].body)
+
+    def test_uncertain_outcome_is_critical(self):
+        self.quote.status = OzonDeliveryQuote.STATUS_UNKNOWN
+        self.quote.save()
+
+        found = self._collect()
+
+        self.assertEqual(len(found), 1)
+        self.assertEqual(found[0].level, 'critical')
+        self.assertIn('две посылки', found[0].body)
+
+    def test_fingerprint_follows_status(self):
+        """Пока состояние то же — уведомление остаётся прочитанным."""
+        posting = OzonPosting.objects.create(
+            posting_number='p-3', order_number='34742020-0375', quote=self.quote,
+            schema=OzonPosting.SCHEMA_FBS, status='cancelled',
+        )
+        first = self._collect()[0].fingerprint
+
+        posting.status = 'not_accepted'
+        posting.save()
+        second = self._collect()[0].fingerprint
+
+        self.assertNotEqual(first, second)
+
+    def test_quote_without_site_order_is_skipped(self):
+        """Расчёт без заказа сайта — тестовый прогон, беспокоить незачем."""
+        OzonDeliveryQuote.objects.create(
+            phone='79161112233', items=[], map_point_id=1,
+            checkout_response=_checkout_response(),
+            status=OzonDeliveryQuote.STATUS_UNKNOWN,
+        )
+        self.assertEqual(self._collect(), [])
+
+    def test_provider_is_registered_for_site_orders(self):
+        """Ключ провайдера — страница из access.PAGES: он же решает, кому видно."""
+        from api.notifications import core
+
+        self.assertIn('site-orders', core._PROVIDERS)
+
+
+class SiteOrderOzonViewTests(TestCase):
+    """Доставка Ozon на странице «Заказы сайта»: показ и отмена."""
+
+    def setUp(self):
+        from django.contrib.auth import get_user_model
+
+        User = get_user_model()
+        self.user = User.objects.create_superuser('so-admin', 'so@test.local', 'pwd12345')
+        self.client.force_login(self.user)
+
+        self.quote = OzonDeliveryQuote.objects.create(
+            phone='79166229030',
+            items=[{'sku': 101, 'quantity': 1}],
+            map_point_id=378617,
+            checkout_response=_checkout_response(),
+            status=OzonDeliveryQuote.STATUS_ORDERED,
+            order_number='34742020-0375',
+            delivery_cost=Decimal('97'),
+            site_order_id='12811918',
+        )
+
+    def _row(self):
+        from api.views.site_orders import _ozon_delivery
+        return _ozon_delivery('12811918')
+
+    def test_row_has_no_ozon_block_for_plain_order(self):
+        """Обычный заказ — колонка пустая, а не «доставки нет»."""
+        from api.views.site_orders import _ozon_delivery
+        self.assertIsNone(_ozon_delivery('99999999'))
+
+    def test_row_shows_posting_status(self):
+        OzonPosting.objects.create(
+            posting_number='34742020-0375-1', order_number='34742020-0375',
+            quote=self.quote, schema=OzonPosting.SCHEMA_FBS, status='delivering',
+        )
+
+        row = self._row()
+
+        self.assertEqual(row['posting_status'], 'delivering')
+        self.assertEqual(row['delivery_cost'], 97.0)
+        self.assertTrue(row['cancellable'])
+
+    def test_delivered_order_is_not_cancellable(self):
+        OzonPosting.objects.create(
+            posting_number='p-1', order_number='34742020-0375',
+            quote=self.quote, schema=OzonPosting.SCHEMA_FBS, status='delivered',
+        )
+        self.assertFalse(self._row()['cancellable'])
+
+    def test_cancel_endpoint_calls_ozon(self):
+        calls = {}
+
+        def fake_cancel(quote, **kwargs):
+            calls['cancelled'] = quote.order_number
+            return {'result': True}
+
+        with patch('ozon_logistics.services.orders.cancel_order', side_effect=fake_cancel), \
+             patch('ozon_logistics.services.orders.cancellation_state', return_value={'state': 'PENDING'}):
+            response = self.client.post('/api/site-orders/12811918/ozon/cancel/')
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(calls['cancelled'], '34742020-0375')
+        self.assertIn('верните после подтверждения', response.json()['message'].lower())
+
+    def test_cancel_endpoint_reports_refusal(self):
+        from ozon_logistics.services.orders import OzonOrderError
+
+        with patch('ozon_logistics.services.orders.cancel_order',
+                   side_effect=OzonOrderError('Ozon не разрешает отменить заказ')):
+            response = self.client.post('/api/site-orders/12811918/ozon/cancel/')
+
+        self.assertEqual(response.status_code, 409)
+        self.assertIn('не разрешает', response.json()['message'])
+
+    def test_cancel_endpoint_404_without_ozon_delivery(self):
+        response = self.client.post('/api/site-orders/99999999/ozon/cancel/')
+        self.assertEqual(response.status_code, 404)
+
+
+class OzonReturnsTests(TestCase):
+    """Возвраты: посылка едет обратно, её надо принять и вернуть деньги."""
+
+    def setUp(self):
+        cache.clear()
+        self.quote = OzonDeliveryQuote.objects.create(
+            phone='79166229030', items=[{'sku': 101, 'quantity': 1}],
+            map_point_id=378617, checkout_response=_checkout_response(),
+            status=OzonDeliveryQuote.STATUS_ORDERED,
+            order_number='34742020-0375', site_order_id='12811918',
+        )
+        self.posting = OzonPosting.objects.create(
+            posting_number='34742020-0375-1', order_number='34742020-0375',
+            quote=self.quote, schema=OzonPosting.SCHEMA_FBS, status='cancelled',
+        )
+
+    def tearDown(self):
+        cache.clear()
+
+    def _client(self, returns_pages):
+        class ReturnsClient:
+            def __init__(self):
+                self.calls = []
+                self._pages = list(returns_pages)
+
+            def returns_list(self, **kwargs):
+                self.calls.append(kwargs)
+                return self._pages.pop(0) if self._pages else {'returns': []}
+
+        return ReturnsClient()
+
+    ENTRY = {
+        'id': '1000015552',
+        'posting_number': '34742020-0375-1',
+        'order_number': '34742020-0375',
+        'type': 'FullReturn',
+        'schema': 'Fbs',
+        'return_reason_name': 'Покупатель отказался при вручении',
+        'visual': {'status': {'display_name': 'В пункте выдачи',
+                              'sys_name': 'ArrivedAtReturnPlace'}},
+        'logistic': {'return_date': '2026-09-04T06:15:48.998146Z'},
+    }
+
+    def test_stores_return_against_our_quote(self):
+        client = self._client([{'returns': [self.ENTRY], 'has_next': False}])
+
+        stats = returns_service.sync_returns(client=client)
+
+        stored = OzonReturn.objects.get(pk='1000015552')
+        self.assertEqual(stored.quote, self.quote)
+        self.assertTrue(stored.is_full)
+        self.assertIn('отказался', stored.reason)
+        self.assertIsNotNone(stored.return_date)
+        self.assertEqual(stats['need_attention'], 1)
+
+    def test_asks_only_about_our_postings(self):
+        client = self._client([{'returns': [], 'has_next': False}])
+        returns_service.sync_returns(client=client)
+
+        self.assertEqual(client.calls[0]['posting_numbers'], ['34742020-0375-1'])
+
+    def test_pagination_follows_last_id(self):
+        first = {'returns': [self.ENTRY], 'has_next': True}
+        second = {'returns': [dict(self.ENTRY, id='1000015553')], 'has_next': False}
+        client = self._client([first, second])
+
+        returns_service.sync_returns(client=client)
+
+        self.assertEqual(client.calls[1]['last_id'], '1000015552')
+        self.assertEqual(OzonReturn.objects.count(), 2)
+
+    def test_handled_return_leaves_the_list(self):
+        client = self._client([{'returns': [self.ENTRY], 'has_next': False}])
+        returns_service.sync_returns(client=client)
+
+        returns_service.mark_handled('1000015552')
+
+        self.assertEqual(list(returns_service.returns_needing_attention()), [])
+
+    def test_old_postings_are_not_polled(self):
+        """По отправлениям годовой давности Ozon ничего не вернёт."""
+        OzonPosting.objects.all().update(
+            created_at=timezone.now() - timezone.timedelta(days=returns_service.TRACK_DAYS + 1)
+        )
+        client = self._client([{'returns': [], 'has_next': False}])
+
+        stats = returns_service.sync_returns(client=client)
+
+        self.assertEqual(stats['postings'], 0)
+        self.assertEqual(client.calls, [])
+
+    def test_return_raises_notification(self):
+        from api.notifications import ozon_delivery
+
+        client = self._client([{'returns': [self.ENTRY], 'has_next': False}])
+        returns_service.sync_returns(client=client)
+
+        found = [n for n in ozon_delivery.ozon_delivery_notifications()
+                 if n.key.startswith('ozon-delivery:return:')]
+
+        self.assertEqual(len(found), 1)
+        self.assertIn('Полный возврат', found[0].title)
+        self.assertIn('Примите товар', found[0].action)
