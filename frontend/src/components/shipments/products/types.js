@@ -14,6 +14,7 @@ export const ProductPropTypes = {
 export const FiltersPropTypes = {
     search: PropTypes.string,
     subgroup: PropTypes.string,
+    salesChannel: PropTypes.string,
     startDate: PropTypes.string,
     endDate: PropTypes.string,
 };

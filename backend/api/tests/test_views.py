@@ -12,6 +12,7 @@ from core.models import (
     Counterparty,
     Product,
     RawMaterial,
+    SalesChannel,
     Shipment,
     ShipmentItem,
     Supply,
@@ -257,6 +258,113 @@ class ProductsViewTests(BaseViewTestCase):
 
         data = json.loads(response.content)
         self.assertEqual(data['status'], 'success')
+
+
+class ProductsSalesChannelFilterTests(BaseViewTestCase):
+    """Отбор товаров по каналу продаж отгрузки."""
+
+    def setUp(self):
+        super().setUp()
+        self.counterparty = Counterparty.objects.create(
+            name='Test Customer',
+            external_id='cust-channel'
+        )
+        self.site = SalesChannel.objects.create(
+            external_id='chan-site',
+            name='Прочее | Сайт Horse-Bio'
+        )
+        self.marketplace = SalesChannel.objects.create(
+            external_id='chan-mp',
+            name='МП | ОЗОН (ФАРМ)'
+        )
+
+        # Список товаров строится только по группе «Товары» с непустой подгруппой
+        self.site_product = Product.objects.create(
+            name='Товар с сайта',
+            external_id='prod-site',
+            group='Товары',
+            subgroup='Гели'
+        )
+        self.marketplace_product = Product.objects.create(
+            name='Товар с маркетплейса',
+            external_id='prod-mp',
+            group='Товары',
+            subgroup='Гели'
+        )
+
+        for external_id, channel, product in (
+            ('ship-site', self.site, self.site_product),
+            ('ship-mp', self.marketplace, self.marketplace_product),
+        ):
+            shipment = Shipment.objects.create(
+                counterparty=self.counterparty,
+                date=timezone.now(),
+                external_id=external_id,
+                number=external_id.upper(),
+                sales_channel=channel
+            )
+            ShipmentItem.objects.create(
+                shipment=shipment,
+                product=product,
+                quantity=Decimal('5'),
+                price=Decimal('200')
+            )
+
+    def test_channels_listed_for_filter(self):
+        """Список каналов приходит вместе с товарами — из него строится фильтр."""
+        response = self.client.get('/api/products/')
+        self.assertEqual(response.status_code, 200)
+
+        data = json.loads(response.content)['data']
+        self.assertCountEqual(
+            data['available_sales_channels'],
+            ['Прочее | Сайт Horse-Bio', 'МП | ОЗОН (ФАРМ)']
+        )
+
+    def test_filter_keeps_only_selected_channel(self):
+        """С выбранным каналом остаются только его продажи."""
+        response = self.client.get('/api/products/?salesChannel=Прочее | Сайт Horse-Bio')
+        self.assertEqual(response.status_code, 200)
+
+        data = json.loads(response.content)['data']
+        self.assertEqual([p['name'] for p in data['products']], ['Товар с сайта'])
+        self.assertEqual(data['products'][0]['total_sum'], 1000.0)
+
+    def test_without_filter_both_channels_present(self):
+        """Без фильтра видно все продажи."""
+        response = self.client.get('/api/products/')
+        self.assertEqual(response.status_code, 200)
+
+        data = json.loads(response.content)['data']
+        self.assertCountEqual(
+            [p['name'] for p in data['products']],
+            ['Товар с сайта', 'Товар с маркетплейса']
+        )
+
+    def test_unused_channels_not_offered(self):
+        """Канал без отгрузок в фильтр не попадает — выбор дал бы пустую таблицу."""
+        SalesChannel.objects.create(external_id='chan-idle', name='Чат | Заведён впрок')
+
+        response = self.client.get('/api/products/')
+        self.assertEqual(response.status_code, 200)
+
+        data = json.loads(response.content)['data']
+        self.assertNotIn('Чат | Заведён впрок', data['available_sales_channels'])
+
+    def test_export_survives_regex_characters_in_search(self):
+        """Экспорт ищет как экран: спецсимволы регулярок его не роняют."""
+        response = self.client.get('/api/products/export/?search=%5B')
+        self.assertEqual(response.status_code, 200)
+
+    def test_details_respect_channel(self):
+        """Карточка товара считает по тому же каналу, что и таблица."""
+        response = self.client.get(
+            f'/api/products/{self.site_product.id}/?salesChannel=МП | ОЗОН (ФАРМ)'
+        )
+        self.assertEqual(response.status_code, 200)
+
+        stats = json.loads(response.content)['data']['statistics']
+        self.assertEqual(stats['total_shipments'], 0)
 
 
 class MaterialsViewTests(BaseViewTestCase):

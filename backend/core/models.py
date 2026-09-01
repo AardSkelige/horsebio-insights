@@ -160,11 +160,38 @@ class ProcessingPlanProduct(models.Model):
         return f"{self.processing_plan.name} - {self.product.name} ({self.quantity})"
 
 
+class SalesChannel(models.Model):
+    """Канал продаж из МойСклад — маркетплейс, сайт, мессенджер и т.п.
+
+    Справочник маленький (около десятка записей) и меняется редко, поэтому
+    заводится по данным самих отгрузок: отдельная синхронизация не нужна.
+    """
+    external_id = models.CharField(max_length=255, unique=True, verbose_name='Внешний ID')
+    name = models.CharField(max_length=255, verbose_name='Наименование')
+
+    def __str__(self):
+        return self.name
+
+    class Meta:
+        db_table = 'parser_saleschannel'
+        verbose_name = 'Канал продаж'
+        verbose_name_plural = 'Каналы продаж'
+        ordering = ['name']
+
+
 class Shipment(models.Model):
     external_id = models.CharField(max_length=255, unique=True, verbose_name='Внешний ID')
     number = models.CharField(max_length=255, null=True, blank=True, verbose_name='Номер отгрузки')
     date = models.DateTimeField(verbose_name='Дата')
     counterparty = models.ForeignKey(Counterparty, on_delete=models.CASCADE, verbose_name='Контрагент (покупатель)')
+    sales_channel = models.ForeignKey(
+        SalesChannel,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='shipments',
+        verbose_name='Канал продаж',
+    )
     moysklad_updated = models.DateTimeField(null=True, blank=True, verbose_name='Обновлено в МойСклад')
 
     def __str__(self):

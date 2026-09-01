@@ -4,21 +4,25 @@ import { FiltersPropTypes } from './types';
 import { DateRange, ResetFilters, SearchInput, Select, Toolbar } from '../../ui';
 import { productsApi } from '../../../api/productsApi';
 
-const EMPTY = { search: '', subgroup: '', startDate: null, endDate: null };
+const EMPTY = { search: '', subgroup: '', salesChannel: '', startDate: null, endDate: null };
 
 const ProductFilterPanel = ({ filters, onChange }) => {
     const [subgroups, setSubgroups] = useState([]);
+    const [salesChannels, setSalesChannels] = useState([]);
 
     useEffect(() => {
         productsApi.getAll()
             .then((data) => {
                 if (data.status !== 'success') return;
                 setSubgroups(data.data.available_subgroups.filter(Boolean));
+                setSalesChannels((data.data.available_sales_channels || []).filter(Boolean));
             })
             .catch(() => {});
     }, []);
 
-    const hasFilters = Boolean(filters.search || filters.subgroup || filters.startDate || filters.endDate);
+    const hasFilters = Boolean(
+        filters.search || filters.subgroup || filters.salesChannel || filters.startDate || filters.endDate
+    );
 
     return (
         <Toolbar>
@@ -34,6 +38,14 @@ const ProductFilterPanel = ({ filters, onChange }) => {
                 options={subgroups}
                 onChange={(e) => onChange({ ...filters, subgroup: e.target.value })}
                 aria-label="Подгруппа"
+            />
+
+            <Select
+                value={filters.salesChannel || ''}
+                placeholder="Все каналы продаж"
+                options={salesChannels}
+                onChange={(e) => onChange({ ...filters, salesChannel: e.target.value })}
+                aria-label="Канал продаж"
             />
 
             <DateRange

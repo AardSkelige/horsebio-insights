@@ -11,6 +11,7 @@ from django.utils import timezone
 
 from core.models import (
     Product,
+    SalesChannel,
     ShipmentItem,
     RawMaterialUsage
 )
@@ -36,6 +37,7 @@ def product_data(request):
         page_size = params['page_size']
         search = params['search'].strip()
         subgroup = params['subgroup'].strip()
+        sales_channel = params['sales_channel'].strip()
         start_date = params.get('start_date')
         end_date = params.get('end_date')
         sort_field = params['sort_field']
@@ -65,7 +67,12 @@ def product_data(request):
 
         # Получаем связанные отгрузки с учетом дат
         shipments_query = ShipmentItem.objects.all()
-        
+
+        if sales_channel:
+            shipments_query = shipments_query.filter(
+                shipment__sales_channel__name=sales_channel
+            )
+
         if start_date:
             start_date = timezone.make_aware(
                 datetime.combine(start_date, datetime.min.time()),
@@ -107,8 +114,8 @@ def product_data(request):
             )
         )
 
-        # Фильтруем товары с нулевыми показателями, если указан период
-        if start_date or end_date:
+        # Фильтруем товары с нулевыми показателями, если сужена выборка отгрузок
+        if start_date or end_date or sales_channel:
             products_data = products_data.filter(
                 Q(total_quantity__gt=0) | 
                 Q(total_sum__gt=0) |
@@ -197,7 +204,15 @@ def product_data(request):
                 'stats': stats,
                 'available_subgroups': list(products_query.values_list(
                     'subgroup', flat=True
-                ).distinct().order_by('subgroup'))
+                ).distinct().order_by('subgroup')),
+                # Только каналы, по которым что-то отгружалось: справочник
+                # МойСклада содержит и заведённые впрок, а выбор такого
+                # означал бы заведомо пустую таблицу
+                'available_sales_channels': list(
+                    SalesChannel.objects.filter(shipments__isnull=False)
+                    .values_list('name', flat=True)
+                    .distinct()
+                )
             }
         })
 
@@ -215,11 +230,17 @@ def product_details(request, product_id):
         # Получаем параметры фильтрации по датам
         start_date = request.GET.get('startDate')
         end_date = request.GET.get('endDate')
+        sales_channel = request.GET.get('salesChannel', '').strip()
 
         # Базовый QuerySet для отгрузок
         shipments_query = ShipmentItem.objects.filter(
             product=product
         ).select_related('shipment')
+
+        if sales_channel:
+            shipments_query = shipments_query.filter(
+                shipment__sales_channel__name=sales_channel
+            )
 
         if start_date:
             try:
@@ -351,6 +372,7 @@ def export_products_excel(request):
         # Получаем те же параметры фильтрации, что и в product_data
         search = request.GET.get('search', '').strip()
         subgroup = request.GET.get('subgroup', '').strip()
+        sales_channel = request.GET.get('salesChannel', '').strip()
         start_date = request.GET.get('startDate')
         end_date = request.GET.get('endDate')
 
@@ -367,8 +389,8 @@ def export_products_excel(request):
             search_query = Q()
             for word in search_words:
                 word_query = (
-                    Q(name__iregex=f'(?i){word}') |
-                    Q(article__iregex=f'(?i){word}')
+                    Q(name__icontains=word) |
+                    Q(article__icontains=word)
                 )
                 search_query &= word_query
             products_query = products_query.filter(search_query)
@@ -378,7 +400,12 @@ def export_products_excel(request):
 
         # Получаем связанные отгрузки с учетом дат
         shipments_query = ShipmentItem.objects.all()
-        
+
+        if sales_channel:
+            shipments_query = shipments_query.filter(
+                shipment__sales_channel__name=sales_channel
+            )
+
         if start_date:
             try:
                 start_date = datetime.strptime(start_date, '%Y-%m-%d')
@@ -427,6 +454,15 @@ def export_products_excel(request):
                 distinct=True
             )
         )
+
+        # Тот же отбор, что и на экране: если выборка отгрузок сужена,
+        # товары без продаж в файле не нужны
+        if start_date or end_date or sales_channel:
+            products_data = products_data.filter(
+                Q(total_quantity__gt=0) |
+                Q(total_sum__gt=0) |
+                Q(shipments_count__gt=0)
+            )
 
         # Создаем новый Excel-файл
         wb = Workbook()

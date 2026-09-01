@@ -7,7 +7,7 @@ from django.utils.dateparse import parse_datetime
 from django.utils import timezone
 from asgiref.sync import sync_to_async
 from sync.models import (
-    Shipment, ShipmentItem, Counterparty,
+    SalesChannel, Shipment, ShipmentItem, Counterparty,
     Product, RawMaterialUsage
 )
 from sync.logger import logger, structured_logger
@@ -20,6 +20,24 @@ class ShipmentStorage:
     def __init__(self, product_cache, material_registry):
         self.product_cache = product_cache
         self.material_registry = material_registry
+        # Каналов продаж около десятка на все отгрузки — держим их в памяти,
+        # чтобы не ходить в базу на каждой отгрузке
+        self.sales_channel_cache = {}
+
+    def get_sales_channel(self, channel_data: dict) -> SalesChannel:
+        """Канал продаж отгрузки. Приходит раскрытым (expand=salesChannel)."""
+        if not channel_data or not channel_data.get('id'):
+            return None
+
+        external_id = channel_data['id']
+        channel = self.sales_channel_cache.get(external_id)
+        if channel is None:
+            channel, _ = SalesChannel.objects.update_or_create(
+                external_id=external_id,
+                defaults={'name': channel_data.get('name') or 'Без названия'},
+            )
+            self.sales_channel_cache[external_id] = channel
+        return channel
 
     @sync_to_async
     def save_shipment_data(self, shipment_data: dict, agent_data: dict, moysklad_updated: str = None) -> Shipment:
@@ -38,7 +56,8 @@ class ShipmentStorage:
                 defaults = {
                     'date': date,
                     'counterparty': counterparty,
-                    'number': shipment_data.get('name', '')
+                    'number': shipment_data.get('name', ''),
+                    'sales_channel': self.get_sales_channel(shipment_data.get('salesChannel')),
                 }
 
                 if moysklad_updated:

@@ -8,7 +8,7 @@ import { FadeRise } from '../../ui/motion';
 import { productsApi } from '../../../api/productsApi';
 import { useAnalysisTable } from '../../../hooks/useAnalysisTable';
 
-const DEFAULT_FILTERS = { search: '', subgroup: '', startDate: null, endDate: null };
+const DEFAULT_FILTERS = { search: '', subgroup: '', salesChannel: '', startDate: null, endDate: null };
 
 const ProductAnalysis = () => {
     const {
@@ -29,6 +29,7 @@ const ProductAnalysis = () => {
         const params = new URLSearchParams();
         if (filters.search) params.append('search', filters.search);
         if (filters.subgroup) params.append('subgroup', filters.subgroup);
+        if (filters.salesChannel) params.append('salesChannel', filters.salesChannel);
         if (filters.startDate) params.append('startDate', filters.startDate);
         if (filters.endDate) params.append('endDate', filters.endDate);
 
@@ -80,6 +81,7 @@ const ProductAnalysis = () => {
                     visible={modalVisible}
                     onClose={handleModalClose}
                     dateRange={{ startDate: filters.startDate, endDate: filters.endDate }}
+                    salesChannel={filters.salesChannel}
                 />
             )}
         </Page>

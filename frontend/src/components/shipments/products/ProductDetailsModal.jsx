@@ -40,7 +40,7 @@ ShipmentRow.propTypes = {
     shipment: PropTypes.shape({ number: PropTypes.string, date: PropTypes.string, quantity: PropTypes.number, price: PropTypes.number, total: PropTypes.number }).isRequired,
 };
 
-const ProductDetailsModal = ({ product, visible, onClose, dateRange }) => {
+const ProductDetailsModal = ({ product, visible, onClose, dateRange, salesChannel }) => {
     const [details, setDetails] = useState(null);
     const [loading, setLoading] = useState(false);
 
@@ -53,6 +53,7 @@ const ProductDetailsModal = ({ product, visible, onClose, dateRange }) => {
         const params = new URLSearchParams();
         if (dateRange?.startDate) params.append('startDate', dateRange.startDate);
         if (dateRange?.endDate)   params.append('endDate',   dateRange.endDate);
+        if (salesChannel)         params.append('salesChannel', salesChannel);
         const qs = params.toString();
 
         productsApi.getDetails(product.id, qs, ctrl.signal)
@@ -61,7 +62,7 @@ const ProductDetailsModal = ({ product, visible, onClose, dateRange }) => {
             .finally(() => setLoading(false));
 
         return () => ctrl.abort();
-    }, [product, visible, dateRange]);
+    }, [product, visible, dateRange, salesChannel]);
 
     const chartData = details?.monthly_dynamics?.map(item => ({
         month: new Date(item.month).toLocaleDateString('ru', { month: 'short', year: '2-digit' }),
@@ -166,6 +167,7 @@ ProductDetailsModal.propTypes = {
     visible: PropTypes.bool.isRequired,
     onClose: PropTypes.func.isRequired,
     dateRange: PropTypes.shape({ startDate: PropTypes.string, endDate: PropTypes.string }),
+    salesChannel: PropTypes.string,
 };
 
 export default ProductDetailsModal;

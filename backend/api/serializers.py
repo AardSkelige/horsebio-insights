@@ -420,6 +420,7 @@ class ListQuerySerializer(
     views больше не разбирали числа и даты вручную.
     """
     subgroup = serializers.CharField(required=False, allow_blank=True, default='')
+    sales_channel = serializers.CharField(required=False, allow_blank=True, default='')
 
     @classmethod
     def from_query_params(
@@ -435,6 +436,7 @@ class ListQuerySerializer(
             'search': ('search',),
             'group': ('group',),
             'subgroup': ('subgroup',),
+            'sales_channel': ('salesChannel', 'sales_channel'),
             'start_date': ('startDate', 'start_date'),
             'end_date': ('endDate', 'end_date'),
             'sort_field': ('sortField', 'sort_field'),
