@@ -14,6 +14,7 @@ urlpatterns = [
     path('diag/warehouses/', views.diag_warehouses, name='diag_warehouses'),
     path('diag/products/', views.diag_products, name='diag_products'),
     path('diag/checkout/', views.diag_checkout, name='diag_checkout'),
+    path('diag/cancel/', views.diag_cancel, name='diag_cancel'),
 
     # Публичные — их вызывает корзина horse-bio.ru из браузера покупателя
     path('site/availability/', site_api.availability, name='site_availability'),

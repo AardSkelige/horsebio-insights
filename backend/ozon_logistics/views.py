@@ -3,10 +3,11 @@ from datetime import datetime, timezone as dt_timezone
 
 from django.http import HttpResponse, HttpResponseRedirect, JsonResponse
 from django.utils import timezone
+from django.core.exceptions import ValidationError
 from django.utils.html import escape
 
-from ozon_logistics.models import OzonOAuthToken
-from ozon_logistics.services import oauth
+from ozon_logistics.models import OzonDeliveryQuote, OzonOAuthToken
+from ozon_logistics.services import oauth, orders
 from ozon_logistics.services.client import OzonLogisticsClient, OzonLogisticsError
 
 logger = logging.getLogger(__name__)
@@ -274,3 +275,51 @@ def diag_checkout(request):
 
     items = [{'offer_id': offer_id, 'sku': sku, 'quantity': quantity}]  # sku в приоритете
     return _call(lambda: OzonLogisticsClient().checkout(phone=phone, items=items, **kwargs))
+
+
+def diag_cancel(request):
+    """Отмена заказа Ozon по расчёту: /diag/cancel/?quote=<uuid>
+
+    Без параметра `confirm=1` только проверяет возможность отмены и показывает
+    допустимые причины — чтобы случайный переход по ссылке ничего не отменил.
+    Состояние отмены: /diag/cancel/?quote=<uuid>&status=1
+    """
+    denied = _superuser_only(request)
+    if denied:
+        return denied
+
+    quote_id = request.GET.get('quote', '').strip()
+    if not quote_id:
+        return JsonResponse({
+            'status': 'error', 'message': 'Укажите расчёт: ?quote=<uuid>',
+        }, status=400)
+
+    try:
+        quote = OzonDeliveryQuote.objects.filter(pk=quote_id).first()
+    except (ValueError, ValidationError):
+        quote = None
+    if quote is None:
+        return JsonResponse({'status': 'error', 'message': 'Расчёт не найден'}, status=404)
+
+    client = OzonLogisticsClient()
+
+    if request.GET.get('status'):
+        return _call(lambda: orders.cancellation_state(quote, client=client))
+
+    if not request.GET.get('confirm'):
+        # Показываем, что будет отменено, но ничего не делаем
+        def preview():
+            return {
+                'order_number': quote.order_number,
+                'check': client.cancel_check(quote.order_number),
+                'reasons': client.cancel_reasons_for_order(quote.order_number),
+                'hint': 'Добавьте &confirm=1, чтобы отменить заказ',
+            }
+        return _call(preview)
+
+    reason_id = request.GET.get('reason_id')
+    return _call(lambda: orders.cancel_order(
+        quote,
+        reason_id=int(reason_id) if reason_id else None,
+        reason_message=request.GET.get('message', ''),
+    ))

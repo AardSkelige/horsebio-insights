@@ -1349,3 +1349,71 @@ class OrderRetryPolicyTests(TestCase):
         )
         quote.refresh_from_db()
         self.assertFalse(quote.needs_order)
+
+
+class CancelOrderTests(TestCase):
+    """Отмена заказа Ozon. Асинхронная: ответ значит «принято», а не «отменено»."""
+
+    def _quote(self, **kwargs):
+        defaults = {
+            'phone': '79161112233',
+            'items': [{'sku': 758646053, 'quantity': 1}],
+            'map_point_id': 378617,
+            'checkout_response': _checkout_response(),
+            'status': OzonDeliveryQuote.STATUS_ORDERED,
+            'order_number': 'OZ-1',
+        }
+        return OzonDeliveryQuote.objects.create(**{**defaults, **kwargs})
+
+    def test_picks_first_allowed_reason(self):
+        class CancelClient:
+            def __init__(self):
+                self.cancelled = None
+
+            def cancel_check(self, order_number):
+                return {'cancellable': True}
+
+            def cancel_reasons_for_order(self, order_number):
+                return {'reasons': [{'id': 352}, {'id': 402}]}
+
+            def cancel_order(self, order_number, *, reason_id, reason_message=''):
+                self.cancelled = (order_number, reason_id)
+                return {'result': True}
+
+        client = CancelClient()
+        orders.cancel_order(self._quote(), client=client)
+        self.assertEqual(client.cancelled, ('OZ-1', 352))
+
+    def test_explicit_reason_skips_lookup(self):
+        """Список причин документация просит не дёргать без надобности."""
+        class CancelClient:
+            def __init__(self):
+                self.reasons_called = False
+
+            def cancel_check(self, order_number):
+                return {'cancellable': True}
+
+            def cancel_reasons_for_order(self, order_number):
+                self.reasons_called = True
+                return {'reasons': []}
+
+            def cancel_order(self, order_number, *, reason_id, reason_message=''):
+                return {'result': True}
+
+        client = CancelClient()
+        orders.cancel_order(self._quote(), reason_id=402, client=client)
+        self.assertFalse(client.reasons_called)
+
+    def test_non_cancellable_order_is_reported(self):
+        class CancelClient:
+            def cancel_check(self, order_number):
+                return {'cancellable': False}
+
+        with self.assertRaises(orders.OzonOrderError) as ctx:
+            orders.cancel_order(self._quote(), client=CancelClient())
+        self.assertIn('OZ-1', str(ctx.exception))
+
+    def test_quote_without_order_cannot_be_cancelled(self):
+        quote = self._quote(status=OzonDeliveryQuote.STATUS_NEW, order_number='')
+        with self.assertRaises(orders.OzonOrderError):
+            orders.cancel_order(quote, client=None)

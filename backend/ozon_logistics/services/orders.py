@@ -194,3 +194,50 @@ def create_order(quote, *, buyer, recipient=None, prices, client=None):
 
     logger.info('Ozon Доставка: создан заказ %s по расчёту %s', order_number, quote.id)
     return quote
+
+
+def cancel_order(quote, *, reason_id=None, reason_message='', client=None):
+    """Отменяет заказ Ozon, созданный по этому расчёту.
+
+    Отмена асинхронная: успешный ответ означает, что запрос принят, а не что
+    заказ уже отменён. Поэтому деньги покупателю возвращают только после того,
+    как `cancel_status` подтвердит отмену — так требует документация.
+
+    Причину можно не указывать: возьмём первую из допустимых для этого заказа.
+    Список причин документация просит запрашивать только при реальной надобности,
+    поэтому лезем за ним лишь когда `reason_id` не передан.
+    """
+    if quote.status != OzonDeliveryQuote.STATUS_ORDERED or not quote.order_number:
+        raise OzonOrderError('По этому расчёту заказ в Ozon не создавался')
+
+    client = client or OzonLogisticsClient()
+
+    check = client.cancel_check(quote.order_number)
+    if not check.get('cancellable'):
+        raise OzonOrderError(
+            f'Ozon не разрешает отменить заказ {quote.order_number} — '
+            'возможно, он уже собран или выдан'
+        )
+
+    if reason_id is None:
+        reasons = (client.cancel_reasons_for_order(quote.order_number) or {}).get('reasons') or []
+        if not reasons:
+            raise OzonOrderError('Ozon не вернул ни одной допустимой причины отмены')
+        reason_id = reasons[0].get('id')
+
+    response = client.cancel_order(
+        quote.order_number, reason_id=reason_id, reason_message=reason_message
+    )
+    logger.info(
+        'Ozon Доставка: запрошена отмена заказа %s (причина %s)',
+        quote.order_number, reason_id,
+    )
+    return response
+
+
+def cancellation_state(quote, *, client=None):
+    """Чем закончилась отмена. Деньги возвращаем только после подтверждения."""
+    if not quote.order_number:
+        raise OzonOrderError('По этому расчёту заказ в Ozon не создавался')
+    client = client or OzonLogisticsClient()
+    return client.cancel_status(quote.order_number)

@@ -204,6 +204,29 @@ class OzonLogisticsClient:
         """
         return self.request('/v2/order/create', payload)
 
+    def cancel_reasons_for_order(self, order_number):
+        """Причины отмены, допустимые для конкретного заказа: {'reasons': [...]}.
+
+        Документация просит не запрашивать список заранее, «на всякий случай», —
+        только когда отмена действительно нужна.
+        """
+        return self.request('/v1/cancel-reason/list-by-order', {'order_number': str(order_number)})
+
+    def cancel_check(self, order_number):
+        """Можно ли отменить заказ: {'cancellable': bool, 'posting_groups': [...]}"""
+        return self.request('/v1/order/cancel/check', {'order_number': str(order_number)})
+
+    def cancel_order(self, order_number, *, reason_id, reason_message=''):
+        """Отменяет заказ целиком. Процесс асинхронный — исход смотрят в cancel_status."""
+        payload = {'order_number': str(order_number), 'reason_id': int(reason_id)}
+        if reason_message:
+            payload['reason_message'] = reason_message
+        return self.request('/v1/order/cancel', payload)
+
+    def cancel_status(self, order_number):
+        """Состояние отмены: {'order_number': ..., 'posting_number': [...], 'state': ...}"""
+        return self.request('/v1/order/cancel/status', {'order_number': str(order_number)})
+
     def delivery_map(self, left_bottom, right_top, zoom):
         """Кластеры точек в области карты — для отрисовки при мелком масштабе.
 
