@@ -73,6 +73,14 @@ describe('SiteOrdersTable — доставка Ozon', () => {
         expect(screen.queryByText(/Ozon:/)).not.toBeInTheDocument();
     });
 
+    // Чип живёт в своей колонке: в общей ячейке со статусом он съезжал,
+    // а у заказов без доставки Ozon колонка просто пустая.
+    it('в таблице есть колонка «Доставка»', () => {
+        renderTable({ ozon: OZON });
+
+        expect(screen.getByText('Доставка')).toBeInTheDocument();
+    });
+
     it('показывает статус отправления, а не расчёта', () => {
         renderTable({ ozon: OZON });
 

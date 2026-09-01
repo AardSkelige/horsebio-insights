@@ -57,7 +57,7 @@ function OzonChip({ ozon }) {
         : ozon.posting_status === 'delivered' ? 'ok' : 'processing';
 
     return (
-        <div className="status-wrap" tabIndex={0} style={{ marginTop: 4 }}>
+        <div className="status-wrap" tabIndex={0}>
             <span className={`chip ${tone}`}>
                 <Truck size={11} style={{ marginRight: 4 }} />
                 Ozon: {label}
@@ -248,11 +248,12 @@ export default function SiteOrdersTable({ rows, loading, sort, onSortChange, onD
         <div style={{ border: '1px solid var(--hairline)', borderRadius: 10 }}>
             <table className="site-orders-table">
                 <colgroup>
-                    <col style={{ width: '24%' }} />
-                    <col style={{ width: '9%' }} />
-                    <col style={{ width: '13%' }} />
-                    <col style={{ width: '11%' }} />
-                    <col style={{ width: '33%' }} />
+                    <col style={{ width: '22%' }} />
+                    <col style={{ width: '8%' }} />
+                    <col style={{ width: '12%' }} />
+                    <col style={{ width: '10%' }} />
+                    <col style={{ width: '20%' }} />
+                    <col style={{ width: '18%' }} />
                     <col style={{ width: '10%' }} />
                 </colgroup>
                 <thead>
@@ -262,12 +263,13 @@ export default function SiteOrdersTable({ rows, loading, sort, onSortChange, onD
                         <SortHeader label="Дата" sortKey="date" sort={sort} onSortChange={onSortChange} />
                         <SortHeader label="Сумма" sortKey="sum" sort={sort} onSortChange={onSortChange} align="right" />
                         <SortHeader label="Статус" sortKey="status" sort={sort} onSortChange={onSortChange} />
+                        <th>Доставка</th>
                         <th />
                     </tr>
                 </thead>
                 <tbody>
                     {loading ? (
-                        <SkeletonRows cols={6} rows={5} />
+                        <SkeletonRows cols={7} rows={5} />
                     ) : rows.map(row => (
                         <tr key={row.order_id} className={ROW_CLASS[row.status] || ''}>
                             <td>
@@ -280,10 +282,8 @@ export default function SiteOrdersTable({ rows, loading, sort, onSortChange, onD
                                 {formatRub(row.sum)}
                                 <DiscountNote row={row} />
                             </td>
-                            <td>
-                                <StatusChip row={row} />
-                                <OzonChip ozon={row.ozon} />
-                            </td>
+                            <td><StatusChip row={row} /></td>
+                            <td><OzonChip ozon={row.ozon} /></td>
                             <td><RowActions row={row} onDeleted={onDeleted} canDelete={canDelete} /></td>
                         </tr>
                     ))}
