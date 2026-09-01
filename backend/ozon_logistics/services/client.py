@@ -204,6 +204,51 @@ class OzonLogisticsClient:
         """
         return self.request('/v2/order/create', payload)
 
+    def posting_fbs_list(self, *, order_numbers=None, since=None, to=None,
+                         limit=100, cursor=None):
+        """Отправления FBS. Фильтр по номерам заказов — то, что нам и нужно.
+
+        Метод v4: v3 отключён с 31.08.2026.
+        """
+        filters = {}
+        if order_numbers:
+            filters['order_numbers'] = [str(n) for n in order_numbers]
+        if since:
+            filters['since'] = since
+        if to:
+            filters['to'] = to
+
+        payload = {'filter': filters, 'limit': limit}
+        if cursor:
+            payload['cursor'] = cursor
+        return self.request('/v4/posting/fbs/list', payload)
+
+    def posting_fbo_list(self, *, posting_numbers=None, since=None, to=None,
+                         limit=100, cursor=None):
+        """Отправления FBO. Здесь фильтр по номерам отправлений, а не заказов.
+
+        Метод v3: v2 отключён с 31.08.2026.
+        """
+        filters = {}
+        if posting_numbers:
+            filters['posting_numbers'] = [str(n) for n in posting_numbers]
+        if since:
+            filters['since'] = since
+        if to:
+            filters['to'] = to
+
+        payload = {'filter': filters, 'limit': limit}
+        if cursor:
+            payload['cursor'] = cursor
+        return self.request('/v3/posting/fbo/list', payload)
+
+    def returns_list(self, *, limit=100, last_id=None):
+        """Возвраты FBO и FBS: невыкупы и возвраты после получения."""
+        payload = {'limit': limit}
+        if last_id:
+            payload['last_id'] = last_id
+        return self.request('/v1/returns/list', payload)
+
     def cancel_reasons_for_order(self, order_number):
         """Причины отмены, допустимые для конкретного заказа: {'reasons': [...]}.
 

@@ -189,6 +189,7 @@ class OzonDeliveryQuote(models.Model):
     status = models.CharField('Статус', max_length=16, choices=STATUS_CHOICES, default=STATUS_NEW)
     site_order_id = models.CharField('Заказ сайта', max_length=64, blank=True, db_index=True)
     order_number = models.CharField('Номер заказа в Ozon', max_length=64, blank=True)
+    postings = models.JSONField('Номера отправлений', null=True, blank=True)
     error = models.TextField('Ошибка создания', blank=True)
     attempts = models.PositiveSmallIntegerField('Попыток создания', default=0)
 
@@ -236,3 +237,53 @@ class OzonDeliveryQuote(models.Model):
                 if reason and reason != 'UNSPECIFIED':
                     reasons.append(reason)
         return sorted(set(reasons))
+
+
+class OzonPosting(models.Model):
+    """Отправление заказа Ozon — то, что реально едет покупателю.
+
+    Заказ дробится на отправления по складам, и статус живёт именно у них.
+    Отслеживаем, чтобы вовремя увидеть отмену или невыкуп: деньги у нас, а
+    покупатель остался без товара — вернуть их должен человек.
+    """
+
+    SCHEMA_FBS = 'fbs'
+    SCHEMA_FBO = 'fbo'
+    SCHEMA_CHOICES = [(SCHEMA_FBS, 'FBS — наш склад'), (SCHEMA_FBO, 'FBO — склад Ozon')]
+
+    # Статусы, после которых отправление больше не изменится
+    FINAL_STATUSES = {'delivered', 'cancelled', 'not_accepted'}
+    # Требуют вмешательства: товар не уехал или вернулся, а деньги у нас
+    ALARMING_STATUSES = {'cancelled', 'not_accepted'}
+
+    posting_number = models.CharField('Номер отправления', max_length=64, primary_key=True)
+    order_number = models.CharField('Номер заказа Ozon', max_length=64, db_index=True)
+    quote = models.ForeignKey(
+        OzonDeliveryQuote, on_delete=models.SET_NULL, null=True, blank=True,
+        related_name='postings_tracked', verbose_name='Расчёт',
+    )
+    schema = models.CharField('Схема', max_length=8, choices=SCHEMA_CHOICES)
+    status = models.CharField('Статус', max_length=64, blank=True)
+    cancel_reason = models.CharField('Причина отмены', max_length=500, blank=True)
+    details = models.JSONField('Ответ Ozon', null=True, blank=True)
+
+    handled_at = models.DateTimeField('Отработано человеком', null=True, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        verbose_name = 'Отправление Ozon'
+        verbose_name_plural = 'Отправления Ozon'
+        ordering = ['-created_at']
+
+    def __str__(self):
+        return f'{self.posting_number} · {self.status or "без статуса"}'
+
+    @property
+    def is_final(self):
+        return self.status in self.FINAL_STATUSES
+
+    @property
+    def needs_attention(self):
+        """Отправление не доехало, а деньги покупателя у нас — нужен возврат."""
+        return self.status in self.ALARMING_STATUSES and self.handled_at is None

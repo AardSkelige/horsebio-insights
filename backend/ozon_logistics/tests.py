@@ -13,13 +13,15 @@ from django.test import TestCase, override_settings
 from django.utils import timezone
 
 from ozon_logistics.models import (
-    OzonAuthState, OzonDeliveryQuote, OzonOAuthToken, OzonPickupPoint, OzonProduct,
+    OzonAuthState, OzonDeliveryQuote, OzonOAuthToken, OzonPickupPoint, OzonPosting,
+    OzonProduct,
 )
 from ozon_logistics.services import catalog
 from ozon_logistics import site_api
 from ozon_logistics.services import orders
 from ozon_logistics.services import pickup_points
 from ozon_logistics.services import site_orders
+from ozon_logistics.services import tracking
 from ozon_logistics.services import client as client_module
 from ozon_logistics.services import oauth
 
@@ -1495,3 +1497,118 @@ class DeliveryPriceProbeTests(TestCase):
         self.assertEqual(probe._pack_size('06-07GP3000'), 3000)
         self.assertEqual(probe._pack_size('11-42AP0100'), 100)
         self.assertIsNone(probe._pack_size('БЕЗ-ЦИФР'))
+
+
+class PostingTrackingTests(TestCase):
+    """Статусы отправлений: без них не увидеть отмену и невыкуп."""
+
+    def setUp(self):
+        self.quote = OzonDeliveryQuote.objects.create(
+            phone='79166229030',
+            items=[{'sku': 101, 'quantity': 1}],
+            map_point_id=378617,
+            checkout_response=_checkout_response(),
+            status=OzonDeliveryQuote.STATUS_ORDERED,
+            order_number='34742020-0375',
+            postings=['34742020-0375-1'],
+            site_order_id='12811918',
+        )
+
+    def _client(self, fbs=None, fbo=None):
+        class TrackingClient:
+            def __init__(self):
+                self.fbs_calls = []
+                self.fbo_calls = []
+
+            def posting_fbs_list(self, **kwargs):
+                self.fbs_calls.append(kwargs)
+                return fbs or {'postings': [], 'has_next': False}
+
+            def posting_fbo_list(self, **kwargs):
+                self.fbo_calls.append(kwargs)
+                return fbo or {'postings': [], 'has_next': False}
+
+        return TrackingClient()
+
+    def test_stores_posting_status(self):
+        client = self._client(fbs={'postings': [{
+            'posting_number': '34742020-0375-1',
+            'order_number': '34742020-0375',
+            'status': 'awaiting_deliver',
+        }], 'has_next': False})
+
+        stats = tracking.sync_postings(client=client)
+
+        posting = OzonPosting.objects.get(pk='34742020-0375-1')
+        self.assertEqual(posting.status, 'awaiting_deliver')
+        self.assertEqual(posting.quote, self.quote)
+        self.assertEqual(stats['seen'], 1)
+        self.assertFalse(posting.needs_attention)
+
+    def test_fbs_is_searched_by_order_number(self):
+        client = self._client()
+        tracking.sync_postings(client=client)
+        self.assertEqual(client.fbs_calls[0]['order_numbers'], ['34742020-0375'])
+
+    def test_fbo_is_searched_by_posting_number(self):
+        """У FBO фильтра по номеру заказа нет — только по отправлениям."""
+        client = self._client()
+        tracking.sync_postings(client=client)
+        self.assertEqual(client.fbo_calls[0]['posting_numbers'], ['34742020-0375-1'])
+
+    def test_cancelled_posting_needs_attention(self):
+        client = self._client(fbs={'postings': [{
+            'posting_number': '34742020-0375-1',
+            'order_number': '34742020-0375',
+            'status': 'cancelled',
+            'cancellation': {'cancel_reason': 'Покупатель не забрал заказ'},
+        }], 'has_next': False})
+
+        stats = tracking.sync_postings(client=client)
+
+        posting = OzonPosting.objects.get(pk='34742020-0375-1')
+        self.assertTrue(posting.needs_attention)
+        self.assertIn('не забрал', posting.cancel_reason)
+        self.assertEqual(stats['need_attention'], 1)
+        self.assertEqual(list(tracking.postings_needing_attention()), [posting])
+
+    def test_handled_posting_leaves_the_list(self):
+        OzonPosting.objects.create(
+            posting_number='p-1', order_number='34742020-0375',
+            schema=OzonPosting.SCHEMA_FBS, status='cancelled',
+        )
+        tracking.mark_handled('p-1')
+        self.assertEqual(list(tracking.postings_needing_attention()), [])
+
+    def test_delivered_order_is_no_longer_polled(self):
+        """Доехавшие заказы не дёргаем — это финальный статус."""
+        OzonPosting.objects.create(
+            posting_number='34742020-0375-1', order_number='34742020-0375',
+            quote=self.quote, schema=OzonPosting.SCHEMA_FBS, status='delivered',
+        )
+        client = self._client()
+        stats = tracking.sync_postings(client=client)
+
+        self.assertEqual(stats['quotes'], 0)
+        self.assertEqual(client.fbs_calls, [])
+
+    def test_quotes_without_order_are_ignored(self):
+        OzonDeliveryQuote.objects.create(
+            phone='79161112233', items=[], map_point_id=1,
+            checkout_response=_checkout_response(),
+        )
+        client = self._client()
+        stats = tracking.sync_postings(client=client)
+        self.assertEqual(stats['quotes'], 1)  # только наш заказанный
+
+    def test_response_wrapped_in_result_is_understood(self):
+        client = self._client(fbs={'result': {
+            'postings': [{
+                'posting_number': '34742020-0375-1',
+                'order_number': '34742020-0375',
+                'status': 'delivering',
+            }],
+            'has_next': False,
+        }})
+        tracking.sync_postings(client=client)
+        self.assertEqual(OzonPosting.objects.get(pk='34742020-0375-1').status, 'delivering')

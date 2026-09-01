@@ -1,6 +1,9 @@
 from django.contrib import admin
+from django.utils import timezone
 
-from .models import OzonDeliveryQuote, OzonOAuthToken, OzonPickupPoint, OzonProduct
+from .models import (
+    OzonDeliveryQuote, OzonOAuthToken, OzonPickupPoint, OzonPosting, OzonProduct,
+)
 
 
 @admin.register(OzonOAuthToken)
@@ -35,3 +38,22 @@ class OzonDeliveryQuoteAdmin(admin.ModelAdmin):
     list_filter = ('status',)
     search_fields = ('id', 'phone', 'site_order_id', 'order_number')
     readonly_fields = ('created_at', 'ordered_at', 'checkout_response')
+
+
+@admin.register(OzonPosting)
+class OzonPostingAdmin(admin.ModelAdmin):
+    list_display = ('posting_number', 'status', 'schema', 'order_number',
+                    'needs_attention', 'handled_at', 'updated_at')
+    list_filter = ('status', 'schema')
+    search_fields = ('posting_number', 'order_number')
+    readonly_fields = ('created_at', 'updated_at', 'details')
+    actions = ['mark_handled']
+
+    @admin.display(boolean=True, description='Нужен возврат денег')
+    def needs_attention(self, obj):
+        return obj.needs_attention
+
+    @admin.action(description='Отметить, что деньги возвращены')
+    def mark_handled(self, request, queryset):
+        updated = queryset.update(handled_at=timezone.now())
+        self.message_user(request, f'Отмечено отправлений: {updated}')

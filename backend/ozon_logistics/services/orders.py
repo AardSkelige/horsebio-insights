@@ -188,9 +188,15 @@ def create_order(quote, *, buyer, recipient=None, prices, client=None):
     order_number = response.get('order_number') or ''
     quote.status = OzonDeliveryQuote.STATUS_ORDERED
     quote.order_number = order_number
+    # Ozon сразу называет отправления; по ним потом отслеживаем статус. Список
+    # может быть неполным — документация предупреждает, поэтому позже дотягиваем
+    # его же методами списка отправлений.
+    quote.postings = response.get('postings') or []
     quote.ordered_at = timezone.now()
     quote.error = ''
-    quote.save(update_fields=['status', 'order_number', 'ordered_at', 'error', 'attempts'])
+    quote.save(update_fields=[
+        'status', 'order_number', 'postings', 'ordered_at', 'error', 'attempts',
+    ])
 
     logger.info('Ozon Доставка: создан заказ %s по расчёту %s', order_number, quote.id)
     return quote

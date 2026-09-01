@@ -209,6 +209,16 @@ SCRIPTS_CONFIG = [
         'args': ['create_ozon_orders'],
     },
     {
+        'id': 'horsebio_ozon_postings',
+        'topic': 'Обновление данных',
+        'name': 'Статусы отправлений Ozon',
+        'account': 'HorseBio',
+        'schedule': 'Каждые 5 мин',
+        'description': 'Статусы отправлений Ozon Доставки: отмены и невыкупы, по которым надо вернуть деньги (Django-команда sync_ozon_postings)',
+        'script': '/app/manage.py',
+        'args': ['sync_ozon_postings'],
+    },
+    {
         'id': 'horsebio_inventory_check',
         'topic': 'Обновление данных',
         'name': 'Инвентаризация',
