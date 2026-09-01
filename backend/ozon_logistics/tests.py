@@ -1,11 +1,14 @@
 import json
 import tempfile
+from io import StringIO
 from decimal import Decimal
 from pathlib import Path
 from unittest.mock import patch
 from urllib.parse import parse_qs, urlparse
 
 from django.core.cache import cache
+from django.core.management import call_command
+from django.core.management.base import CommandError
 from django.test import TestCase, override_settings
 from django.utils import timezone
 
@@ -1417,3 +1420,78 @@ class CancelOrderTests(TestCase):
         quote = self._quote(status=OzonDeliveryQuote.STATUS_NEW, order_number='')
         with self.assertRaises(orders.OzonOrderError):
             orders.cancel_order(quote, client=None)
+
+
+@patch.dict('os.environ', CREDS)
+class DeliveryPriceProbeTests(TestCase):
+    """Промер комиссии: расчёт ничего не создаёт, поэтому им можно измерять."""
+
+    def setUp(self):
+        OzonOAuthToken.objects.create(
+            pk=OzonOAuthToken.SINGLETON_PK,
+            access_token='access-1',
+            refresh_token='r',
+            expires_at=timezone.now() + timezone.timedelta(hours=1),
+        )
+        OzonPickupPoint.objects.create(map_point_id=378617, latitude=55.7, longitude=37.6)
+        for offer_id, sku in [
+            ('11-42AP0100', 101), ('01-14AP0250', 102),
+            ('06-07GP3000', 103), ('09-04EP1000', 104),
+        ]:
+            OzonProduct.objects.create(
+                offer_id=offer_id, sku=sku, has_fbs_stocks=True, archived=False
+            )
+
+    def _run(self, **extra):
+        out = StringIO()
+        call_command('probe_ozon_delivery_prices', phone='79161112233',
+                     stdout=out, stderr=out, **extra)
+        return out.getvalue()
+
+    def test_prints_commission_per_product(self):
+        with patch('requests.post', return_value=FakeResponse(data=_checkout_response(sku=101))):
+            output = self._run(qty='1', limit=4)
+
+        self.assertIn('11-42AP0100', output)
+        self.assertIn('100', output)          # комиссия из ответа
+        self.assertIn('Наш тариф', output)
+
+    def test_warns_when_tariff_does_not_cover(self):
+        expensive = _checkout_response()
+        expensive['splits'][0]['commissions']['total']['amount'] = '400'
+
+        with patch('requests.post', return_value=FakeResponse(data=expensive)):
+            output = self._run(qty='1', limit=2, tariff=Decimal('250'))
+
+        self.assertIn('не покрывает', output)
+
+    def test_reports_success_when_tariff_covers(self):
+        with patch('requests.post', return_value=FakeResponse(data=_checkout_response())):
+            output = self._run(qty='1', limit=2, tariff=Decimal('250'))
+
+        self.assertIn('покрывает все замеры', output)
+
+    def test_unavailable_delivery_is_shown_not_crashed(self):
+        with patch('requests.post', return_value=FakeResponse(data=_checkout_response(available=False))):
+            output = self._run(qty='1', limit=1)
+
+        self.assertIn('OUT_OF_STOCK', output)
+        self.assertIn('Ни одного расчёта не получилось', output)
+
+    def test_explicit_offer_ids_are_used(self):
+        with patch('requests.post', return_value=FakeResponse(data=_checkout_response())):
+            output = self._run(qty='1', **{'offer_id': '06-07GP3000'})
+
+        self.assertIn('06-07GP3000', output)
+        self.assertNotIn('11-42AP0100', output)
+
+    def test_unknown_offer_id_is_an_error(self):
+        with self.assertRaises(CommandError):
+            self._run(**{'offer_id': 'НЕТ-ТАКОГО'})
+
+    def test_pack_size_from_article(self):
+        from ozon_logistics.management.commands import probe_ozon_delivery_prices as probe
+
+        self.assertEqual(probe._pack_size('06-07GP3000'), 3000)
+        self.assertEqual(probe._pack_size('11-42AP0100'), 100)
+        self.assertIsNone(probe._pack_size('БЕЗ-ЦИФР'))
