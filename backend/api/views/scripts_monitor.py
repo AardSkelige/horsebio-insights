@@ -103,17 +103,6 @@ SCRIPTS_CONFIG = [
         'structured': True,
     },
     {
-        'id': 'starpony_cost_prices',
-        'topic': 'Себестоимость',
-        'name': 'Себестоимость',
-        'account': 'StarPony',
-        'schedule': 'Каждые 5 ч с 09:00',
-        'description': 'FIFO → тип цены "Себестоимость"',
-        'script': '/app/moysklad/starpony/01_daemons/01_cost_prices/scripts/01_sync_cost_prices.py',
-        'args': [],
-        'structured': True,
-    },
-    {
         'id': 'horsebio_deadlines',
         'topic': 'Оплаты',
         'name': 'Сроки оплаты',
@@ -323,14 +312,6 @@ def scripts_auth_basic(view_func):
     return wrapper
 
 
-def _starpony_access_denied(request, script_id):
-    """Возвращает 403 если скрипт StarPony и пользователь не суперпользователь."""
-    script = SCRIPTS_BY_ID.get(script_id)
-    if script and script.get('account') == 'StarPony':
-        is_superuser = request.user.is_authenticated and request.user.is_superuser
-        if not is_superuser and not _has_valid_cron_secret(request):
-            return JsonResponse({'status': 'error', 'message': 'Нет доступа'}, status=403)
-    return None
 
 # ─── Вспомогательные функции ──────────────────────────────────────────────────
 
@@ -640,15 +621,9 @@ def _cleanup_old_logs(script_id):
 
 @scripts_auth_basic
 def scripts_list(request):
-    """GET /api/scripts/ — список скриптов со статусом последнего запуска.
-
-    Суперпользователь видит все скрипты; остальные — только HorseBio.
-    """
-    is_superuser = request.user.is_authenticated and request.user.is_superuser
+    """GET /api/scripts/ — список скриптов со статусом последнего запуска."""
     result = []
     for script in SCRIPTS_CONFIG:
-        if script.get('account') == 'StarPony' and not is_superuser:
-            continue
         sid = script['id']
         latest = _get_latest_run(sid)
         running = _is_running(sid)
@@ -667,9 +642,6 @@ def script_runs(request, script_id):
     """GET /api/scripts/{id}/runs/ — последние 20 запусков."""
     if script_id not in SCRIPTS_BY_ID:
         return JsonResponse({'status': 'error', 'message': 'Скрипт не найден'}, status=404)
-    denied = _starpony_access_denied(request, script_id)
-    if denied:
-        return denied
     runs = _get_runs(script_id)
     return JsonResponse({'runs': runs, 'is_running': _is_running(script_id)})
 
@@ -682,9 +654,6 @@ def script_log(request, script_id, run_id):
     """
     if script_id not in SCRIPTS_BY_ID:
         return JsonResponse({'status': 'error', 'message': 'Скрипт не найден'}, status=404)
-    denied = _starpony_access_denied(request, script_id)
-    if denied:
-        return denied
 
     log_file = _log_filename(script_id, run_id)
     if not os.path.exists(log_file):
@@ -720,9 +689,6 @@ def script_stop(request, script_id):
     """POST /api/scripts/{id}/stop/ — остановить запущенный скрипт."""
     if script_id not in SCRIPTS_BY_ID:
         return JsonResponse({'status': 'error', 'message': 'Скрипт не найден'}, status=404)
-    denied = _starpony_access_denied(request, script_id)
-    if denied:
-        return denied
 
     pid_file = _pid_file(script_id)
     if not os.path.exists(pid_file):
@@ -771,9 +737,6 @@ def script_run_delete(request, script_id, run_id):
     """POST /api/scripts/{id}/runs/{run_id}/delete/ — удалить лог запуска."""
     if script_id not in SCRIPTS_BY_ID:
         return JsonResponse({'status': 'error', 'message': 'Скрипт не найден'}, status=404)
-    denied = _starpony_access_denied(request, script_id)
-    if denied:
-        return denied
 
     # Нельзя удалять лог текущего запуска
     if _is_running(script_id):
@@ -803,9 +766,6 @@ def script_run_now(request, script_id):
     script = SCRIPTS_BY_ID.get(script_id)
     if not script:
         return JsonResponse({'status': 'error', 'message': 'Скрипт не найден'}, status=404)
-    denied = _starpony_access_denied(request, script_id)
-    if denied:
-        return denied
 
     if _is_running(script_id):
         return JsonResponse({'status': 'error', 'message': 'Скрипт уже запущен'}, status=409)

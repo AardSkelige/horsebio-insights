@@ -21,7 +21,7 @@ from api.models import HealthCheckException, CheckRunResult
 from api.services.health_checks import active_exception_index, apply_exceptions_to_summary
 from .scripts_monitor import (
     SCRIPTS_CONFIG, SCRIPTS_BY_ID, HEALTH_CHECK_SCRIPT_ID,
-    scripts_auth, scripts_auth_basic, _starpony_access_denied,
+    scripts_auth, scripts_auth_basic,
     _get_runs, _get_latest_run, _is_running, _run_script_async,
     _log_filename, _process_terminal_output, _get_exit_code,
     _pid_file, _pid_is_alive, _exit_file,
@@ -32,10 +32,6 @@ _SEVERITY_RANK = {'critical': 3, 'important': 2, 'warning': 1, 'info': 0}
 
 
 # ─── Вспомогательные ──────────────────────────────────────────────────────────
-
-def _is_superuser(request):
-    return request.user.is_authenticated and request.user.is_superuser
-
 
 def _findings_identity(findings):
     """Множество идентичностей находок запуска — для определения «изменилось»."""
@@ -91,13 +87,7 @@ def _serialize_exception(e):
 
 @scripts_auth
 def checks_overview(request):
-    """GET /api/checks/scripts/ — обзор всех скриптов со сводкой.
-
-    StarPony отдаём только суперпользователю (как и раньше). На странице проверок
-    его карточки прячет фронтенд, а в личном кабинете суперпользователя, наоборот,
-    показывает — данные для обоих берутся из этого же ответа.
-    """
-    superuser = _is_superuser(request)
+    """GET /api/checks/scripts/ — обзор всех скриптов со сводкой."""
     latest_results = {}
     for s in SCRIPTS_CONFIG:
         if s.get('structured'):
@@ -108,8 +98,6 @@ def checks_overview(request):
     for script in SCRIPTS_CONFIG:
         sid = script['id']
         if script.get('hidden'):
-            continue
-        if script.get('account') == 'StarPony' and not superuser:
             continue
         item = {
             **{k: script[k] for k in ('id', 'name', 'account', 'schedule', 'description')},
@@ -137,9 +125,6 @@ def checks_runs(request, script_id):
     """GET /api/checks/scripts/{id}/runs/ — история запусков."""
     if script_id not in SCRIPTS_BY_ID:
         return JsonResponse({'status': 'error', 'message': 'Скрипт не найден'}, status=404)
-    denied = _starpony_access_denied(request, script_id)
-    if denied:
-        return denied
 
     if SCRIPTS_BY_ID.get(script_id, {}).get('structured'):
         rows = list(CheckRunResult.objects.filter(script_id=script_id).order_by('-finished_at')[:30])
@@ -207,9 +192,6 @@ def checks_results(request, script_id):
     """GET /api/checks/scripts/{id}/results/?run_id= — структурированные находки."""
     if not SCRIPTS_BY_ID.get(script_id, {}).get('structured'):
         return JsonResponse({'status': 'error', 'message': 'У скрипта нет структурированных результатов'}, status=400)
-    denied = _starpony_access_denied(request, script_id)
-    if denied:
-        return denied
 
     run_id = request.GET.get('run_id')
     qs = CheckRunResult.objects.filter(script_id=script_id)
@@ -302,9 +284,6 @@ def checks_log(request, script_id):
     """GET /api/checks/scripts/{id}/log/?run_id= — сырой лог (для 6 скриптов и отладки)."""
     if script_id not in SCRIPTS_BY_ID:
         return JsonResponse({'status': 'error', 'message': 'Скрипт не найден'}, status=404)
-    denied = _starpony_access_denied(request, script_id)
-    if denied:
-        return denied
 
     run_id = request.GET.get('run_id')
     if not run_id:
@@ -344,9 +323,6 @@ def checks_run(request, script_id):
     script = SCRIPTS_BY_ID.get(script_id)
     if not script:
         return JsonResponse({'status': 'error', 'message': 'Скрипт не найден'}, status=404)
-    denied = _starpony_access_denied(request, script_id)
-    if denied:
-        return denied
     if _is_running(script_id):
         return JsonResponse({'status': 'error', 'message': 'Скрипт уже запущен'}, status=409)
     if not os.path.exists(script['script']):
@@ -363,9 +339,6 @@ def checks_stop(request, script_id):
     """POST /api/checks/scripts/{id}/stop/ — остановить скрипт."""
     if script_id not in SCRIPTS_BY_ID:
         return JsonResponse({'status': 'error', 'message': 'Скрипт не найден'}, status=404)
-    denied = _starpony_access_denied(request, script_id)
-    if denied:
-        return denied
 
     pid_file = _pid_file(script_id)
     if not os.path.exists(pid_file):
@@ -407,9 +380,6 @@ def checks_run_delete(request, script_id, run_id):
     """DELETE /api/checks/scripts/{id}/runs/{run_id}/ — удалить запуск из истории."""
     if script_id not in SCRIPTS_BY_ID:
         return JsonResponse({'status': 'error', 'message': 'Скрипт не найден'}, status=404)
-    denied = _starpony_access_denied(request, script_id)
-    if denied:
-        return denied
 
     if _is_running(script_id):
         latest = _get_latest_run(script_id)

@@ -39,16 +39,6 @@ const SCRIPTS = [
         last_run: null,
         schedule: 'каждый час',
     },
-    {
-        // StarPony на странице проверок НЕ показывается (виден только в ЛК суперпользователя),
-        // но остаётся в данных, чтобы деталь по прямой ссылке /checks/:id работала
-        id: 'starpony_returns',
-        name: 'StarPony возвраты',
-        description: 'Возвраты StarPony',
-        account: 'StarPony',
-        last_run: null,
-        schedule: 'каждый час',
-    },
 ];
 
 const renderAt = (path) => render(
@@ -66,14 +56,11 @@ beforeEach(() => {
 });
 
 describe('ChecksPage — список', () => {
-    it('показывает строки HorseBio, но скрывает StarPony', async () => {
+    it('показывает строки скриптов с аккаунтом', async () => {
         renderAt('/checks');
         expect(await screen.findByText('Проверка данных')).toBeInTheDocument();
         expect(screen.getByText('Мониторинг возвратов')).toBeInTheDocument();
         expect(screen.getAllByText('HorseBio').length).toBeGreaterThan(0);
-        // StarPony на странице проверок не отображается
-        expect(screen.queryByText('StarPony возвраты')).not.toBeInTheDocument();
-        expect(screen.queryByText('StarPony')).not.toBeInTheDocument();
     });
 
     it('показывает статус и время запуска одной компактной строкой', async () => {
@@ -109,7 +96,7 @@ describe('ChecksPage — навигация', () => {
     });
 
     it('прямая ссылка /checks/:id сразу открывает деталку', async () => {
-        renderAt('/checks/starpony_returns');
-        expect(await screen.findByText('деталка: starpony_returns')).toBeInTheDocument();
+        renderAt('/checks/horsebio_returns');
+        expect(await screen.findByText('деталка: horsebio_returns')).toBeInTheDocument();
     });
 });

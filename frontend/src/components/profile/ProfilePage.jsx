@@ -1,13 +1,11 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { duration, formatDateTime } from '../../utils/formatters';
 import { useIsMobile } from '../../hooks/useIsMobile';
-import { Link } from 'react-router-dom';
-import { CalendarClock, Database, DoorClosed, DoorOpen, LogOut, Monitor, Smartphone, ShieldCheck, Mail, ExternalLink, Activity } from 'lucide-react';
+import { CalendarClock, Database, DoorClosed, DoorOpen, LogOut, Monitor, Smartphone, ShieldCheck, Mail, ExternalLink } from 'lucide-react';
 import { setAuthStatus } from '../../utils/authSession';
 import { useAuthStatus } from '../../hooks/useAuthStatus';
 import { authApi } from '../../api/authApi';
 import { Page, SectionLabel } from '../ui';
-import { checksApi } from '../checks/checksShared';
 
 const card = {
     backgroundColor: 'var(--surface-card)',
@@ -59,7 +57,6 @@ const ProfilePage = () => {
     const [activity, setActivity] = useState([]);
     const [usage, setUsage] = useState(null);
     const [sessions, setSessions] = useState([]);
-    const [starponyScripts, setStarponyScripts] = useState([]);
     const [revokingId, setRevokingId] = useState(null);
     const isMobile = useIsMobile();
 
@@ -91,16 +88,6 @@ const ProfilePage = () => {
 
         return () => ctrl.abort();
     }, []);
-
-    // StarPony виден только здесь, в ЛК суперпользователя (со страницы проверок убран)
-    useEffect(() => {
-        if (!auth.isSuperuser) return;
-        let alive = true;
-        checksApi.overview()
-            .then(d => { if (alive) setStarponyScripts((d.scripts || []).filter(s => s.account === 'StarPony')); })
-            .catch(() => {});
-        return () => { alive = false; };
-    }, [auth.isSuperuser]);
 
     const handleRevoke = useCallback(async (sessionId) => {
         setRevokingId(sessionId);
@@ -220,7 +207,7 @@ const ProfilePage = () => {
                 alignItems: 'start',
             }}>
 
-                {/* Колонка 1: профиль + администрирование + StarPony */}
+                {/* Колонка 1: профиль + администрирование */}
                 <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
 
                     <section style={card}>
@@ -271,45 +258,6 @@ const ProfilePage = () => {
                         </section>
                     )}
 
-                    {auth.isSuperuser && starponyScripts.length > 0 && (
-                        <section style={card}>
-                            <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 16 }}>
-                                <Activity size={15} color="var(--primary)" />
-                                <span style={sectionLabel}>StarPony</span>
-                            </div>
-                            <div style={{ display: 'flex', flexDirection: 'column' }}>
-                                {starponyScripts.map(s => {
-                                    const problems = (s.summary?.critical || 0) + (s.summary?.important || 0) + (s.summary?.warnings || 0);
-                                    const ok = Boolean(s.summary) && problems === 0;
-                                    const problemLabel = problems === 1 ? 'проблема' : problems < 5 ? 'проблемы' : 'проблем';
-                                    return (
-                                        <Link key={s.id} to={`/checks/${s.id}`} state={{ from: 'profile' }} style={{
-                                            display: 'flex', alignItems: 'center', gap: 10,
-                                            borderTop: '1px solid var(--hairline)', padding: '9px 0',
-                                            textDecoration: 'none', color: 'inherit',
-                                        }}>
-                                            <div style={{ flex: 1, minWidth: 0 }}>
-                                                <div style={{ fontSize: 13, color: 'var(--ink)', fontWeight: 500, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                                                    {s.name}
-                                                </div>
-                                                <div style={{ fontSize: 11, color: 'var(--muted-soft)', marginTop: 2 }}>
-                                                    {s.last_run ? relativeTime(s.last_run.finished_at) : s.schedule}
-                                                </div>
-                                            </div>
-                                            <span style={{
-                                                fontSize: 11, fontWeight: 500, flexShrink: 0,
-                                                borderRadius: 4, padding: '2px 8px',
-                                                color: ok ? 'var(--success)' : problems > 0 ? 'var(--cat-orange-ink)' : 'var(--muted)',
-                                                background: ok ? 'var(--success-bg)' : problems > 0 ? 'var(--cat-orange-bg)' : 'transparent',
-                                            }}>
-                                                {ok ? 'OK' : problems > 0 ? `${problems} ${problemLabel}` : '—'}
-                                            </span>
-                                        </Link>
-                                    );
-                                })}
-                            </div>
-                        </section>
-                    )}
                 </div>
 
                 {/* Колонка 2: статистика месяца + активные сессии */}

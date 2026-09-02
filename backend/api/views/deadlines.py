@@ -9,7 +9,6 @@ from .scripts_monitor import scripts_auth_basic
 
 DEADLINES_JSON = {
     'horsebio': '/app/moysklad/horsebio/01_daemons/05_payment_deadline/data/deadlines.json',
-    'starpony': '/app/moysklad/starpony/01_daemons/02_payment_deadline/data/deadlines.json',
 }
 
 

@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback } from 'react';
-import { useNavigate, useParams, useLocation } from 'react-router-dom';
+import { useNavigate, useParams } from 'react-router-dom';
 import { ErrorState, Page, PageHeader, SectionLabel, Skeleton } from '../ui';
 import { checksApi, PENDING_RETURNS_ID } from './checksShared';
 import ScriptCard from './ScriptCard';
@@ -15,7 +15,6 @@ export default function ChecksPage() {
     const [error, setError] = useState(null);
     const { scriptId } = useParams();
     const navigate = useNavigate();
-    const location = useLocation();
 
     const load = useCallback(async () => {
         try {
@@ -35,27 +34,20 @@ export default function ChecksPage() {
 
     if (scriptId) {
         const script = (scripts || []).find((s) => s.id === scriptId);
-        // Открыто из ЛК (StarPony) — помечено state.from; «назад» ведёт в кабинет
-        const fromProfile = location.state?.from === 'profile';
         // idx === 0 — деталка открыта по прямой ссылке, «назад» из истории увёл бы из приложения
         const goBack = () => {
-            if (fromProfile) navigate('/profile');
-            else if (window.history.state?.idx > 0) navigate(-1);
+            if (window.history.state?.idx > 0) navigate(-1);
             else navigate('/checks', { replace: true });
         };
-        const backLabel = fromProfile ? 'Личный кабинет' : 'Все проверки';
+        const backLabel = 'Все проверки';
         // У «Возвратов в пути» своя деталка: плитки, лента возраста, группы по статусу
         if (scriptId === PENDING_RETURNS_ID) return <PendingReturnsDetail onBack={goBack} />;
         return <CheckDetail scriptId={scriptId} initial={script} onBack={goBack} backLabel={backLabel} />;
     }
 
     // Группировка по темам (аккаунт — бейдж в строке, не секция).
-    // StarPony на сетке проверок не показываем — он виден только в личном кабинете
-    // суперпользователя. При этом сам скрипт остаётся в списке scripts, чтобы
-    // деталь по прямой ссылке /checks/<id> получала свои данные (name, summary…).
     const topics = [];
     (scripts || []).forEach((s) => {
-        if (s.account === 'StarPony') return;
         const topic = s.topic || '';
         let t = topics.find((x) => x.topic === topic);
         if (!t) { t = { topic, items: [] }; topics.push(t); }
