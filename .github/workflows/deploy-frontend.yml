@@ -5,6 +5,8 @@ on:
     branches: [main]
     paths:
       - 'frontend/**'
+      # Правка самого деплоя обязана деплой и запускать — см. deploy-backend.yml.
+      - '.github/workflows/deploy-frontend.yml'
   workflow_dispatch:
 
 concurrency:

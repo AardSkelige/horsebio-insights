@@ -6,6 +6,11 @@ on:
     paths:
       - 'backend/**'
       - 'docker-compose.prod.yml'
+      # Правка самого деплоя обязана деплой и запускать. Без этой строки
+      # 02.09.2026 коммит с повторами для ghcr.io просто не выкатился:
+      # workflow изменён, а прогона нет — и понять это можно только
+      # по отсутствию запуска, никакой ошибки при этом не появляется.
+      - '.github/workflows/deploy-backend.yml'
   workflow_dispatch:
 
 concurrency:
