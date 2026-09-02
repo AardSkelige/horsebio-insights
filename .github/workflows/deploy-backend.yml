@@ -136,9 +136,32 @@ jobs:
           envs: GHCR_TOKEN,GHCR_USER
           script: |
             set -e
-            echo "$GHCR_TOKEN" | docker login ghcr.io -u "$GHCR_USER" --password-stdin
+
+            # Связь сервера с ghcr.io рвётся примерно в каждой пятой попытке:
+            # измерено 02.09.2026 — из пяти запросов подряд четыре прошли
+            # за 0.2-0.5 с, а один завис на 20 с (TLS-рукопожатие 7.5 с
+            # и обрыв). У docker таймаут короткий, и он попадает в эти окна:
+            # два деплоя подряд упали с "TLS handshake timeout".
+            #
+            # Повторяем только сетевые шаги. Всё остальное локально и падать
+            # по этой причине не может — заворачивать его в retry значило бы
+            # прятать настоящие ошибки за повторами.
+            retry() {
+              local attempt=1 max=5
+              until "$@"; do
+                if [ "$attempt" -ge "$max" ]; then
+                  echo "Не удалось за $max попыток: $*" >&2
+                  return 1
+                fi
+                echo "Попытка $attempt из $max не удалась, повтор через $((attempt * 5)) с"
+                sleep $((attempt * 5))
+                attempt=$((attempt + 1))
+              done
+            }
+
+            retry bash -c 'echo "$GHCR_TOKEN" | docker login ghcr.io -u "$GHCR_USER" --password-stdin'
             cd /root/horsebio
-            docker compose -f docker-compose.prod.yml pull
+            retry docker compose -f docker-compose.prod.yml pull
             # The backend entrypoint applies migrations before starting Django.
             # Waiting for its health avoids racing a second migration process.
             docker compose -f docker-compose.prod.yml up -d --remove-orphans --wait --wait-timeout 180
