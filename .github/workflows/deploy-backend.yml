@@ -166,7 +166,20 @@ jobs:
 
             retry bash -c 'echo "$GHCR_TOKEN" | docker login ghcr.io -u "$GHCR_USER" --password-stdin'
             cd /root/horsebio
-            retry docker compose -f docker-compose.prod.yml pull
+
+            # Тянем ТОЛЬКО образ бэкенда, а не все четыре.
+            #
+            # `compose pull` без имени сервиса качает всё сразу и параллельно:
+            # postgres, nginx, backend и frontend. Первые два с Docker Hub
+            # приходят всегда, а два с ghcr.io — через раз, и в логе 02.09
+            # видно характерное: один образ Pulled, второй Error, и так все
+            # пять попыток. Каждая неудача откатывала и уже скачанное.
+            #
+            # Образ фронтенда этому деплою не нужен — его выкатывает
+            # deploy-frontend.yml, а локальная копия уже лежит на сервере
+            # и подхватится при up. Один образ вместо двух — вдвое меньше
+            # шансов попасть в обрыв.
+            retry docker compose -f docker-compose.prod.yml pull backend
             # The backend entrypoint applies migrations before starting Django.
             # Waiting for its health avoids racing a second migration process.
             docker compose -f docker-compose.prod.yml up -d --remove-orphans --wait --wait-timeout 180
