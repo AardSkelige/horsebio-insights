@@ -10,11 +10,9 @@ import os
 import re
 import glob
 import hashlib
-import secrets
 from datetime import datetime
 from functools import wraps
 
-from django.conf import settings
 from django.http import JsonResponse
 from django.views.decorators.csrf import csrf_exempt, csrf_protect
 from django.views.decorators.http import require_http_methods
@@ -29,25 +27,19 @@ logger = logging.getLogger(__name__)
 
 
 # ─── Авторизация ──────────────────────────────────────────────────────────────
-
-def _has_valid_cron_secret(request):
-    """Проверить machine-to-machine секрет без утечки по времени сравнения."""
-    configured_secret = getattr(settings, 'CRON_SECRET', '')
-    supplied_secret = request.headers.get('X-Cron-Secret', '')
-    return bool(
-        configured_secret
-        and supplied_secret
-        and secrets.compare_digest(supplied_secret, configured_secret)
-    )
-
+#
+# Machine-to-machine входа здесь больше нет. Он был нужен, пока запуск шёл
+# по HTTP: cron дёргал /api/scripts/<id>/run/ с заголовком X-Cron-Secret,
+# а секрет лежал в crontab открытым текстом. С переездом на `manage.py
+# run_check` запуск идёт мимо HTTP, и авторизация теперь — это доступ
+# к серверу. Забытый секрет — это лишний вход в систему, который никто
+# не сторожит.
 
 def scripts_auth(view_func):
-    """Только суперпользователь или запрос с X-Cron-Secret."""
+    """Только суперпользователь."""
     @wraps(view_func)
     def wrapper(request, *args, **kwargs):
         if request.user.is_authenticated and request.user.is_superuser:
-            return view_func(request, *args, **kwargs)
-        if _has_valid_cron_secret(request):
             return view_func(request, *args, **kwargs)
         status = 403 if request.user.is_authenticated else 401
         return JsonResponse({'status': 'error', 'message': 'Нет доступа'}, status=status)
@@ -55,38 +47,30 @@ def scripts_auth(view_func):
 
 
 def scripts_mutation_auth(view_func):
-    """Авторизация изменений: cron по секрету, администратор — с CSRF.
-
-    Внешний cron не использует cookie-сессию, поэтому CSRF ему не нужен. Для
-    браузерной сессии суперпользователя CSRF остаётся обязательным.
-    """
+    """Изменения: суперпользователь, CSRF обязателен."""
     csrf_protected_view = csrf_protect(view_func)
 
     @wraps(view_func)
     def wrapper(request, *args, **kwargs):
-        if _has_valid_cron_secret(request):
-            return view_func(request, *args, **kwargs)
         if request.user.is_authenticated and request.user.is_superuser:
             return csrf_protected_view(request, *args, **kwargs)
         status = 403 if request.user.is_authenticated else 401
         return JsonResponse({'status': 'error', 'message': 'Нет доступа'}, status=status)
 
-    # Глобальный middleware пропускает wrapper; ветка session auth выше явно
-    # прогоняется через csrf_protect, а machine-to-machine запрос — нет.
+    # Глобальный middleware пропускает wrapper, а ветка сессии выше явно
+    # прогоняется через csrf_protect. Без этого запрос без токена получал бы
+    # от middleware страницу CSRF вместо внятного «Нет доступа».
     return csrf_exempt(wrapper)
 
 
 def scripts_auth_basic(view_func):
-    """Декоратор: любой авторизованный пользователь или X-Cron-Secret заголовок."""
+    """Чтение: любой вошедший пользователь."""
     @wraps(view_func)
     def wrapper(request, *args, **kwargs):
         if request.user.is_authenticated:
             return view_func(request, *args, **kwargs)
-        if _has_valid_cron_secret(request):
-            return view_func(request, *args, **kwargs)
         return JsonResponse({'status': 'error', 'message': 'Требуется авторизация'}, status=401)
     return wrapper
-
 
 
 # ─── Вспомогательные функции ──────────────────────────────────────────────────

@@ -3,7 +3,7 @@ from decimal import Decimal
 from unittest.mock import patch
 
 from django.contrib.auth.models import User
-from django.test import Client, TestCase, override_settings
+from django.test import Client, TestCase
 from django.utils import timezone
 
 from core.models import (
@@ -14,7 +14,6 @@ from core.models import (
 SCRIPT_ID = 'horsebio_buy_prices'
 
 
-@override_settings(CRON_SECRET='test-cron-secret')
 class ScriptsMutationAuthorizationTests(TestCase):
     def setUp(self):
         self.user = User.objects.create_user('user', password='password')
@@ -84,14 +83,17 @@ class ScriptsMutationAuthorizationTests(TestCase):
 
         self.assertEqual([response.status_code for response in responses], [200, 200, 200])
 
-    def test_cron_secret_can_mutate_without_browser_csrf(self):
+    def test_cron_secret_header_no_longer_opens_anything(self):
+        """Machine-to-machine вход убран вместе с запуском по HTTP: cron ходит
+        через `manage.py run_check`, а секрет в crontab был лишним входом
+        в систему, который никто не сторожил."""
         client = Client(enforce_csrf_checks=True)
 
         responses = self._post_mutating_endpoints(
             client, HTTP_X_CRON_SECRET='test-cron-secret'
         )
 
-        self.assertEqual([response.status_code for response in responses], [200, 200, 200])
+        self.assertEqual([response.status_code for response in responses], [401, 401, 401])
 
 
 class AnalyticsListValidationTests(TestCase):

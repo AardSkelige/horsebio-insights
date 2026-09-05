@@ -128,7 +128,6 @@ SITE_CML_PASSWORD = os.getenv('SITE_CML_PASSWORD', '')
 
 # Scripts monitor settings
 SCRIPTS_LOGS_DIR = os.getenv('SCRIPTS_LOGS_DIR', '/app/scripts_logs')
-CRON_SECRET = os.getenv('CRON_SECRET', '')
 
 # Обновленные CORS настройки
 _BASE_CORS_ORIGINS = [

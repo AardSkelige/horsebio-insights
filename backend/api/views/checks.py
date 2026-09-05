@@ -11,7 +11,6 @@ import json
 from collections import defaultdict
 
 from django.http import JsonResponse
-from django.views.decorators.csrf import csrf_exempt
 from django.views.decorators.http import require_http_methods
 from django.utils import timezone as dj_timezone
 
@@ -22,7 +21,7 @@ from api.services.scripts_registry import (
     SCRIPTS_CONFIG, SCRIPTS_BY_ID, HEALTH_CHECK_SCRIPT_ID,
 )
 from .scripts_monitor import (
-    scripts_auth, scripts_auth_basic,
+    scripts_auth, scripts_mutation_auth,
     _get_runs, _get_latest_run, _process_terminal_output, _get_exit_code,
 )
 
@@ -314,8 +313,7 @@ def checks_log(request, script_id):
 
 # ─── Запуск / остановка ───────────────────────────────────────────────────────
 
-@csrf_exempt
-@scripts_auth
+@scripts_mutation_auth
 @require_http_methods(['POST'])
 def checks_run(request, script_id):
     """POST /api/checks/scripts/{id}/run/ — запустить скрипт."""
@@ -331,8 +329,7 @@ def checks_run(request, script_id):
     return JsonResponse({'status': 'ok', 'run_id': run_id, 'message': f'Скрипт {script["name"]} запущен'})
 
 
-@csrf_exempt
-@scripts_auth
+@scripts_mutation_auth
 @require_http_methods(['POST'])
 def checks_stop(request, script_id):
     """POST /api/checks/scripts/{id}/stop/ — остановить скрипт."""
@@ -346,8 +343,7 @@ def checks_stop(request, script_id):
     return JsonResponse({'status': 'ok', 'message': script_runner.STOP_MESSAGES[outcome]})
 
 
-@csrf_exempt
-@scripts_auth
+@scripts_mutation_auth
 @require_http_methods(['DELETE'])
 def checks_run_delete(request, script_id, run_id):
     """DELETE /api/checks/scripts/{id}/runs/{run_id}/ — удалить запуск из истории."""
@@ -377,8 +373,7 @@ def checks_run_delete(request, script_id, run_id):
 
 # ─── Исключения (CRUD) ────────────────────────────────────────────────────────
 
-@csrf_exempt
-@scripts_auth
+@scripts_mutation_auth
 @require_http_methods(['GET', 'POST'])
 def checks_exceptions(request):
     """GET /api/checks/exceptions/?kind= — список; POST — добавить."""
@@ -418,8 +413,7 @@ def checks_exceptions(request):
                         status=201 if created else 200)
 
 
-@csrf_exempt
-@scripts_auth
+@scripts_mutation_auth
 @require_http_methods(['PATCH', 'DELETE'])
 def checks_exception_detail(request, exc_id):
     """PATCH /api/checks/exceptions/{id}/ — изменить причину; DELETE — убрать."""
