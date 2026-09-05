@@ -1,0 +1,40 @@
+# Блок Horse Bio Insights для общего Caddyfile.
+#
+# Caddy на сервере один на два проекта (второй — StarPony Insights), и его
+# конфигурация живёт в /root/caddy/Caddyfile. Деплой её не копирует: здесь
+# лежит копия нашей части, чтобы её можно было прочитать, не заходя
+# на сервер, и восстановить, если конфигурация на сервере потеряется.
+#
+# Применение:
+#   docker exec shared_caddy caddy validate --config /etc/caddy/Caddyfile --adapter caddyfile
+#   docker exec shared_caddy caddy reload   --config /etc/caddy/Caddyfile --adapter caddyfile
+# Публикация портов — в /root/caddy/docker-compose.caddy.yml: 80 и 443.
+# Изменение портов требует пересоздания контейнера, reload его не подхватит.
+
+{
+	email mystmuse@gmail.com
+
+	# Порт 80 занимаем: с 02.09.2026 контейнер Horse Bio его больше
+	# не публикует, и голый http:// перестал отвечать вовсе — старая
+	# закладка упиралась в отказ соединения. Теперь Caddy отвечает на 80
+	# и уводит на 443 своим редиректом.
+}
+
+insight.horse-bio.ru {
+	# HSTS НЕ включаем: откат должен оставаться мгновенным.
+
+	reverse_proxy horsebio_frontend:80 {
+		# Долгие операции: синк идёт минутами
+		transport http {
+			read_timeout 600s
+			write_timeout 600s
+		}
+	}
+
+	log {
+		output file /var/log/caddy/access.log {
+			roll_size 10mb
+			roll_keep 3
+		}
+	}
+}
