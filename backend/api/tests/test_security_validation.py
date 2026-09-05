@@ -25,13 +25,13 @@ class ScriptsMutationAuthorizationTests(TestCase):
     def _post_mutating_endpoints(self, client, **headers):
         requests = [
             (f'/api/scripts/{SCRIPT_ID}/run/', {
-                'api.views.scripts_monitor._is_running': False,
+                'api.services.script_runner.is_running': False,
                 'api.views.scripts_monitor.os.path.exists': True,
-                'api.views.scripts_monitor._run_script_async': 'run-1',
+                'api.services.script_runner.launch': 'run-1',
             }),
             (f'/api/scripts/{SCRIPT_ID}/stop/', {}),
             (f'/api/scripts/{SCRIPT_ID}/runs/run-1/delete/', {
-                'api.views.scripts_monitor._is_running': False,
+                'api.services.script_runner.is_running': False,
                 'api.views.scripts_monitor.os.path.exists': True,
                 'api.views.scripts_monitor.os.unlink': None,
             }),
@@ -57,7 +57,7 @@ class ScriptsMutationAuthorizationTests(TestCase):
         client.force_login(self.user)
         with (
             patch('api.views.scripts_monitor._get_latest_run', return_value=None),
-            patch('api.views.scripts_monitor._is_running', return_value=False),
+            patch('api.services.script_runner.is_running', return_value=False),
             patch('api.views.scripts_monitor.os.path.exists', return_value=True),
         ):
             response = client.get('/api/scripts/')

@@ -6,6 +6,10 @@ on:
     paths:
       - 'backend/**'
       - 'docker-compose.prod.yml'
+      # Обёртка запуска проверок и расписание: их на сервер кладёт этот же
+      # деплой. Правка, которая не выкатилась, — это расписание, разошедшееся
+      # с тем, что реально исполняется.
+      - 'deploy/**'
       # Правка самого деплоя обязана деплой и запускать. Без этой строки
       # 02.09.2026 коммит с повторами для ghcr.io просто не выкатился:
       # workflow изменён, а прогона нет — и понять это можно только
@@ -126,7 +130,7 @@ jobs:
           host: ${{ secrets.SSH_HOST }}
           username: ${{ secrets.SSH_USER }}
           key: ${{ secrets.SSH_PRIVATE_KEY }}
-          source: "docker-compose.prod.yml,backend/nginx/nginx.conf"
+          source: "docker-compose.prod.yml,backend/nginx/nginx.conf,deploy"
           target: "/root/horsebio"
 
       - name: Deploy to server
@@ -166,6 +170,10 @@ jobs:
 
             retry bash -c 'echo "$GHCR_TOKEN" | docker login ghcr.io -u "$GHCR_USER" --password-stdin'
             cd /root/horsebio
+
+            # scp не сохраняет бит исполнения — без этого cron молча
+            # не запустит ни одной проверки.
+            chmod +x /root/horsebio/deploy/cron/*.sh
 
             # Тянем ТОЛЬКО образ бэкенда, а не все четыре.
             #

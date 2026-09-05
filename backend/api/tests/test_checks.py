@@ -14,8 +14,9 @@ from api.models import CheckRunResult, HealthCheckException
 from api.services.health_checks import (
     EXPIRE_DAYS, cleanup_expired_exceptions, cleanup_resolved_deviations,
 )
+from api.services import script_runner
+from api.services.scripts_registry import HEALTH_CHECK_SCRIPT_ID
 from api.views import scripts_monitor
-from api.views.scripts_monitor import HEALTH_CHECK_SCRIPT_ID
 from api.views.checks import _parse_progress
 
 
@@ -315,7 +316,7 @@ class ScriptLogIsolationTests(SimpleTestCase):
                 self._touch(tmp, f'horsebio_returns_wb_enrich_2026-08-{i + 1:02d}_09-30-00.log')
 
             with override_settings(SCRIPTS_LOGS_DIR=tmp):
-                scripts_monitor._cleanup_old_logs('horsebio_returns')
+                script_runner.cleanup_old_logs('horsebio_returns')
 
             self.assertTrue(os.path.exists(own))
             self.assertTrue(os.path.exists(other))

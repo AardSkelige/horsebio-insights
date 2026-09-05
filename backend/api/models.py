@@ -176,7 +176,7 @@ class HealthCheckException(models.Model):
 class CheckRunResult(models.Model):
     """Снимок структурированного результата одного запуска health_check.
 
-    Заполняется watcher-потоком после завершения процесса (см. scripts_monitor._run_script_async),
+    Заполняется командой run_check после завершения процесса (см. services/script_runner.py),
     парсингом <run>.results.json. Используется для истории, дельт и просмотра прошлых запусков
     независимо от очистки лог-файлов.
     """

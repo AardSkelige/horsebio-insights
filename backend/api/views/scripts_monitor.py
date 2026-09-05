@@ -1,16 +1,16 @@
 # api/views/scripts_monitor.py
 """
-Мониторинг и запуск автоматизированных скриптов.
+Мониторинг автоматизированных скриптов: список, история, логи, остановка.
+
+Сам запуск живёт в api/services/script_runner.py и идёт отдельным процессом
+(`manage.py run_check`) — веб только порождает его и читает то, что он оставил
+в файлах. Реестр задач — в api/services/scripts_registry.py.
 """
 import os
 import re
 import glob
 import hashlib
-import signal
 import secrets
-import threading
-import subprocess
-import time
 from datetime import datetime
 from functools import wraps
 
@@ -19,238 +19,14 @@ from django.http import JsonResponse
 from django.views.decorators.csrf import csrf_exempt, csrf_protect
 from django.views.decorators.http import require_http_methods
 
+from api.services import script_runner
+from api.services.scripts_registry import (
+    SCRIPTS_CONFIG, SCRIPTS_BY_ID, HEALTH_CHECK_SCRIPT_ID,
+)
+
 import logging
 logger = logging.getLogger(__name__)
 
-# ─── Конфигурация скриптов ────────────────────────────────────────────────────
-
-SCRIPTS_CONFIG = [
-    {
-        'id': 'horsebio_health_check',
-        'topic': 'Себестоимость',
-        'name': 'Health Check',
-        'account': 'HorseBio',
-        'schedule': 'Ежедн. в 08:00',
-        'description': 'Комплекс из 13 проверок: FIFO-себестоимость, документы, цены в приёмках, коды товаров, черновики',
-        'script': '/app/moysklad/horsebio/02_checks/01_health/scripts/01_health_check.py',
-        'args': ['--full'],
-        'structured': True,
-    },
-    {
-        'id': 'horsebio_buy_prices',
-        'topic': 'Себестоимость',
-        'name': 'Закупочные цены',
-        'account': 'HorseBio',
-        'schedule': 'Каждые 5 ч с 09:50',
-        'description': 'Синхронизация buyPrice из FIFO-себестоимости',
-        'script': '/app/moysklad/horsebio/01_daemons/02_buy_prices/scripts/01_sync_buy_prices.py',
-        'args': [],
-        'structured': True,
-    },
-    {
-        'id': 'horsebio_pending_returns',
-        'topic': 'Возвраты',
-        'name': 'Что разобрать из возвратов',
-        'account': 'HorseBio',
-        'schedule': 'Каждые 5 ч с 09:45',
-        'description': 'Сколько денег висит в возвратах и что требует действия',
-        'script': '/app/moysklad/horsebio/01_daemons/03_returns/scripts/04_pending_returns.py',
-        'args': [],
-        'structured': True,
-    },
-    {
-        'id': 'horsebio_returns',
-        'topic': 'Возвраты',
-        'name': 'Все ли возвраты заведены',
-        'account': 'HorseBio',
-        'schedule': 'Каждые 5 ч с 09:00',
-        'description': 'Робот берёт у маркетплейсов список возвратов и заводит документы',
-        'script': '/app/moysklad/horsebio/01_daemons/03_returns/scripts/01_monitor_returns.py',
-        'args': [],
-        'structured': True,
-    },
-    {
-        'id': 'horsebio_returns_ozon_enrich',
-        'topic': 'Возвраты',
-        'name': 'Где едут возвраты Озон',
-        'account': 'HorseBio',
-        'schedule': 'Каждые 5 ч с 09:15',
-        'description': 'Робот спрашивает у Ozon, где коробка, и ставит статус на документ',
-        'script': '/app/moysklad/horsebio/01_daemons/03_returns/scripts/02_enrich_ozon_returns.py',
-        'args': [],
-        'structured': True,
-    },
-    {
-        'id': 'horsebio_returns_wb_enrich',
-        'topic': 'Возвраты',
-        'name': 'Где едут возвраты ВБ',
-        'account': 'HorseBio',
-        'schedule': 'Каждые 5 ч с 09:30',
-        'description': 'Робот берёт статус из отчёта Wildberries и ставит его на документ',
-        'script': '/app/moysklad/horsebio/01_daemons/03_returns/scripts/03_enrich_wb_returns.py',
-        'args': [],
-        'structured': True,
-    },
-    {
-        'id': 'horsebio_zero_cost_returns',
-        'topic': 'Возвраты',
-        'name': 'Нет ли возвратов без себестоимости',
-        'account': 'HorseBio',
-        'schedule': 'Каждые 5 ч с 10:00',
-        'description': 'Проведённые возвраты не занижают FIFO-себестоимость готовой продукции',
-        'script': '/app/moysklad/horsebio/01_daemons/03_returns/scripts/05_zero_cost_returns.py',
-        'args': [],
-        'structured': True,
-    },
-    {
-        'id': 'horsebio_deadlines',
-        'topic': 'Оплаты',
-        'name': 'Сроки оплаты',
-        'account': 'HorseBio',
-        'schedule': 'Ежедн. в 09:20',
-        'description': 'Мониторинг просроченных и скоро истекающих оплат',
-        'script': '/app/moysklad/horsebio/01_daemons/05_payment_deadline/scripts/01_check_deadlines.py',
-        'args': [],
-        'structured': True,
-    },
-    {
-        'id': 'horsebio_order_email_sync',
-        'topic': 'Заказы сайта',
-        'name': 'Чтение писем о заказах',
-        'account': 'HorseBio',
-        'schedule': 'Каждые 5 мин',
-        'description': 'Читает почту info@horse-bio.ru и распознаёт заказы в письмах-уведомлениях с сайта (МойСклад не трогает)',
-        'script': '/app/moysklad/horsebio/01_daemons/06_order_email_sync/scripts/01_read_order_emails.py',
-        'args': [],
-        'structured': True,
-    },
-    {
-        'id': 'horsebio_order_email_create',
-        'topic': 'Заказы сайта',
-        'name': 'Заведение заказов в МойСклад',
-        'account': 'HorseBio',
-        'schedule': 'Каждые 5 мин',
-        'description': 'Заводит черновик заказа сразу после письма о заказе, платёж и проведение — после письма об оплате',
-        'script': '/app/moysklad/horsebio/01_daemons/06_order_email_sync/scripts/02_create_orders.py',
-        'args': [],
-        'structured': True,
-    },
-    {
-        'id': 'horsebio_cdek_waybills',
-        'topic': 'Заказы сайта',
-        'name': 'Накладные СДЭК',
-        'account': 'HorseBio',
-        'schedule': 'Каждые 5 мин',
-        'description': 'Формирует накладную СДЭК для оплаченных одиночных заказов сайта и прикрепляет PDF к заказу в МойСклад',
-        'script': '/app/moysklad/horsebio/01_daemons/07_cdek_waybills/scripts/01_create_waybills.py',
-        'args': [],
-        'structured': True,
-    },
-    {
-        'id': 'horsebio_site_orders_reconcile',
-        'topic': 'Заказы сайта',
-        'name': 'Сверка заказов с сайтом',
-        'account': 'HorseBio',
-        'schedule': 'Ежедн. в 09:40',
-        'description': 'Сверяет заказы сайта с МойСклад по выгрузке CommerceML: не потерялся ли оплаченный заказ, сходятся ли сумма и оплата с учётом скидок',
-        'script': '/app/moysklad/horsebio/02_checks/02_site_orders/scripts/01_reconcile_site_orders.py',
-        'args': [],
-        'structured': True,
-    },
-    {
-        'id': 'horsebio_data_sync',
-        'topic': 'Обновление данных',
-        'name': 'Синхронизация данных',
-        'account': 'HorseBio',
-        'schedule': 'Ежедн. в 11:00',
-        'description': 'Автосинхронизация данных МойСклад за последние 7 дней (Django-команда auto_sync_weekly)',
-        'script': '/app/manage.py',
-        'args': ['auto_sync_weekly'],
-    },
-    {
-        'id': 'horsebio_ozon_products',
-        'topic': 'Обновление данных',
-        'name': 'Товары Ozon',
-        'account': 'HorseBio',
-        'schedule': 'Ежедн. в 09:35',
-        'description': 'Сопоставление артикулов с sku в Ozon для Ozon Доставки (Django-команда sync_ozon_products)',
-        'script': '/app/manage.py',
-        'args': ['sync_ozon_products'],
-    },
-    {
-        'id': 'horsebio_ozon_points',
-        'topic': 'Обновление данных',
-        'name': 'Пункты выдачи Ozon',
-        'account': 'HorseBio',
-        'schedule': 'Ежедн. в 09:40',
-        'description': 'Координаты ~94 тыс. ПВЗ для карты в корзине (Django-команда sync_ozon_pickup_points)',
-        'script': '/app/manage.py',
-        'args': ['sync_ozon_pickup_points'],
-    },
-    {
-        'id': 'horsebio_ozon_orders',
-        'topic': 'Обновление данных',
-        'name': 'Заказы Ozon Доставки',
-        'account': 'HorseBio',
-        'schedule': 'Каждые 5 мин',
-        'description': 'Создание заказов в Ozon по оплаченным заказам сайта (Django-команда create_ozon_orders)',
-        'script': '/app/manage.py',
-        'args': ['create_ozon_orders'],
-    },
-    {
-        'id': 'horsebio_ozon_postings',
-        'topic': 'Обновление данных',
-        'name': 'Статусы отправлений Ozon',
-        'account': 'HorseBio',
-        'schedule': 'Каждые 5 мин',
-        'description': 'Статусы отправлений Ozon Доставки: отмены и невыкупы, по которым надо вернуть деньги (Django-команда sync_ozon_postings)',
-        'script': '/app/manage.py',
-        'args': ['sync_ozon_postings'],
-    },
-    {
-        'id': 'horsebio_ozon_returns',
-        'topic': 'Обновление данных',
-        'name': 'Возвраты Ozon Доставки',
-        'account': 'HorseBio',
-        'schedule': 'Каждые 5 мин',
-        'description': 'Возвраты по нашим отправлениям Ozon: товар едет обратно, надо принять и вернуть деньги (Django-команда sync_ozon_returns)',
-        'script': '/app/manage.py',
-        'args': ['sync_ozon_returns'],
-    },
-    {
-        'id': 'horsebio_ozon_duplicates',
-        'topic': 'Обновление данных',
-        'name': 'Дубли заказов Ozon',
-        'account': 'HorseBio',
-        'schedule': 'Каждые 5 мин',
-        'description': 'Переносит сведения об отправлении в заказ сайта и удаляет дубль, созданный синхронизацией МойСклад ↔ Ozon (Django-команда resolve_ozon_ms_duplicates)',
-        'script': '/app/manage.py',
-        'args': ['resolve_ozon_ms_duplicates', '--apply'],
-    },
-    {
-        'id': 'horsebio_inventory_check',
-        'topic': 'Обновление данных',
-        'name': 'Инвентаризация',
-        'account': 'HorseBio',
-        'schedule': 'Ежедн. в 09:25',
-        'description': 'Ежедневный пересчёт статуса инвентаризации позиций (Django-команда check_inventory)',
-        'script': '/app/manage.py',
-        'args': ['check_inventory', '--triggered-by', 'scheduler'],
-    },
-    {
-        'id': 'horsebio_backup',
-        'topic': 'Сохранность',
-        'name': 'Бэкапы',
-        'account': 'HorseBio',
-        'schedule': 'Ежедн. в 09:50',
-        'description': 'Идут ли бэкапы: свежесть последнего прогона, размер архивов, место на диске, давность проверки восстановлением',
-        'script': '/app/moysklad/horsebio/02_checks/03_backup/scripts/01_check_backup.py',
-        'args': [],
-        'structured': True,
-    },
-]
-
-SCRIPTS_BY_ID = {s['id']: s for s in SCRIPTS_CONFIG}
 
 # ─── Авторизация ──────────────────────────────────────────────────────────────
 
@@ -315,35 +91,8 @@ def scripts_auth_basic(view_func):
 
 # ─── Вспомогательные функции ──────────────────────────────────────────────────
 
-def _logs_dir():
-    return getattr(settings, 'SCRIPTS_LOGS_DIR', '/app/scripts_logs')
-
-
-# Маска даты в имени лога: {script_id}_2026-08-19_14-20-46.log. Нужна именно
-# маска, а не '*': id одного скрипта бывает префиксом другого (horsebio_returns
-# и horsebio_returns_ozon_enrich), и по '*' они разбирают логи друг друга.
-_RUN_ID_GLOB = '????-??-??_??-??-??'
-
-
-def _pid_file(script_id):
-    return os.path.join(_logs_dir(), f'{script_id}.pid')
-
-
-def _exit_file(log_file):
-    return log_file + '.exit'
-
-
-def _log_filename(script_id, timestamp):
-    return os.path.join(_logs_dir(), f'{script_id}_{timestamp}.log')
-
-
-# Скрипт проверки здоровья — единственный со структурированными результатами и исключениями
-HEALTH_CHECK_SCRIPT_ID = 'horsebio_health_check'
-
-
-def _results_file(script_id, timestamp):
-    return os.path.join(_logs_dir(), f'{script_id}_{timestamp}.results.json')
-
+# Читающая часть: список прогонов, коды выхода, содержимое логов. Пути,
+# замок и сам запуск — в script_runner, здесь только чтение оставленного им.
 
 _NORMALIZE_RE = re.compile(
     r'\d{4}-\d{2}-\d{2}[T ]\d{2}:\d{2}(:\d{2})?'  # ISO datetime
@@ -390,9 +139,9 @@ def _get_runs(script_id):
     """Возвращает список запусков (сортировка: новые первыми).
     Каждый запуск содержит флаг has_changes — отличается ли содержимое от предыдущего.
     """
-    pattern = os.path.join(_logs_dir(), f'{script_id}_{_RUN_ID_GLOB}.log')
+    pattern = os.path.join(script_runner.logs_dir(), f'{script_id}_{script_runner.RUN_ID_GLOB}.log')
     files = sorted(glob.glob(pattern), reverse=True)[:20]
-    running_now = _is_running(script_id)
+    running_now = script_runner.is_running(script_id)
     runs = []
     hashes = []
     for i, f in enumerate(files):
@@ -423,7 +172,7 @@ def _get_runs(script_id):
 
 
 def _get_exit_code(log_file):
-    exit_file = _exit_file(log_file)
+    exit_file = script_runner.exit_file(log_file)
     if not os.path.exists(exit_file):
         return None
     try:
@@ -433,119 +182,9 @@ def _get_exit_code(log_file):
         return None
 
 
-def _is_running(script_id):
-    pid_file = _pid_file(script_id)
-    if not os.path.exists(pid_file):
-        return False
-    try:
-        with open(pid_file) as f:
-            pid = int(f.read().strip())
-        os.kill(pid, 0)  # Сигнал 0 — просто проверка существования процесса
-        return True
-    except (ProcessLookupError, PermissionError):
-        # Процесс уже завершился, удаляем устаревший файл
-        try:
-            os.unlink(pid_file)
-        except Exception:
-            pass
-        return False
-    except Exception:
-        return False
-
-
-def _pid_is_alive(pid):
-    try:
-        os.kill(pid, 0)
-        return True
-    except ProcessLookupError:
-        return False
-
-
 def _get_latest_run(script_id):
     runs = _get_runs(script_id)
     return runs[0] if runs else None
-
-
-def _run_script_async(script_id, script_path, args):
-    """Запускает скрипт в фоне, пишет лог и exit-код."""
-    os.makedirs(_logs_dir(), exist_ok=True)
-    timestamp = datetime.now().strftime('%Y-%m-%d_%H-%M-%S')
-    log_file = _log_filename(script_id, timestamp)
-    pid_file = _pid_file(script_id)
-
-    # Структурированные скрипты пишут находки в .results.json (для страницы /checks).
-    # health_check дополнительно: исключения хранятся в БД — регенерируем data/*.json перед запуском.
-    run_args = list(args)
-    results_file = None
-    is_structured = SCRIPTS_BY_ID.get(script_id, {}).get('structured')
-    if script_id == HEALTH_CHECK_SCRIPT_ID:
-        try:
-            from api.services.health_checks import cleanup_expired_exceptions, export_exceptions_to_json
-            cleanup_expired_exceptions()
-            export_exceptions_to_json()
-        except Exception as e:
-            logger.error('Не удалось экспортировать исключения health_check: %s', e)
-    if is_structured:
-        results_file = _results_file(script_id, timestamp)
-        run_args = run_args + ['--results-out', results_file]
-
-    started_at = time.time()
-    try:
-        log_fh = open(log_file, 'w', encoding='utf-8')
-        proc = subprocess.Popen(
-            # -u: без буферизации. Иначе вывод копится блоками по 4 КБ и лог на
-            # странице выглядит замершим, пока скрипт на самом деле работает.
-            ['python3', '-u', script_path] + run_args,
-            stdout=log_fh,
-            stderr=subprocess.STDOUT,
-            start_new_session=True,
-        )
-    except Exception as e:
-        logger.error(f'Ошибка запуска скрипта {script_id}: {e}')
-        try:
-            with open(log_file, 'a', encoding='utf-8') as f:
-                f.write(f'\n[ОШИБКА ЗАПУСКА] {e}\n')
-            with open(_exit_file(log_file), 'w') as f:
-                f.write('-1')
-        except Exception:
-            pass
-        return timestamp
-
-    # Сохраняем PID
-    with open(pid_file, 'w') as f:
-        f.write(str(proc.pid))
-
-    # Поток-наблюдатель: ждёт завершения и записывает exit-код
-    def _wait(proc, log_fh, log_file, pid_file):
-        proc.wait()
-        log_fh.close()
-        try:
-            with open(_exit_file(log_file), 'w') as f:
-                f.write(str(proc.returncode))
-        except Exception:
-            pass
-        try:
-            os.unlink(pid_file)
-        except Exception:
-            pass
-        # Структурированные скрипты: разбираем .results.json в БД
-        if results_file:
-            try:
-                from api.services.health_checks import ingest_results_file
-                ingest_results_file(
-                    script_id, timestamp, results_file,
-                    exit_code=proc.returncode,
-                    duration_sec=round(time.time() - started_at, 1),
-                )
-            except Exception as e:
-                logger.error('Не удалось разобрать результаты %s: %s', script_id, e)
-        # Удаляем старые логи (оставляем последние 20)
-        _cleanup_old_logs(script_id)
-
-    t = threading.Thread(target=_wait, args=(proc, log_fh, log_file, pid_file), daemon=True)
-    t.start()
-
-    return timestamp
 
 
 # Таймер пишет "\r  ⏱  Xс   " (без \n), продукт пишет сразу за ним.
@@ -605,18 +244,6 @@ def _process_terminal_output(text):
     return '\n'.join(result)
 
 
-def _cleanup_old_logs(script_id):
-    pattern = os.path.join(_logs_dir(), f'{script_id}_{_RUN_ID_GLOB}.log')
-    files = sorted(glob.glob(pattern))
-    for old in files[:-20]:
-        try:
-            os.unlink(old)
-            for ext in (_exit_file(old), old + '.hash', old[:-4] + '.results.json'):
-                if os.path.exists(ext):
-                    os.unlink(ext)
-        except Exception:
-            pass
-
 # ─── Views ────────────────────────────────────────────────────────────────────
 
 @scripts_auth_basic
@@ -626,7 +253,7 @@ def scripts_list(request):
     for script in SCRIPTS_CONFIG:
         sid = script['id']
         latest = _get_latest_run(sid)
-        running = _is_running(sid)
+        running = script_runner.is_running(sid)
         result.append({
             **{k: script[k] for k in ('id', 'name', 'account', 'schedule', 'description')},
             'topic': script.get('topic', ''),
@@ -643,7 +270,7 @@ def script_runs(request, script_id):
     if script_id not in SCRIPTS_BY_ID:
         return JsonResponse({'status': 'error', 'message': 'Скрипт не найден'}, status=404)
     runs = _get_runs(script_id)
-    return JsonResponse({'runs': runs, 'is_running': _is_running(script_id)})
+    return JsonResponse({'runs': runs, 'is_running': script_runner.is_running(script_id)})
 
 
 @scripts_auth_basic
@@ -655,7 +282,7 @@ def script_log(request, script_id, run_id):
     if script_id not in SCRIPTS_BY_ID:
         return JsonResponse({'status': 'error', 'message': 'Скрипт не найден'}, status=404)
 
-    log_file = _log_filename(script_id, run_id)
+    log_file = script_runner.log_filename(script_id, run_id)
     if not os.path.exists(log_file):
         return JsonResponse({'content': '', 'offset': 0, 'is_running': False, 'exit_code': None})
 
@@ -673,7 +300,7 @@ def script_log(request, script_id, run_id):
     # Считаем этот запуск "текущим" только если он последний
     latest = _get_latest_run(script_id)
     is_current_run = latest and latest['run_id'] == run_id
-    running = is_current_run and _is_running(script_id)
+    running = is_current_run and script_runner.is_running(script_id)
 
     return JsonResponse({
         'content': content,
@@ -690,45 +317,11 @@ def script_stop(request, script_id):
     if script_id not in SCRIPTS_BY_ID:
         return JsonResponse({'status': 'error', 'message': 'Скрипт не найден'}, status=404)
 
-    pid_file = _pid_file(script_id)
-    if not os.path.exists(pid_file):
-        return JsonResponse({'status': 'ok', 'message': 'Скрипт уже завершён'})
-
     try:
-        with open(pid_file) as f:
-            pid = int(f.read().strip())
-
-        try:
-            pgid = os.getpgid(pid)
-            os.killpg(pgid, signal.SIGTERM)
-        except ProcessLookupError:
-            raise
-        except Exception:
-            pgid = None
-            os.kill(pid, signal.SIGTERM)
-
-        for _ in range(15):
-            if not _pid_is_alive(pid):
-                return JsonResponse({'status': 'ok', 'message': 'Скрипт остановлен'})
-            time.sleep(0.1)
-
-        try:
-            if pgid is not None:
-                os.killpg(pgid, signal.SIGKILL)
-            else:
-                os.kill(pid, signal.SIGKILL)
-        except ProcessLookupError:
-            return JsonResponse({'status': 'ok', 'message': 'Скрипт остановлен'})
-
-        return JsonResponse({'status': 'ok', 'message': 'Скрипт принудительно остановлен'})
-    except ProcessLookupError:
-        try:
-            os.unlink(pid_file)
-        except Exception:
-            pass
-        return JsonResponse({'status': 'ok', 'message': 'Процесс уже завершён'})
+        outcome = script_runner.stop(script_id)
     except Exception as e:
         return JsonResponse({'status': 'error', 'message': str(e)}, status=500)
+    return JsonResponse({'status': 'ok', 'message': script_runner.STOP_MESSAGES[outcome]})
 
 
 @scripts_mutation_auth
@@ -739,18 +332,18 @@ def script_run_delete(request, script_id, run_id):
         return JsonResponse({'status': 'error', 'message': 'Скрипт не найден'}, status=404)
 
     # Нельзя удалять лог текущего запуска
-    if _is_running(script_id):
+    if script_runner.is_running(script_id):
         latest = _get_latest_run(script_id)
         if latest and latest['run_id'] == run_id:
             return JsonResponse({'status': 'error', 'message': 'Нельзя удалить лог запущенного скрипта'}, status=409)
 
-    log_file = _log_filename(script_id, run_id)
+    log_file = script_runner.log_filename(script_id, run_id)
     if not os.path.exists(log_file):
         return JsonResponse({'status': 'error', 'message': 'Лог не найден'}, status=404)
 
     try:
         os.unlink(log_file)
-        for ext in (_exit_file(log_file), log_file + '.hash'):
+        for ext in (script_runner.exit_file(log_file), log_file + '.hash'):
             if os.path.exists(ext):
                 os.unlink(ext)
     except Exception as e:
@@ -767,7 +360,7 @@ def script_run_now(request, script_id):
     if not script:
         return JsonResponse({'status': 'error', 'message': 'Скрипт не найден'}, status=404)
 
-    if _is_running(script_id):
+    if script_runner.is_running(script_id):
         return JsonResponse({'status': 'error', 'message': 'Скрипт уже запущен'}, status=409)
 
     if not os.path.exists(script['script']):
@@ -776,7 +369,7 @@ def script_run_now(request, script_id):
             'message': f'Файл скрипта не найден: {script["script"]}'
         }, status=400)
 
-    run_id = _run_script_async(script_id, script['script'], script['args'])
+    run_id = script_runner.launch(script_id)
 
     return JsonResponse({
         'status': 'ok',

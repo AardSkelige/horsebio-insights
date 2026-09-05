@@ -1,0 +1,57 @@
+# Расписание проверок Horse Bio Insights.
+#
+# Время сохранено ровно то, что стояло у прежних строк с curl: они менялись
+# по живым наблюдениям (лимит МойСклада общий с ботом и со StarPony, на сервере
+# одно ядро), и переезд на manage.py — не повод их пересматривать.
+#
+# Устанавливается вручную: crontab -l > /tmp/c && cat horsebio.cron >> /tmp/c && crontab /tmp/c
+# Проверить: crontab -l | grep -c '^[^#].*horsebio-check'   → должно быть 21
+# (счёт только по рабочим строкам: этот комментарий тоже попадёт в crontab)
+
+# ─── Себестоимость ───────────────────────────────────────────────────────────
+# Комплекс из 13 проверок, самая долгая задача после возвратов (10 минут).
+0 8 * * * /root/horsebio/deploy/cron/horsebio-check.sh horsebio_health_check
+50 0,9,14,19 * * * /root/horsebio/deploy/cron/horsebio-check.sh horsebio_buy_prices
+
+# ─── Возвраты ────────────────────────────────────────────────────────────────
+# Четырежды в сутки, с шагом в 15 минут: каждая следующая опирается
+# на документы, заведённые предыдущей, а лимит запросов общий.
+0 0,9,14,19 * * * /root/horsebio/deploy/cron/horsebio-check.sh horsebio_returns
+15 0,9,14,19 * * * /root/horsebio/deploy/cron/horsebio-check.sh horsebio_returns_ozon_enrich
+30 0,9,14,19 * * * /root/horsebio/deploy/cron/horsebio-check.sh horsebio_returns_wb_enrich
+45 0,9,14,19 * * * /root/horsebio/deploy/cron/horsebio-check.sh horsebio_pending_returns
+0 1,10,15,20 * * * /root/horsebio/deploy/cron/horsebio-check.sh horsebio_zero_cost_returns
+
+# ─── Оплаты ──────────────────────────────────────────────────────────────────
+20 9 * * * /root/horsebio/deploy/cron/horsebio-check.sh horsebio_deadlines
+
+# ─── Заказы сайта ────────────────────────────────────────────────────────────
+# Каждые 5 минут, цепочкой со сдвигом: письмо → заказ в МойСклад → накладная.
+# Сдвиги были и раньше — они разводят задачи по времени, чтобы шесть процессов
+# не стартовали разом на одном ядре.
+#
+# Раньше чтение писем и заведение заказов стояли одной строкой через `&&`:
+# сбой первого отменял второе. Теперь это отдельные строки — заведение работает
+# по уже сохранённому состоянию, и заминка с почтой не должна его откладывать.
+*/5 * * * * /root/horsebio/deploy/cron/horsebio-check.sh horsebio_order_email_sync
+*/5 * * * * sleep 20 && /root/horsebio/deploy/cron/horsebio-check.sh horsebio_order_email_create
+*/5 * * * * sleep 60 && /root/horsebio/deploy/cron/horsebio-check.sh horsebio_cdek_waybills
+40 9 * * * /root/horsebio/deploy/cron/horsebio-check.sh horsebio_site_orders_reconcile
+
+# ─── Ozon Доставка ───────────────────────────────────────────────────────────
+# Заказы создаются после письма об оплате, поэтому идут следом за чтением почты
+# и заведением в МойСклад — отсюда те же сдвиги, что у накладных СДЭК.
+*/5 * * * * sleep 90 && /root/horsebio/deploy/cron/horsebio-check.sh horsebio_ozon_orders
+*/5 * * * * sleep 120 && /root/horsebio/deploy/cron/horsebio-check.sh horsebio_ozon_postings
+*/5 * * * * sleep 150 && /root/horsebio/deploy/cron/horsebio-check.sh horsebio_ozon_duplicates
+*/5 * * * * sleep 180 && /root/horsebio/deploy/cron/horsebio-check.sh horsebio_ozon_returns
+35 9 * * * /root/horsebio/deploy/cron/horsebio-check.sh horsebio_ozon_products
+45 9 * * * /root/horsebio/deploy/cron/horsebio-check.sh horsebio_ozon_points
+
+# ─── Обновление данных ───────────────────────────────────────────────────────
+25 9 * * * /root/horsebio/deploy/cron/horsebio-check.sh horsebio_inventory_check
+0 11 * * * /root/horsebio/deploy/cron/horsebio-check.sh horsebio_data_sync
+
+# ─── Сохранность ─────────────────────────────────────────────────────────────
+# Сам бэкап делает /root/backup/backup.sh в 3:30 — это проверка, что он идёт.
+50 9 * * * /root/horsebio/deploy/cron/horsebio-check.sh horsebio_backup

@@ -2,14 +2,12 @@
 """
 API страницы /checks — дашборд результатов проверок и управление исключениями.
 
-Переиспользует запуск/историю/логи из scripts_monitor. Для health_check добавляет
+Историю и логи читает через scripts_monitor, запускает через script_runner. Для health_check добавляет
 структурированные результаты (CheckRunResult) и CRUD исключений (HealthCheckException).
 """
 import os
 import re
 import json
-import signal
-import time
 from collections import defaultdict
 
 from django.http import JsonResponse
@@ -18,13 +16,14 @@ from django.views.decorators.http import require_http_methods
 from django.utils import timezone as dj_timezone
 
 from api.models import HealthCheckException, CheckRunResult
+from api.services import script_runner
 from api.services.health_checks import active_exception_index, apply_exceptions_to_summary
-from .scripts_monitor import (
+from api.services.scripts_registry import (
     SCRIPTS_CONFIG, SCRIPTS_BY_ID, HEALTH_CHECK_SCRIPT_ID,
+)
+from .scripts_monitor import (
     scripts_auth, scripts_auth_basic,
-    _get_runs, _get_latest_run, _is_running, _run_script_async,
-    _log_filename, _process_terminal_output, _get_exit_code,
-    _pid_file, _pid_is_alive, _exit_file,
+    _get_runs, _get_latest_run, _process_terminal_output, _get_exit_code,
 )
 
 _KIND_LABELS = dict(HealthCheckException.KIND_CHOICES)
@@ -104,7 +103,7 @@ def checks_overview(request):
             'topic': script.get('topic', ''),
             'structured': bool(script.get('structured')),
             'is_health': sid == HEALTH_CHECK_SCRIPT_ID,
-            'is_running': _is_running(sid),
+            'is_running': script_runner.is_running(sid),
             'last_run': _get_latest_run(sid),
             'script_exists': os.path.exists(script['script']),
         }
@@ -131,9 +130,9 @@ def checks_runs(request, script_id):
         exc_index = active_exception_index() if script_id == HEALTH_CHECK_SCRIPT_ID else None
         runs = [_serialize_health_run(r, rows[i + 1] if i + 1 < len(rows) else None, exc_index)
                 for i, r in enumerate(rows)]
-        return JsonResponse({'kind': 'structured', 'runs': runs, 'is_running': _is_running(script_id)})
+        return JsonResponse({'kind': 'structured', 'runs': runs, 'is_running': script_runner.is_running(script_id)})
 
-    return JsonResponse({'kind': 'log', 'runs': _get_runs(script_id), 'is_running': _is_running(script_id)})
+    return JsonResponse({'kind': 'log', 'runs': _get_runs(script_id), 'is_running': script_runner.is_running(script_id)})
 
 
 RECENT_CHANGES_DAYS = 14
@@ -292,7 +291,7 @@ def checks_log(request, script_id):
     if not run_id:
         return JsonResponse({'content': '', 'is_running': False, 'exit_code': None, 'run_id': None, 'progress': None})
 
-    log_file = _log_filename(script_id, run_id)
+    log_file = script_runner.log_filename(script_id, run_id)
     if not os.path.exists(log_file):
         return JsonResponse({'content': '', 'is_running': False, 'exit_code': None, 'run_id': run_id, 'progress': None})
 
@@ -303,7 +302,7 @@ def checks_log(request, script_id):
         return JsonResponse({'status': 'error', 'message': str(e)}, status=500)
 
     latest = _get_latest_run(script_id)
-    running = bool(latest and latest['run_id'] == run_id and _is_running(script_id))
+    running = bool(latest and latest['run_id'] == run_id and script_runner.is_running(script_id))
     return JsonResponse({
         'content': content,
         'run_id': run_id,
@@ -323,12 +322,12 @@ def checks_run(request, script_id):
     script = SCRIPTS_BY_ID.get(script_id)
     if not script:
         return JsonResponse({'status': 'error', 'message': 'Скрипт не найден'}, status=404)
-    if _is_running(script_id):
+    if script_runner.is_running(script_id):
         return JsonResponse({'status': 'error', 'message': 'Скрипт уже запущен'}, status=409)
     if not os.path.exists(script['script']):
         return JsonResponse({'status': 'error', 'message': f'Файл скрипта не найден: {script["script"]}'}, status=400)
 
-    run_id = _run_script_async(script_id, script['script'], script['args'])
+    run_id = script_runner.launch(script_id)
     return JsonResponse({'status': 'ok', 'run_id': run_id, 'message': f'Скрипт {script["name"]} запущен'})
 
 
@@ -340,37 +339,11 @@ def checks_stop(request, script_id):
     if script_id not in SCRIPTS_BY_ID:
         return JsonResponse({'status': 'error', 'message': 'Скрипт не найден'}, status=404)
 
-    pid_file = _pid_file(script_id)
-    if not os.path.exists(pid_file):
-        return JsonResponse({'status': 'ok', 'message': 'Скрипт уже завершён'})
     try:
-        with open(pid_file) as f:
-            pid = int(f.read().strip())
-        try:
-            pgid = os.getpgid(pid)
-            os.killpg(pgid, signal.SIGTERM)
-        except ProcessLookupError:
-            raise
-        except Exception:
-            pgid = None
-            os.kill(pid, signal.SIGTERM)
-        for _ in range(15):
-            if not _pid_is_alive(pid):
-                return JsonResponse({'status': 'ok', 'message': 'Скрипт остановлен'})
-            time.sleep(0.1)
-        if pgid is not None:
-            os.killpg(pgid, signal.SIGKILL)
-        else:
-            os.kill(pid, signal.SIGKILL)
-        return JsonResponse({'status': 'ok', 'message': 'Скрипт принудительно остановлен'})
-    except ProcessLookupError:
-        try:
-            os.unlink(pid_file)
-        except Exception:
-            pass
-        return JsonResponse({'status': 'ok', 'message': 'Процесс уже завершён'})
+        outcome = script_runner.stop(script_id)
     except Exception as e:
         return JsonResponse({'status': 'error', 'message': str(e)}, status=500)
+    return JsonResponse({'status': 'ok', 'message': script_runner.STOP_MESSAGES[outcome]})
 
 
 @csrf_exempt
@@ -381,15 +354,15 @@ def checks_run_delete(request, script_id, run_id):
     if script_id not in SCRIPTS_BY_ID:
         return JsonResponse({'status': 'error', 'message': 'Скрипт не найден'}, status=404)
 
-    if _is_running(script_id):
+    if script_runner.is_running(script_id):
         latest = _get_latest_run(script_id)
         if latest and latest['run_id'] == run_id:
             return JsonResponse({'status': 'error', 'message': 'Нельзя удалить текущий запуск'}, status=409)
 
     deleted = CheckRunResult.objects.filter(script_id=script_id, run_id=run_id).delete()[0]
 
-    log_file = _log_filename(script_id, run_id)
-    for path in (log_file, _exit_file(log_file), log_file + '.hash'):
+    log_file = script_runner.log_filename(script_id, run_id)
+    for path in (log_file, script_runner.exit_file(log_file), log_file + '.hash'):
         if os.path.exists(path):
             try:
                 os.unlink(path)
