@@ -1,29 +1,30 @@
-# Этап сборки
+# Фронтенд — статика. Своего веб-сервера у него больше нет: файлы отдаёт
+# общий Caddy прямо из тома. До 06.09.2026 здесь стоял nginx, а за ним ещё
+# один, у бэкенда, — оба только перекладывали запрос дальше.
+#
+# Поэтому образ не «работает», а один раз выкладывает собранные файлы в том,
+# смонтированный и сюда, и в Caddy, после чего завершается.
+
 FROM node:22.23.1-slim AS builder
 
 WORKDIR /app
 
-# Копируем package.json и package-lock.json
+# npm ci ставит ровно то, что в package-lock.json: сборка на сервере даёт
+# те же версии, что были проверены локально.
 COPY package*.json ./
-
-# Устанавливаем зависимости
 RUN npm ci
 
-# Копируем исходный код
 COPY . .
-
-# Собираем приложение
 RUN npm run build
 
-# Этап production с nginx
-FROM nginx:alpine
+FROM alpine:3.21
 
-# Копируем собранное приложение
-COPY --from=builder /app/dist /usr/share/nginx/html
+COPY --from=builder /app/dist /dist
 
-# Копируем конфиг nginx
-COPY nginx/nginx.conf /etc/nginx/conf.d/default.conf
-
-EXPOSE 3001
-
-CMD ["nginx", "-g", "daemon off;"]
+# Старые файлы удаляются: имена собранных ассетов хешированные, и без чистки
+# обломки прошлых сборок оставались бы в томе навсегда.
+CMD ["sh", "-c", "\
+  if [ ! -d /target ]; then echo 'Том /target не смонтирован' >&2; exit 1; fi; \
+  rm -rf /target/*; \
+  cp -a /dist/. /target/; \
+  echo 'Статика выложена:'; ls /target"]

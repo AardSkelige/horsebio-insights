@@ -130,7 +130,7 @@ jobs:
           host: ${{ secrets.SSH_HOST }}
           username: ${{ secrets.SSH_USER }}
           key: ${{ secrets.SSH_PRIVATE_KEY }}
-          source: "docker-compose.prod.yml,backend/nginx/nginx.conf,deploy"
+          source: "docker-compose.prod.yml,deploy"
           target: "/root/horsebio"
 
       - name: Deploy to server
@@ -191,6 +191,4 @@ jobs:
             # The backend entrypoint applies migrations before starting Django.
             # Waiting for its health avoids racing a second migration process.
             docker compose -f docker-compose.prod.yml up -d --remove-orphans --wait --wait-timeout 180
-            # nginx does not notice changes inside a bind-mounted config by itself.
-            docker compose -f docker-compose.prod.yml up -d --force-recreate --no-deps backend_nginx
             docker image prune -f

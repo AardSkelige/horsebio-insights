@@ -8,8 +8,11 @@
 # Применение:
 #   docker exec shared_caddy caddy validate --config /etc/caddy/Caddyfile --adapter caddyfile
 #   docker exec shared_caddy caddy reload   --config /etc/caddy/Caddyfile --adapter caddyfile
-# Публикация портов — в /root/caddy/docker-compose.caddy.yml: 80 и 443.
-# Изменение портов требует пересоздания контейнера, reload его не подхватит.
+# Публикация портов и монтирование томов — в /root/caddy/docker-compose.caddy.yml.
+# Их изменение требует пересоздания контейнера, reload не подхватит ни то, ни другое.
+#
+# Тома: /srv/horsebio — собранный фронтенд (наполняет деплой фронта),
+# /srv/horsebio-django — статика админки (её кладёт collectstatic бэкенда).
 
 {
 	email mystmuse@gmail.com
@@ -23,12 +26,46 @@
 insight.horse-bio.ru {
 	# HSTS НЕ включаем: откат должен оставаться мгновенным.
 
-	reverse_proxy horsebio_frontend:80 {
-		# Долгие операции: синк идёт минутами
-		transport http {
-			read_timeout 600s
-			write_timeout 600s
+	# API, парсер и админка — прямо в gunicorn. До 06.09.2026 между Caddy
+	# и Django стояли два nginx, которые только перекладывали запрос дальше:
+	# сначала фронтовый, потом бэкендовый.
+	@backend path /api/* /parser/* /admin/*
+	handle @backend {
+		reverse_proxy horsebio_backend:8000 {
+			# Долгие операции: прогноз и ABC-анализ считаются прямо в запросе.
+			# Столько же ждёт и gunicorn, дальше него ждать некому.
+			transport http {
+				read_timeout 600s
+				write_timeout 600s
+			}
 		}
+	}
+
+	# Статика админки Django: её складывает collectstatic при старте бэкенда.
+	# Приставка /static/ свободна — собранные файлы фронта лежат в /assets/.
+	handle_path /static/* {
+		root * /srv/horsebio-django
+		file_server
+	}
+
+	# Всё остальное — одностраничное приложение.
+	handle {
+		root * /srv/horsebio
+
+		# Имена собранных файлов содержат хеш содержимого: меняется файл —
+		# меняется имя. Поэтому их можно кэшировать надолго.
+		@hashed path /assets/*
+		header @hashed Cache-Control "public, max-age=31536000, immutable"
+
+		# А index.html — никогда: он единственный со стабильным именем,
+		# и закэшированный им браузер будет вечно просить файлы прошлой сборки.
+		@index path / /index.html
+		header @index Cache-Control "no-store"
+
+		# Маршруты приложения живут на клиенте: /checks, /purchases и прочие
+		# файлами на диске не являются.
+		try_files {path} /index.html
+		file_server
 	}
 
 	log {

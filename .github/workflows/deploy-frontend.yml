@@ -76,25 +76,17 @@ jobs:
           cache-from: type=gha,scope=frontend
           cache-to: type=gha,mode=max,scope=frontend
 
-      - name: Copy docker-compose to server
-        uses: appleboy/scp-action@v0.1.7
-        with:
-          host: ${{ secrets.SSH_HOST }}
-          username: ${{ secrets.SSH_USER }}
-          key: ${{ secrets.SSH_PRIVATE_KEY }}
-          source: "docker-compose.prod.yml"
-          target: "/root/horsebio"
-
       - name: Deploy to server
         uses: appleboy/ssh-action@v1
         env:
           GHCR_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           GHCR_USER: ${{ github.actor }}
+          IMAGE: ghcr.io/${{ steps.vars.outputs.owner }}/horsebio-frontend:latest
         with:
           host: ${{ secrets.SSH_HOST }}
           username: ${{ secrets.SSH_USER }}
           key: ${{ secrets.SSH_PRIVATE_KEY }}
-          envs: GHCR_TOKEN,GHCR_USER
+          envs: GHCR_TOKEN,GHCR_USER,IMAGE
           script: |
             set -e
 
@@ -115,7 +107,10 @@ jobs:
             }
 
             retry bash -c 'echo "$GHCR_TOKEN" | docker login ghcr.io -u "$GHCR_USER" --password-stdin'
-            cd /root/horsebio
-            retry docker compose -f docker-compose.prod.yml pull frontend
-            docker compose -f docker-compose.prod.yml up -d --force-recreate frontend
+
+            # Фронтенд больше не сервис: образ один раз выкладывает собранные
+            # файлы в том и завершается, а отдаёт их Caddy. Поэтому здесь
+            # `docker run`, а не `compose up` — поднимать нечего.
+            retry docker pull "$IMAGE"
+            docker run --rm -v horsebio_frontend_static:/target "$IMAGE"
             docker image prune -f
