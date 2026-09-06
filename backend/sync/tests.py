@@ -1,11 +1,13 @@
+import os
+import tempfile
 from io import StringIO
-from unittest.mock import AsyncMock, patch
+from unittest.mock import AsyncMock, Mock, patch
 
 from asgiref.sync import async_to_sync
 from django.core.cache import cache
 from django.core.management import call_command
 from django.core.management.base import CommandError
-from django.test import TestCase
+from django.test import TestCase, override_settings
 
 from .models import SyncRun
 from .sync_task import ParserTask, TaskStatus
@@ -59,56 +61,48 @@ class ParserTaskMaterialErrorTests(TestCase):
 
 
 class AutoSyncWeeklyCommandTests(TestCase):
+    """Ночная команда — тонкая обёртка: сама синхронизация в `sync.runner`,
+    одна на кнопку и на расписание."""
+
     def setUp(self):
         cache.clear()
 
-    def test_command_uses_owned_lock_and_heartbeat(self):
-        with (
-            patch('sync.management.commands.auto_sync_weekly.SyncLock') as sync_lock,
-            patch('sync.management.commands.auto_sync_weekly.SyncHeartbeat') as heartbeat_class,
-            patch('sync.management.commands.auto_sync_weekly.ParserTask') as task_class,
-        ):
-            sync_lock.acquire_lock.return_value = 'owner-token'
-            task = task_class.return_value
-            task.run = AsyncMock()
-            task.progress.status = TaskStatus.COMPLETED
-
+    def test_command_syncs_last_week_on_schedule(self):
+        with patch('sync.management.commands.auto_sync_weekly.runner.execute',
+                   return_value=0) as execute:
             call_command('auto_sync_weekly', stdout=StringIO())
 
-        sync_lock.acquire_lock.assert_called_once_with(
-            'moysklad_sync', locked_by='auto_sync_weekly'
-        )
-        # Прогон по расписанию виден в базе: до этого интерфейс о нём не знал
-        # ничего — синхронизация шла, а страница показывала «не идёт».
-        run = SyncRun.objects.get()
-        self.assertEqual(run.triggered_by, 'расписание')
-        heartbeat_class.assert_called_once_with(
-            task, 'moysklad_sync', 'owner-token', run=run
-        )
-        heartbeat_class.return_value.start.assert_called_once_with()
-        heartbeat_class.return_value.stop.assert_called_once_with()
-        sync_lock.release_lock.assert_called_once_with('moysklad_sync', 'owner-token')
+        kwargs = execute.call_args.kwargs
+        self.assertEqual(kwargs['triggered_by'], 'расписание')
+        self.assertTrue(kwargs['auto_sync'])
+        self.assertEqual((kwargs['end_date'] - kwargs['start_date']).days, 7)
+        # Отметка о свежести данных: по ней страница предупреждает,
+        # что автосинхронизация давно не проходила.
+        self.assertIsNotNone(cache.get('last_auto_sync_started'))
 
-    def test_task_error_fails_command_and_does_not_report_success(self):
-        output = StringIO()
-        with (
-            patch('sync.management.commands.auto_sync_weekly.SyncLock') as sync_lock,
-            patch('sync.management.commands.auto_sync_weekly.SyncHeartbeat') as heartbeat_class,
-            patch('sync.management.commands.auto_sync_weekly.ParserTask') as task_class,
-        ):
-            sync_lock.acquire_lock.return_value = 'owner-token'
-            task = task_class.return_value
-            task.run = AsyncMock()
-            task.progress.status = TaskStatus.ERROR
-            task.progress.error = 'MoySklad unavailable'
+    def test_failed_sync_fails_the_command_and_does_not_mark_freshness(self):
+        with patch('sync.management.commands.auto_sync_weekly.runner.execute',
+                   return_value=1):
+            with self.assertRaises(CommandError):
+                call_command('auto_sync_weekly', stdout=StringIO())
 
-            with self.assertRaisesRegex(CommandError, 'MoySklad unavailable'):
-                call_command('auto_sync_weekly', stdout=output)
-
-        self.assertNotIn('выполнена синхронно', output.getvalue())
         self.assertIsNone(cache.get('last_auto_sync_started'))
-        heartbeat_class.return_value.stop.assert_called_once_with()
-        sync_lock.release_lock.assert_called_once_with('moysklad_sync', 'owner-token')
+
+    def test_busy_is_a_skip_and_not_a_failure(self):
+        """Очередь синхронизаций хуже пропущенного запуска."""
+        output = StringIO()
+        with patch('sync.management.commands.auto_sync_weekly.runner.execute',
+                   return_value=75):
+            call_command('auto_sync_weekly', stdout=output)
+
+        self.assertIn('уже выполняется', output.getvalue())
+        self.assertIsNone(cache.get('last_auto_sync_started'))
+
+    def test_dry_run_touches_nothing(self):
+        with patch('sync.management.commands.auto_sync_weekly.runner.execute') as execute:
+            call_command('auto_sync_weekly', '--dry-run', stdout=StringIO())
+
+        execute.assert_not_called()
 
 
 class TaskStatusFromDatabaseTests(TestCase):
@@ -276,3 +270,149 @@ class RunLifecycleTests(TestCase):
             SyncRun.start(triggered_by='кнопка')
 
         self.assertEqual(SyncRun.objects.count(), SyncRun.KEEP_RUNS)
+
+
+class SyncRunnerTests(TestCase):
+    """Синхронизация порождается отдельным процессом: внутри веб-процесса
+    её поток не пережил бы перезапуск воркера под gunicorn."""
+
+    def setUp(self):
+        self._logs = tempfile.TemporaryDirectory()
+        self.addCleanup(self._logs.cleanup)
+        self._settings = override_settings(SCRIPTS_LOGS_DIR=self._logs.name)
+        self._settings.enable()
+        self.addCleanup(self._settings.disable)
+
+    def test_launch_spawns_the_command_for_the_row_it_created(self):
+        from sync import runner
+
+        with patch.object(runner.subprocess, 'Popen', return_value=Mock(pid=1)) as popen:
+            run_id = runner.launch(months=12)
+
+        argv = popen.call_args[0][0]
+        self.assertIn('sync_data', argv)
+        self.assertEqual(argv[argv.index('--run-id') + 1], str(run_id))
+        self.assertEqual(argv[argv.index('--months') + 1], '12')
+        self.assertEqual(SyncRun.objects.get(pk=run_id).triggered_by, 'кнопка')
+
+    def test_child_output_goes_to_a_file(self):
+        """Процесс, умерший до первой отметки в базе, оставляет след только здесь."""
+        from sync import runner
+
+        with patch.object(runner.subprocess, 'Popen', return_value=Mock(pid=1)) as popen:
+            run_id = runner.launch(months=12)
+
+        log = popen.call_args.kwargs['stdout']
+        self.assertEqual(log.name, os.path.join(self._logs.name, f'sync_{run_id}.log'))
+
+    def test_launch_refuses_while_another_sync_is_running(self):
+        """Иначе новая строка становится последней, и идущую синхронизацию —
+        ночную или чужую — уже нечем ни увидеть, ни остановить."""
+        from sync import runner
+
+        SyncRun.objects.create(triggered_by='расписание')
+
+        with patch.object(runner.subprocess, 'Popen') as popen:
+            with self.assertRaises(runner.AlreadyRunning):
+                runner.launch(months=12)
+
+        popen.assert_not_called()
+        self.assertEqual(SyncRun.objects.count(), 1)
+
+    def test_failed_launch_leaves_a_failed_run_and_not_a_hanging_one(self):
+        from sync import runner
+
+        with patch.object(runner.subprocess, 'Popen', side_effect=OSError('нет процесса')):
+            with self.assertRaises(OSError):
+                runner.launch(months=12)
+
+        run = SyncRun.latest()
+        self.assertEqual(run.status, SyncRun.STATUS_ERROR)
+        self.assertIsNotNone(run.finished_at)
+        self.assertFalse(run.is_alive)
+
+    def test_busy_closes_the_row_prepared_by_the_button(self):
+        """Иначе карточка на странице висела бы «идёт» до срока годности."""
+        from sync import runner
+        from .models import SyncLock
+
+        SyncLock.acquire_lock('moysklad_sync', locked_by='кто-то другой')
+        run = SyncRun.start(triggered_by='кнопка')
+
+        code = runner.execute(triggered_by='кнопка', months_back=1, run_id=run.id)
+
+        run.refresh_from_db()
+        self.assertEqual(code, runner.EXIT_BUSY)
+        self.assertFalse(run.is_alive)
+        self.assertIsNotNone(run.finished_at)
+
+    def test_execute_attaches_to_the_row_the_button_created(self):
+        from sync import runner
+
+        run = SyncRun.start(triggered_by='кнопка')
+        task = Mock()
+        task.progress.status = TaskStatus.COMPLETED
+
+        with (
+            patch.object(runner, 'ParserTask', return_value=task),
+            patch.object(runner.asyncio, 'run'),
+            patch.object(runner, 'SyncHeartbeat') as heartbeat,
+        ):
+            code = runner.execute(triggered_by='кнопка', months_back=1, run_id=run.id)
+
+        self.assertEqual(code, runner.EXIT_OK)
+        self.assertEqual(heartbeat.call_args.kwargs['run'], run)
+        self.assertEqual(SyncRun.objects.count(), 1)
+
+    def test_broken_start_releases_the_lock(self):
+        """Задача ходит за токеном и в кеш ещё до первого запроса. Упади она
+        там — блокировка висела бы час, и всё это время пропускались бы
+        и ночные прогоны, и нажатия кнопки."""
+        from sync import runner
+        from .models import SyncLock
+
+        run = SyncRun.start(triggered_by='кнопка')
+        with patch.object(runner, 'ParserTask', side_effect=RuntimeError('нет токена')):
+            code = runner.execute(triggered_by='кнопка', months_back=1, run_id=run.id)
+
+        self.assertEqual(code, runner.EXIT_FAILED)
+        self.assertIsNotNone(SyncLock.acquire_lock('moysklad_sync', locked_by='следующий'))
+        run.refresh_from_db()
+        self.assertEqual(run.status, SyncRun.STATUS_ERROR)
+
+
+class SyncDataCommandTests(TestCase):
+    def test_half_a_period_is_refused(self):
+        """Иначе команда молча синхронизировала бы неделю вместо запрошенного."""
+        with self.assertRaisesRegex(CommandError, 'обе даты'):
+            call_command('sync_data', '--start-date', '2026-09-01', stdout=StringIO())
+
+
+class LoadDataViewTests(TestCase):
+    def setUp(self):
+        from django.contrib.auth.models import User
+        self._logs = tempfile.TemporaryDirectory()
+        self.addCleanup(self._logs.cleanup)
+        self._settings = override_settings(SCRIPTS_LOGS_DIR=self._logs.name)
+        self._settings.enable()
+        self.addCleanup(self._settings.disable)
+        self.client.force_login(User.objects.create_user('user', password='password'))
+
+    def test_button_gets_a_refusal_while_a_sync_is_running(self):
+        SyncRun.objects.create(triggered_by='расписание')
+
+        response = self.client.post('/parser/load-data/', {'months': 12},
+                                    content_type='application/json')
+
+        self.assertEqual(response.status_code, 409)
+        self.assertIn('уже выполняется', response.json()['message'])
+
+    def test_button_returns_the_number_of_its_run(self):
+        from sync import runner
+
+        with patch.object(runner.subprocess, 'Popen', return_value=Mock(pid=1)):
+            response = self.client.post('/parser/load-data/', {'months': 12},
+                                        content_type='application/json')
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.json()['run_id'], SyncRun.latest().id)

@@ -9,14 +9,11 @@ from django.utils import timezone
 from django.core.exceptions import ValidationError
 
 from .models import Shipment, RawMaterial, Counterparty, SyncRun
-from .sync_task import TaskManager, ParserTask
+from . import runner
 from .logger import logger, structured_logger
 
 from datetime import datetime as dt
 
-
-# Создаем единственный экземпляр TaskManager
-task_manager = TaskManager()
 
 @api_view(['GET'])
 @ensure_csrf_cookie
@@ -68,18 +65,26 @@ def load_data(request):
                 }
             else:
                 params = {
-                    'months_back': months
+                    'months': months
                 }
         except ValueError:
             raise ValidationError("Некорректный формат даты")
 
-        response = task_manager.start_task(ParserTask, **params)
-        structured_logger.success(f"Задача запущена: {response.get('message', 'OK')}")
+        try:
+            run_id = runner.launch(**params)
+        except runner.AlreadyRunning as busy:
+            structured_logger.info(str(busy))
+            return Response({'status': 'error', 'message': str(busy)}, status=409)
 
-        if response['status'] != 'started':
-            raise ValidationError(f"Failed to start task: {response.get('message', 'Unknown error')}")
+        structured_logger.success(f'Синхронизация запущена, прогон {run_id}')
 
-        return Response(response)
+        return Response({
+            'status': 'started',
+            'message': 'Задача успешно запущена',
+            # Номер прогона нужен странице: без него она принимает за свой
+            # прошлый, уже законченный прогон и гасит полосу.
+            'run_id': run_id,
+        })
 
     except ValidationError as e:
         structured_logger.error(f"Ошибка валидации: {str(e)}")
@@ -114,8 +119,6 @@ def stop_loading(request):
             })
 
         SyncRun.objects.filter(pk=run.pk).update(stop_requested=True)
-        # Тот же процесс — останавливаем сразу, не дожидаясь удара сердца.
-        task_manager.stop_current_task()
 
         return Response({
             'status': 'success',

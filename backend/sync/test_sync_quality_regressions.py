@@ -13,7 +13,7 @@ from .processors.processing_plans import ProcessingPlanProcessor, ProcessingPlan
 from .processors.purchases import PurchaseOrderProcessor, PurchaseOrderStorage
 from .processors.shipments import ShipmentProcessor, ShipmentStorage
 from .processors.supplies import SupplyProcessor, SupplyStorage
-from .sync_task import BaseTask, TaskManager, TaskStatus
+from .sync_task import BaseTask, TaskStatus
 
 
 def response_with_json(payload, status_code=200):
@@ -184,41 +184,6 @@ class StorageDatabaseFailureTests(TestCase):
 class FailingTask(BaseTask):
     async def run(self):
         raise RuntimeError('task failed')
-
-
-class TaskManagerLifecycleTests(SimpleTestCase):
-    def setUp(self):
-        self.manager = TaskManager()
-        self.manager._initialize()
-
-    def tearDown(self):
-        self.manager._initialize()
-
-    def test_terminal_error_is_available_after_worker_cleanup(self):
-        task = FailingTask()
-        async_to_sync(self.manager._run_task)(task)
-        self.manager._current_task = task
-        self.manager._is_running = True
-
-        self.manager._cleanup()
-
-        self.assertFalse(self.manager.is_task_running())
-        self.assertEqual(self.manager.get_current_state()['status'], 'error')
-        self.assertEqual(self.manager.get_current_state()['error'], 'task failed')
-
-    def test_stop_is_cooperative_and_does_not_cleanup_foreign_loop(self):
-        task = FailingTask()
-        self.manager._current_task = task
-        self.manager._is_running = True
-        self.manager._thread = MagicMock()
-
-        with patch.object(self.manager, '_cleanup') as cleanup:
-            result = self.manager.stop_current_task()
-
-        self.assertEqual(result['status'], 'success')
-        self.assertTrue(task.should_stop())
-        self.assertEqual(task.progress.status, TaskStatus.STOPPED)
-        cleanup.assert_not_called()
 
 
 class TaskStatusTests(TestCase):

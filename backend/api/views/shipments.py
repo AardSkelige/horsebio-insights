@@ -1,5 +1,4 @@
 # api/views/shipments.py
-from sync.sync_task import TaskManager
 from django.http import JsonResponse
 from django.utils import timezone
 from django.core.cache import cache
