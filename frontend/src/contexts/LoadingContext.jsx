@@ -24,18 +24,16 @@ export const LoadingProvider = ({ children }) => {
     const [loadingKey, setLoadingKey] = useState(0);
     const [currentDateRange, setCurrentDateRange] = useState(null);
     const [syncVersion, setSyncVersion] = useState(0);
-    
-    const eventSourceRef = useRef(null);
-    const lastMessageTimestamps = useRef(new Map());
-    const messageThrottleTime = 100;
 
-    const cleanupEventSource = useCallback(() => {
-        if (eventSourceRef.current) {
-            eventSourceRef.current.close();
-            eventSourceRef.current = null;
-        }
-        lastMessageTimestamps.current.clear();
-    }, []);
+    // Номер прогона, который запустили мы. Без него первый же опрос находит
+    // прошлый прогон — законченный — и гасит полосу через полсекунды после
+    // нажатия, пока запущенная синхронизация идёт незаметно.
+    const runIdRef = useRef(null);
+    
+    // Как часто спрашивать сервер, что там с синхронизацией. Три секунды —
+    // столько же, сколько у StarPony: полоса двигается по этапам, а не
+    // по документам, и чаще спрашивать нечего.
+    const POLL_INTERVAL_MS = 3000;
 
     const resetStates = useCallback(() => {
         setIsLoading(false);
@@ -45,8 +43,7 @@ export const LoadingProvider = ({ children }) => {
         setError(null);
         setLoadingKey(prev => prev + 1);
         setCurrentDateRange(null);
-        cleanupEventSource();
-    }, [cleanupEventSource]);
+    }, []);
 
     const startLoading = useCallback(async (dateRange) => {
         try {
@@ -71,6 +68,8 @@ export const LoadingProvider = ({ children }) => {
             if (!response || response.status !== 'started') {
                 throw new Error(response?.message || 'Не удалось начать загрузку данных');
             }
+
+            runIdRef.current = response.run_id ?? null;
 
             setLoadingProgress({
                 status: 'running',
@@ -109,102 +108,86 @@ export const LoadingProvider = ({ children }) => {
         setIsLoading(false);
     }, []);
 
-    // SSE подключение
+    // Опрос состояния синхронизации.
+    //
+    // Раньше здесь было открытое соединение (SSE): сервер сам слал новости,
+    // пока шла загрузка. Убрано по двум причинам. Открытый поток не переживает
+    // gunicorn — тот перезапускает воркер по счётчику запросов и рвёт
+    // соединение на середине, а полоса при этом замирает молча. И состояние
+    // всё равно живёт теперь в базе, откуда его видно любому процессу
+    // и любому пользователю, а не только тому, кто нажал кнопку.
     useEffect(() => {
         if (!isLoading) return;
 
         let isMounted = true;
 
-        const handleStreamMessage = (event) => {
-            if (!isMounted) return;
+        const applyState = (state, isRunning) => {
+            if (!isMounted || !state) return;
 
-            try {
-                const data = JSON.parse(event.data);
+            // Чужой прогон — не наш: страница показывает его как чужой,
+            // но завершать по нему свою загрузку нельзя.
+            if (runIdRef.current && state.id && state.id !== runIdRef.current) return;
 
-                // Throttling для предотвращения спама
-                const messageKey = `${data.message}${data.details || ''}`;
-                const currentTime = Date.now();
-                const lastTime = lastMessageTimestamps.current.get(messageKey);
+            // Прогон, о котором сервер давно не слышал: процесс умер,
+            // не закрыв запись. Статус в ней навсегда остался бы «идёт»,
+            // а полоса — застывшей, пока страницу не перезагрузят.
+            if (!isRunning && state.status === 'running') {
+                setProgress({ processed: 0, total: 0 });
+                window.setTimeout(() => {
+                    if (isMounted) handleLoadingComplete('error');
+                }, 500);
+                return;
+            }
 
-                if (lastTime && (currentTime - lastTime < messageThrottleTime)) {
-                    return;
+            const newLog = {
+                timestamp: new Date().toISOString(),
+                message: state.message || 'Загрузка завершена',
+                status: state.status,
+            };
+
+            setLogs(prevLogs => {
+                const lastLog = prevLogs[prevLogs.length - 1];
+                if (lastLog && lastLog.message === newLog.message) {
+                    return prevLogs;
                 }
+                return [...prevLogs, newLog].slice(-100);
+            });
 
-                lastMessageTimestamps.current.set(messageKey, currentTime);
-
-                const newLog = {
-                    timestamp: data.timestamp || new Date().toISOString(),
-                    message: data.message || 'Загрузка завершена',
-                    details: data.details,
-                    status: data.status
-                };
-
-                setLogs(prevLogs => {
-                    const lastLog = prevLogs[prevLogs.length - 1];
-                    if (lastLog &&
-                        lastLog.message === newLog.message &&
-                        lastLog.details === newLog.details) {
-                        return prevLogs;
-                    }
-
-                    const newLogs = [...prevLogs, newLog];
-                    return newLogs.slice(-100);
+            if (state.processed !== undefined && state.total !== undefined) {
+                setProgress({ processed: state.processed, total: state.total });
+                setLoadingProgress({
+                    status: state.status || 'running',
+                    message: state.message || 'Загрузка данных...',
+                    processed: state.processed,
+                    total: state.total,
                 });
+            }
 
-                // Обновляем прогресс
-                if (data.processed !== undefined && data.total !== undefined) {
-                    setProgress({
-                        processed: data.processed,
-                        total: data.total
-                    });
-                    
-                    setLoadingProgress({
-                        status: data.status || 'running',
-                        message: data.message || 'Загрузка данных...',
-                        details: data.details,
-                        processed: data.processed,
-                        total: data.total
-                    });
-                }
-
-                // Проверяем статус завершения
-                if (data.status === 'completed' || data.status === 'error' || data.status === 'stopped') {
-                    setProgress({ processed: 0, total: 0 });
-                    cleanupEventSource();
-
-                    window.setTimeout(() => {
-                        if (isMounted) {
-                            handleLoadingComplete(data.status);
-                        }
-                    }, 500);
-                }
-            } catch (error) {
-                console.error('Error parsing SSE message:', error);
+            if (state.status === 'completed' || state.status === 'error' || state.status === 'stopped') {
+                setProgress({ processed: 0, total: 0 });
+                window.setTimeout(() => {
+                    if (isMounted) handleLoadingComplete(state.status);
+                }, 500);
             }
         };
 
-        try {
-            if (!eventSourceRef.current) {
-                eventSourceRef.current = new EventSource('/parser/stream-progress/');
-                eventSourceRef.current.onmessage = handleStreamMessage;
-                eventSourceRef.current.onerror = (error) => {
-                    console.error('SSE Error:', error);
-                    if (eventSourceRef.current?.readyState === EventSource.CLOSED) {
-                        return;
-                    }
-                    handleLoadingComplete('error');
-                };
+        const poll = async () => {
+            try {
+                const data = await parserAPI.getTaskStatus();
+                applyState(data.state, data.is_running);
+            } catch (error) {
+                if (isMounted) console.error('Error polling sync status:', error);
             }
-        } catch (err) {
-            console.error('Error setting up SSE:', err);
-            handleLoadingComplete('error');
-        }
+        };
+
+        poll();
+        const timer = window.setInterval(poll, POLL_INTERVAL_MS);
 
         return () => {
             isMounted = false;
-            cleanupEventSource();
+            window.clearInterval(timer);
         };
-    }, [isLoading, cleanupEventSource, handleLoadingComplete]);
+    }, [isLoading, handleLoadingComplete]);
 
     // Проверяем фоновую задачу только для подтверждённой пользовательской
     // сессии. LoadingProvider также оборачивает публичную страницу входа, где

@@ -17,6 +17,7 @@ from core.models import (
     PurchaseOrderItem,
     SupplyItem,
     SyncLock,
+    SyncRun,
 )
 
 __all__ = [
@@ -36,4 +37,5 @@ __all__ = [
     'PurchaseOrderItem',
     'SupplyItem',
     'SyncLock',
+    'SyncRun',
 ]

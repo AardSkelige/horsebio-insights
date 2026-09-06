@@ -519,3 +519,86 @@ class SyncLock(models.Model):
             return lock.is_locked
         except cls.DoesNotExist:
             return False
+
+
+class SyncRun(models.Model):
+    """
+    Прогон синхронизации: что идёт сейчас и чем кончился прошлый.
+
+    Состояние живёт в базе, а не в памяти веб-процесса, по трём причинам:
+
+    * под gunicorn воркеров несколько, и вопрос «как там синхронизация?»
+      попадает не обязательно в тот процесс, где она идёт;
+    * ночной прогон вообще идёт в отдельном процессе (`auto_sync_weekly`),
+      и интерфейс о нём сейчас не знает ничего;
+    * перезагрузка страницы теряла состояние у того, кто нажал кнопку,
+      а другие пользователи не видели чужой прогон вовсе.
+
+    Пишется «сердцебиением» задачи раз в секунду, а не самой задачей: задача
+    крутится в цикле asyncio, откуда Django к ORM обращаться не даёт.
+    """
+
+    STATUS_RUNNING = 'running'
+    STATUS_COMPLETED = 'completed'
+    STATUS_ERROR = 'error'
+    STATUS_STOPPED = 'stopped'
+    STATUSES = [
+        (STATUS_RUNNING, 'Идёт'),
+        (STATUS_COMPLETED, 'Завершён'),
+        (STATUS_ERROR, 'Ошибка'),
+        (STATUS_STOPPED, 'Остановлен'),
+    ]
+
+    # Прогон, о котором давно нет вестей, считается брошенным: так остаётся
+    # запись после убитого воркера или перезапуска контейнера. Сердцебиение
+    # отмечается раз в несколько секунд, поэтому минуты хватает с запасом,
+    # а без срока годности одна такая запись навсегда показывала бы
+    # «идёт обновление».
+    STALE_AFTER_SECONDS = 60
+
+    # Сколько прогонов храним. Прогон в сутки по расписанию плюс нажатия
+    # кнопки — сотня держит месяц с лишним, а таблица не растёт бесконечно.
+    KEEP_RUNS = 100
+
+    status = models.CharField(max_length=20, choices=STATUSES, default=STATUS_RUNNING,
+                              verbose_name='Статус')
+    stop_requested = models.BooleanField(default=False, verbose_name='Запрошена остановка')
+    message = models.CharField(max_length=255, blank=True, verbose_name='Этап')
+    processed = models.PositiveSmallIntegerField(default=0, verbose_name='Готово, %')
+    total = models.PositiveSmallIntegerField(default=100, verbose_name='Всего, %')
+    triggered_by = models.CharField(max_length=50, blank=True, verbose_name='Кто запустил')
+    error = models.TextField(blank=True, verbose_name='Ошибка')
+    started_at = models.DateTimeField(auto_now_add=True, verbose_name='Начат')
+    updated_at = models.DateTimeField(auto_now=True, verbose_name='Обновлён')
+    finished_at = models.DateTimeField(null=True, blank=True, verbose_name='Завершён')
+
+    class Meta:
+        db_table = 'parser_syncrun'
+        verbose_name = 'Прогон синхронизации'
+        verbose_name_plural = 'Прогоны синхронизации'
+        indexes = [models.Index(fields=['-started_at'])]
+
+    def __str__(self):
+        return f"{self.get_status_display()} — {self.started_at:%d.%m.%Y %H:%M}"
+
+    @property
+    def is_alive(self) -> bool:
+        """Идёт ли прогон на самом деле, а не числится идущим."""
+        from django.utils import timezone
+        if self.status != self.STATUS_RUNNING:
+            return False
+        age = (timezone.now() - self.updated_at).total_seconds()
+        return age <= self.STALE_AFTER_SECONDS
+
+    @classmethod
+    def latest(cls):
+        return cls.objects.order_by('-started_at').first()
+
+    @classmethod
+    def start(cls, triggered_by: str):
+        """Завести прогон и прибрать старые."""
+        run = cls.objects.create(triggered_by=triggered_by)
+        stale_ids = cls.objects.order_by('-started_at').values_list('id', flat=True)[cls.KEEP_RUNS:]
+        if stale_ids:
+            cls.objects.filter(id__in=list(stale_ids)).delete()
+        return run

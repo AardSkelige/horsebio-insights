@@ -6,8 +6,8 @@ from django.core.management.base import BaseCommand, CommandError
 from django.utils import timezone
 from django.core.cache import cache
 
-from sync.models import SyncLock
-from sync.sync_task import ParserTask, SyncLockHeartbeat, TaskStatus
+from sync.models import SyncLock, SyncRun
+from sync.sync_task import ParserTask, SyncHeartbeat, TaskStatus
 
 logger = logging.getLogger(__name__)
 
@@ -63,7 +63,13 @@ class Command(BaseCommand):
                 end_date=end_date,
                 auto_sync=True
             )
-            heartbeat = SyncLockHeartbeat(task, 'moysklad_sync', lock_token)
+            # Прогон по расписанию идёт отдельным процессом, и до записи в базу
+            # интерфейс о нём не знал ничего: страница показывала «не идёт»,
+            # пока синхронизация шла.
+            heartbeat = SyncHeartbeat(
+                task, 'moysklad_sync', lock_token,
+                run=SyncRun.start(triggered_by='расписание'),
+            )
             heartbeat.start()
 
             import asyncio

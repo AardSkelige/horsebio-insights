@@ -272,9 +272,6 @@ const FloatingLoadingCard = () => {
                                         {logs.slice(-3).map((log, index) => (
                                             <div key={index} style={{ border: '1px solid var(--hairline)', borderRadius: '8px', background: 'var(--surface-soft)', padding: '7px 8px' }}>
                                                 <div style={{ fontFamily: 'var(--sans)', fontSize: '12px', color: 'var(--ink)', fontWeight: 500, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{log.message}</div>
-                                                {log.details && (
-                                                    <div style={{ fontFamily: 'var(--sans)', fontSize: '11px', color: 'var(--muted)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', marginTop: '2px' }}>{log.details}</div>
-                                                )}
                                                 <div style={{ fontFamily: 'var(--mono)', fontSize: '10px', color: 'var(--muted-soft)', marginTop: '3px' }}>
                                                     {formatDate(log.timestamp, true)}
                                                 </div>

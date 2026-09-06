@@ -221,16 +221,22 @@ class TaskManagerLifecycleTests(SimpleTestCase):
         cleanup.assert_not_called()
 
 
-class ProgressStreamTests(SimpleTestCase):
-    @patch('sync.views.time.sleep', return_value=None)
-    @patch('sync.views.task_manager')
-    def test_missing_state_is_not_reported_as_success(self, manager, _sleep):
-        from .views import stream_loading_progress
+class TaskStatusTests(TestCase):
+    """Отсутствие состояния не должно выглядеть успехом.
 
-        manager.get_current_state.return_value = None
-        manager.is_task_running.return_value = False
-        response = stream_loading_progress(RequestFactory().get('/parser/stream-progress/'))
-        payload = json.loads(next(iter(response.streaming_content)).decode().removeprefix('data: '))
+    Раньше это проверялось на потоке прогресса: он отдавал `completed`, когда
+    состояние задачи пропадало, и полоса «доезжала» у мёртвой задачи. Поток
+    убран, состояние живёт в базе — свойство проверяем на её месте.
+    """
 
-        self.assertEqual(payload['status'], 'error')
-        self.assertNotEqual(payload['status'], 'completed')
+    def test_missing_state_is_not_reported_as_success(self):
+        from django.contrib.auth.models import User
+        from django.test import Client
+
+        client = Client()
+        client.force_login(User.objects.create_user('user', password='password'))
+
+        payload = client.get('/parser/task-status/').json()
+
+        self.assertFalse(payload['is_running'])
+        self.assertIsNone(payload['state'])

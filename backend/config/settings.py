@@ -272,14 +272,16 @@ else:
     SECURE_BROWSER_XSS_FILTER = True
     X_FRAME_OPTIONS = 'DENY'
 
-# Настройки логирования - убираем спам от stream-progress запросов
+# Настройки логирования: гасим повторяющийся опрос состояния синхронизации.
+# Пока она идёт, страница спрашивает статус раз в три секунды, и в журнале
+# от этого не остаётся ничего, кроме него.
 LOGGING = {
     'version': 1,
     'disable_existing_loggers': False,
     'filters': {
-        'ignore_stream_progress': {
+        'ignore_status_polling': {
             '()': 'django.utils.log.CallbackFilter',
-            'callback': lambda record: 'stream-progress' not in getattr(record, 'getMessage', lambda: '')()
+            'callback': lambda record: 'task-status' not in getattr(record, 'getMessage', lambda: '')()
         },
     },
     'formatters': {
@@ -297,7 +299,7 @@ LOGGING = {
             'level': 'INFO',
             'class': 'logging.StreamHandler',
             'formatter': 'simple',
-            'filters': ['ignore_stream_progress'],
+            'filters': ['ignore_status_polling'],
         },
     },
     'root': {
@@ -307,7 +309,7 @@ LOGGING = {
         'django.server': {
             'handlers': ['console'],
             'level': 'INFO',
-            'filters': ['ignore_stream_progress'],
+            'filters': ['ignore_status_polling'],
             'propagate': False,
         },
     },

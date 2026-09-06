@@ -18,7 +18,7 @@ from django.utils import timezone
 from asgiref.sync import sync_to_async
 
 from .logger import logger, structured_logger
-from .models import RawMaterial, SyncLock
+from .models import RawMaterial, SyncLock, SyncRun
 from .moysklad import MoySkladAPIClient
 from .cache import MaterialRegistry, ProductCache
 from .utils import get_group_from_pathname
@@ -105,16 +105,37 @@ class BaseTask(ABC):
         }
 
 
-class SyncLockHeartbeat:
-    """Поддерживает lease блокировки, пока задача выполняется."""
+class SyncHeartbeat:
+    """Пока задача жива, отмечается за неё в базе — и делает это дважды.
 
-    def __init__(self, task: BaseTask, lock_type: str, lock_token: str):
+    Продлевает lease блокировки, иначе долгий прогон сочтут брошенным.
+    И переносит прогресс в `SyncRun`: состояние задачи живёт в памяти
+    процесса, а спрашивают его по HTTP — под gunicorn это разные процессы,
+    и в память задачи спрашивающий не попадает вовсе. Ночной прогон вообще
+    идёт отдельной командой, и без записи в базу интерфейс о нём не знает.
+
+    Почему отсюда, а не из самой задачи: задача крутится в цикле asyncio,
+    а обращаться к ORM из async-кода Django запрещает.
+    """
+
+    # Шаг сердцебиения. Прогресс переносим на каждом, блокировку продлеваем
+    # раз в `interval_seconds` — она этого чаще не просит.
+    TICK_SECONDS = 1.0
+
+    # Отмечаемся в базе, даже когда состояние не менялось: по свежести записи
+    # видно, что прогон жив, а не брошен (см. SyncRun.STALE_AFTER_SECONDS).
+    TOUCH_SECONDS = 5.0
+
+    def __init__(self, task: BaseTask, lock_type: str, lock_token: str, run=None):
         self.task = task
         self.lock_type = lock_type
         self.lock_token = lock_token
+        self.run = run
         self.interval_seconds = getattr(settings, 'SYNC_LOCK_HEARTBEAT_SECONDS', 300)
         self._stop_event = threading.Event()
         self._thread = None
+        self._last_mirror = None
+        self._last_touch = 0.0
 
     def start(self) -> None:
         self._thread = threading.Thread(target=self._run, daemon=True)
@@ -123,7 +144,18 @@ class SyncLockHeartbeat:
     def _run(self) -> None:
         close_old_connections()
         try:
-            while not self._stop_event.wait(self.interval_seconds):
+            # Шаг не крупнее интервала продления: иначе настройка
+            # SYNC_LOCK_HEARTBEAT_SECONDS меньше секунды просто не работала бы.
+            tick = min(self.TICK_SECONDS, self.interval_seconds)
+            since_lock = 0.0
+            while not self._stop_event.wait(tick):
+                self._mirror_progress()
+                self._check_stop_request()
+
+                since_lock += tick
+                if since_lock < self.interval_seconds:
+                    continue
+                since_lock = 0.0
                 if not SyncLock.refresh_lock(self.lock_type, self.lock_token):
                     structured_logger.error(
                         "Потеряна блокировка синхронизации; задача будет остановлена"
@@ -133,10 +165,82 @@ class SyncLockHeartbeat:
         finally:
             close_old_connections()
 
+    # Статусы, при которых прогон считается законченным.
+    FINAL_STATUSES = (
+        SyncRun.STATUS_COMPLETED, SyncRun.STATUS_ERROR, SyncRun.STATUS_STOPPED,
+    )
+
+    def _mirror_progress(self, final: bool = False) -> None:
+        """Переносит состояние задачи в строку прогона."""
+        if not self.run:
+            return
+        try:
+            state = self.task.get_state()
+            status = state.get('status')
+
+            # Первый удар сердца может прийтись на момент, когда задача ещё
+            # только создана: у неё статус `idle`, которого у прогона нет.
+            # Записать его значило бы объявить прогон законченным — и это
+            # уже не исправить, отметку о завершении мы ставим один раз.
+            if status == TaskStatus.IDLE.value:
+                return
+
+            snapshot = (status, state.get('message'), state.get('processed'))
+            elapsed = time.time() - self._last_touch
+            if not final and snapshot == self._last_mirror and elapsed < self.TOUCH_SECONDS:
+                return
+
+            self.run.status = status if status in self.FINAL_STATUSES else SyncRun.STATUS_RUNNING
+            self.run.message = (state.get('message') or '')[:255]
+            self.run.processed = max(0, min(100, int(state.get('processed') or 0)))
+            self.run.total = max(1, min(100, int(state.get('total') or 100)))
+            self.run.error = state.get('error') or ''
+            if self.run.status in self.FINAL_STATUSES and not self.run.finished_at:
+                self.run.finished_at = timezone.now()
+            self.run.save(update_fields=[
+                'status', 'message', 'processed', 'total', 'error',
+                'finished_at', 'updated_at',
+            ])
+            self._last_mirror = snapshot
+            self._last_touch = time.time()
+        except Exception:
+            # Прогон важнее его отображения: не смогли записать — не мешаем.
+            # Соединение после сбоя закрываем: Django помечает его негодным,
+            # и без этого молчали бы уже все последующие удары сердца, а прогон
+            # через минуту стал бы выглядеть брошенным.
+            logger.exception('Не удалось записать состояние прогона синхронизации')
+            try:
+                close_old_connections()
+            except Exception:
+                pass
+
+    def _check_stop_request(self) -> None:
+        """Остановку просят через базу: нажавший «Стоп» сидит в другом процессе.
+
+        Через память это работало, только пока сервер был одним процессом
+        и синхронизацию запускала кнопка. Прогон по расписанию идёт вообще
+        отдельной командой, и остановить его было нечем.
+        """
+        if not self.run:
+            return
+        try:
+            if SyncRun.objects.filter(pk=self.run.pk, stop_requested=True).exists():
+                structured_logger.info('Получена просьба остановить синхронизацию')
+                self.task.stop()
+        except Exception:
+            logger.exception('Не удалось проверить просьбу об остановке')
+
     def stop(self) -> None:
         self._stop_event.set()
         if self._thread and self._thread is not threading.current_thread():
             self._thread.join(timeout=5)
+        # Последний снимок: без него прогон навсегда остался бы «идёт»,
+        # пока не протухнет по сроку.
+        self._mirror_progress(final=True)
+
+
+# Прежнее имя: он продлевал только блокировку.
+SyncLockHeartbeat = SyncHeartbeat
 
 
 # --- Task Manager ---
@@ -255,13 +359,16 @@ class TaskManager:
                     self._cached_state = None
                     self._last_state_update = 0
 
+                run = SyncRun.start(triggered_by='кнопка')
+
                 def run_loop():
                     heartbeat = None
                     try:
-                        heartbeat = SyncLockHeartbeat(
+                        heartbeat = SyncHeartbeat(
                             self._current_task,
                             'moysklad_sync',
                             lock_token,
+                            run=run,
                         )
                         heartbeat.start()
                         self._loop = asyncio.new_event_loop()
@@ -297,7 +404,11 @@ class TaskManager:
 
                 return {
                     'status': 'started',
-                    'message': 'Задача успешно запущена'
+                    'message': 'Задача успешно запущена',
+                    # Номер прогона нужен странице: без него она принимает
+                    # за свой прошлый, уже законченный прогон и гасит полосу
+                    # через полсекунды после нажатия.
+                    'run_id': run.id,
                 }
             except Exception as e:
                 logger.exception("Ошибка запуска задачи")

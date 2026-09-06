@@ -3,32 +3,20 @@
 from rest_framework.decorators import api_view
 from rest_framework.response import Response
 from django.views.decorators.csrf import ensure_csrf_cookie
-from django.http import StreamingHttpResponse
 from django.views.decorators.http import require_http_methods
 from django.middleware.csrf import get_token
 from django.utils import timezone
 from django.core.exceptions import ValidationError
 
-from .models import Shipment, RawMaterial, Counterparty
+from .models import Shipment, RawMaterial, Counterparty, SyncRun
 from .sync_task import TaskManager, ParserTask
 from .logger import logger, structured_logger
 
-import json
-import time
 from datetime import datetime as dt
 
-from contextlib import contextmanager
-from django.db import connection
 
 # Создаем единственный экземпляр TaskManager
 task_manager = TaskManager()
-
-@contextmanager
-def close_old_connections():
-    try:
-        yield
-    finally:
-        connection.close()
 
 @api_view(['GET'])
 @ensure_csrf_cookie
@@ -108,14 +96,30 @@ def load_data(request):
 
 @api_view(['POST'])
 def stop_loading(request):
-    """Остановка загрузки данных"""
+    """Остановка загрузки данных.
+
+    Просьба пишется в строку прогона, а не только в память процесса: нажавший
+    «Стоп» вполне может сидеть в другом воркере, а прогон по расписанию идёт
+    вообще отдельной командой. Сердцебиение задачи видит отметку и просит
+    задачу остановиться — там же, где она и живёт.
+    """
     try:
         structured_logger.info("Получен запрос на остановку загрузки")
-        response = task_manager.stop_current_task()
+
+        run = SyncRun.latest()
+        if not run or not run.is_alive:
+            return Response({
+                'status': 'success',
+                'message': 'Синхронизация уже не выполняется'
+            })
+
+        SyncRun.objects.filter(pk=run.pk).update(stop_requested=True)
+        # Тот же процесс — останавливаем сразу, не дожидаясь удара сердца.
+        task_manager.stop_current_task()
 
         return Response({
             'status': 'success',
-            'message': 'Задача остановлена или уже не выполняется'
+            'message': 'Остановка запрошена'
         })
 
     except Exception as e:
@@ -125,87 +129,33 @@ def stop_loading(request):
             'message': f'Ошибка при остановке загрузки: {str(e)}'
         }, status=500)
 
-def stream_loading_progress(request):
-    """Стриминг прогресса загрузки"""
-    def event_stream():
-        last_state = None
-        last_state_time = 0
-        task_active = True
-        consecutive_empty_states = 0
-        min_interval = 0.1
-
-        try:
-            while task_active:
-                with close_old_connections():
-                    current_time = time.time()
-
-                    current_state = task_manager.get_current_state()
-
-                    if not current_state:
-                        consecutive_empty_states += 1
-                        if consecutive_empty_states >= 3:
-                            if not task_manager.is_task_running():
-                                final_state = {
-                                    'status': 'error',
-                                    'message': 'Состояние задачи недоступно',
-                                    'timestamp': timezone.now().isoformat()
-                                }
-                                yield f"data: {json.dumps(final_state)}\n\n"
-                                task_active = False
-                                break
-                    else:
-                        consecutive_empty_states = 0
-
-                        time_elapsed = current_time - last_state_time
-                        state_changed = (
-                            not last_state or
-                            current_state.get('message') != last_state.get('message') or
-                            current_state.get('details') != last_state.get('details') or
-                            current_state.get('status') != last_state.get('status') or
-                            current_state.get('processed') != last_state.get('processed')
-                        )
-
-                        if state_changed and time_elapsed >= min_interval:
-                            current_state['timestamp'] = timezone.now().isoformat()
-                            yield f"data: {json.dumps(current_state)}\n\n"
-                            last_state = current_state.copy()
-                            last_state_time = current_time
-
-                            if current_state.get('status') in ['completed', 'error', 'stopped']:
-                                task_active = False
-                                break
-
-                time.sleep(min_interval)
-
-        except Exception as e:
-            logger.exception("Error in event stream")
-            error_state = {
-                'status': 'error',
-                'message': str(e),
-                'timestamp': timezone.now().isoformat()
-            }
-            yield f"data: {json.dumps(error_state)}\n\n"
-        finally:
-            connection.close()
-
-    response = StreamingHttpResponse(
-        event_stream(),
-        content_type='text/event-stream'
-    )
-    response['Cache-Control'] = 'no-cache'
-    response['X-Accel-Buffering'] = 'no'
-    return response
-
 @api_view(['GET'])
 def get_task_status(request):
-    """Получение текущего статуса задачи"""
+    """Состояние синхронизации — из базы, а не из памяти процесса.
+
+    В памяти его знает только тот процесс, где идёт задача. Под gunicorn
+    воркеров несколько, и спрашивающий попадает не обязательно в нужный;
+    а ночной прогон идёт вообще отдельной командой, и про него в памяти
+    веб-процесса нет ничего.
+    """
     try:
-        is_running = task_manager.is_task_running()
-        current_state = task_manager.get_current_state()
+        run = SyncRun.latest()
+        if not run:
+            return Response({'is_running': False, 'state': None})
 
         return Response({
-            'is_running': is_running,
-            'state': current_state
+            'is_running': run.is_alive,
+            'state': {
+                'id': run.id,
+                'status': run.status,
+                'message': run.message,
+                'processed': run.processed,
+                'total': run.total,
+                'started_at': run.started_at.isoformat(),
+                'completed_at': run.finished_at.isoformat() if run.finished_at else None,
+                'error': run.error or None,
+                'triggered_by': run.triggered_by,
+            },
         })
     except Exception as e:
         logger.exception("Error getting task status")
@@ -214,6 +164,7 @@ def get_task_status(request):
             'state': None,
             'error': str(e)
         }, status=500)
+
 
 @api_view(['GET'])
 @ensure_csrf_cookie
