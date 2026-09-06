@@ -231,3 +231,31 @@ class NotificationState(models.Model):
 
     def __str__(self):
         return f'{self.user} → {self.key} ({"прочитано" if self.seen_at else "новое"})'
+
+
+class CdekWaybillState(models.Model):
+    """Состояние робота накладных СДЭК: по записи на заказ сайта.
+
+    Раньше лежало в JSON-файле на томе (`.cdek_waybill_state.json`), и держалось
+    это на том, что том не забыли смонтировать в docker-compose. Забыли бы —
+    робот начал бы с чистого листа и завёл вторую накладную на заказ, который
+    уже уехал. Здесь же состояние бэкапится вместе с базой и переживает
+    любой деплой.
+
+    Запись хранится целиком в `payload`, а не разложена по колонкам: робот
+    дописывает в неё поля по ходу дела (`st.update(fields)`), и жёсткая схема
+    молча теряла бы то, чего в ней не предусмотрели.
+    """
+    order_id = models.CharField(max_length=64, unique=True,
+                                verbose_name='Заказ в МойСклад')
+    payload = models.JSONField(default=dict, verbose_name='Запись робота')
+    updated_at = models.DateTimeField(auto_now=True, verbose_name='Обновлена')
+
+    class Meta:
+        verbose_name = 'Накладная СДЭК (состояние робота)'
+        verbose_name_plural = 'Накладные СДЭК (состояние робота)'
+
+    def __str__(self):
+        name = (self.payload or {}).get('name') or self.order_id
+        status = (self.payload or {}).get('status') or 'без статуса'
+        return f'Заказ {name} — {status}'
