@@ -57,12 +57,15 @@ from pathlib import Path
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', '..', '..', '_shared'))
 from api_client import ProductionHelper, MOYSKLAD_TOKEN, BASE_URL
+from django_env import setup_django
 from cdek_client import CdekClient, CdekError
 from waybill_rules import (
     MARKER_PREFIX, REASON_MARKER_PREFIX, TRACK_LINE_PREFIX,
     delivery_text, is_managed_line, resolve_delivery,
 )
 
+# Старое место состояния. Нужен только команде импорта
+# (`manage.py import_cdek_waybills`), сам робот сюда больше не пишет.
 STATE_FILE = Path(__file__).parent.parent / "data" / ".cdek_waybill_state.json"
 
 # ─── Параметры МойСклад (подтверждены на живом аккаунте) ────────────────────
@@ -98,16 +101,28 @@ class WaybillError(Exception):
 
 
 def load_state() -> dict:
-    if STATE_FILE.exists():
-        with open(STATE_FILE, encoding="utf-8") as f:
-            return json.load(f)
-    return {"orders": {}}
+    """Состояние робота — из базы.
+
+    До 06.09.2026 лежало в JSON-файле на томе, и держалось это на том, что том
+    не забыли смонтировать: забыли бы — робот начал бы с чистого листа и завёл
+    вторую накладную на уже уехавший заказ. Форма словаря осталась прежней,
+    поэтому остальной код о переезде не знает.
+    """
+    setup_django()
+    from api.models import CdekWaybillState
+
+    return {"orders": {row.order_id: row.payload
+                       for row in CdekWaybillState.objects.all()}}
 
 
 def save_state(state: dict) -> None:
-    STATE_FILE.parent.mkdir(parents=True, exist_ok=True)
-    with open(STATE_FILE, "w", encoding="utf-8") as f:
-        json.dump(state, f, ensure_ascii=False, indent=2)
+    setup_django()
+    from api.models import CdekWaybillState
+
+    for order_id, payload in (state.get("orders") or {}).items():
+        CdekWaybillState.objects.update_or_create(
+            order_id=order_id, defaults={"payload": payload},
+        )
 
 
 def normalize_phone(raw: str) -> str:

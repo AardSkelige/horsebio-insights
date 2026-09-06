@@ -18,12 +18,16 @@ services:
       - django_cache:/app/cache
       - scripts_logs:/app/scripts_logs
       # Состояние демонов МойСклад: без volume оно живёт в контейнере и стирается
-      # каждым деплоем (демоны пересканируют всю историю с START_DATE)
+      # каждым деплоем (демоны пересканируют всю историю с START_DATE).
+      #
+      # Тома уезжают в Postgres по одному (MIGRATION-PLAN.md, этап 6): состояние
+      # там бэкапится вместе с базой и не зависит от того, не забыли ли его
+      # смонтировать. Первым, 06.09.2026, уехал робот накладных СДЭК —
+      # его записи теперь в таблице CdekWaybillState.
       - hb_returns_data:/app/moysklad/horsebio/01_daemons/03_returns/data
       - hb_buy_prices_data:/app/moysklad/horsebio/01_daemons/02_buy_prices/data
       - hb_deadlines_data:/app/moysklad/horsebio/01_daemons/05_payment_deadline/data
       - hb_order_email_data:/app/moysklad/horsebio/01_daemons/06_order_email_sync/data
-      - hb_cdek_waybills_data:/app/moysklad/horsebio/01_daemons/07_cdek_waybills/data
       # Ack-файлы health-чеков: пишутся через API (подтверждение из UI),
       # без volume каждый деплой откатывает их к снимку из образа
       - hb_health_data:/app/moysklad/horsebio/02_checks/01_health/data
@@ -85,7 +89,6 @@ volumes:
   hb_buy_prices_data:
   hb_deadlines_data:
   hb_order_email_data:
-  hb_cdek_waybills_data:
   hb_health_data:
   hb_site_orders_data:
 
