@@ -641,7 +641,7 @@ class ReturnsMonitor:
                 1 for o in orders
                 if o.get("agent", {}).get("name") in TARGET_AGENTS
             )
-            print(f"Найдено: {len(orders)} заказов (ВБ+Озон: {target_count})")
+            print(f"Найдено: {len(orders)} заказов (Wildberries+Ozon: {target_count})")
 
             for order in orders:
                 self._last_created = None
@@ -760,7 +760,7 @@ def _export_results(counts, details, path):
 
 def main():
     parser = argparse.ArgumentParser(
-        description="Монитор возвратов покупателей для ВБ и Озон"
+        description="Монитор возвратов покупателей для Wildberries и Ozon"
     )
     parser.add_argument("--daemon", action="store_true",
                         help="Запустить как демон")
@@ -796,7 +796,7 @@ def main():
 
     if args.daemon:
         print(f"{'='*60}")
-        print(f"  Монитор возвратов ВБ/Озон — ЗАПУЩЕН")
+        print(f"  Монитор возвратов Ozon/Wildberries — ЗАПУЩЕН")
         print(f"  Дата старта:  {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
         print(f"  Интервал:     {args.interval} сек ({args.interval//60} мин)")
         print(f"  Агенты:       {', '.join(TARGET_AGENTS)}")

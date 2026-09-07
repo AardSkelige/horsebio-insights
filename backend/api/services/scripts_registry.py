@@ -77,7 +77,7 @@ SCRIPTS_CONFIG = [
     {
         'id': 'horsebio_returns_ozon_enrich',
         'topic': 'Возвраты',
-        'name': 'Где едут возвраты Озон',
+        'name': 'Где едут возвраты Ozon',
         'account': 'HorseBio',
         'schedule': 'Каждые 5 ч с 09:15',
         'description': 'Робот спрашивает у Ozon, где коробка, и ставит статус на документ',
@@ -88,7 +88,7 @@ SCRIPTS_CONFIG = [
     {
         'id': 'horsebio_returns_wb_enrich',
         'topic': 'Возвраты',
-        'name': 'Где едут возвраты ВБ',
+        'name': 'Где едут возвраты Wildberries',
         'account': 'HorseBio',
         'schedule': 'Каждые 5 ч с 09:30',
         'description': 'Робот берёт статус из отчёта Wildberries и ставит его на документ',
@@ -175,10 +175,10 @@ SCRIPTS_CONFIG = [
     {
         'id': 'horsebio_ozon_products',
         'topic': 'Обновление данных',
-        'name': 'Товары Ozon',
+        'name': 'Товары для доставки Ozon',
         'account': 'HorseBio',
         'schedule': 'Ежедн. в 09:35',
-        'description': 'Сопоставление артикулов с sku в Ozon для Ozon Доставки (Django-команда sync_ozon_products)',
+        'description': 'Доставку Ozon видно в корзине сайта: сверяет наши артикулы с каталогом Ozon (Django-команда sync_ozon_products)',
         'script': '/app/manage.py',
         'args': ['sync_ozon_products'],
     },

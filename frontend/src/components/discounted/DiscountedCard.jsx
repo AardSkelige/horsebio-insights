@@ -25,6 +25,11 @@ function term(position) {
  * отправляли, либо она скрыта. Это читается из фида сайта, а не из наших записей,
  * поэтому показывает настоящее положение дел, а не то, что мы когда-то отправили.
  *
+ * Строка про Ozon появляется только у позиций, заведённых на площадке: там продаётся
+ * часть уценки, и её отсутствие — не проблема, о которой надо сообщать. Остаток туда
+ * едет из МойСклад сам (каждые 15 минут), поэтому расхождению взяться неоткуда —
+ * строка показывает цену площадки, которая с ценой сайта не совпадает намеренно.
+ *
  * «Снять с продажи» уходит обменом на сайт, а не в МойСклад: остаток и срок
  * остаются как были, меняется только доступность карточки покупателю. Поэтому
  * после успешного снятия карточка не исчезает — она просто перестаёт предлагать
@@ -83,6 +88,15 @@ export default function DiscountedCard({ position, onDelisted }) {
                 </div>
             )}
 
+            {position.ozon_url && (
+                <div className="uc-site live">
+                    <span className="dot" />
+                    {position.ozon_price
+                        ? `На Ozon: ${money(position.ozon_price)}, ${position.ozon_quantity} шт`
+                        : 'На Ozon'}
+                </div>
+            )}
+
             <div className="uc-actions">
                 {canDelist && (
                     <Button
@@ -108,6 +122,12 @@ export default function DiscountedCard({ position, onDelisted }) {
                         Сайт
                     </Button>
                 )}
+                {position.ozon_url && (
+                    <Button as="a" variant="ghost" size="sm" icon={ExternalLink}
+                        href={position.ozon_url} target="_blank" rel="noreferrer">
+                        Ozon
+                    </Button>
+                )}
             </div>
 
             {error && <div className="uc-error" role="alert">{error}</div>}
@@ -131,6 +151,9 @@ DiscountedCard.propTypes = {
         published: PropTypes.bool,
         site_price: PropTypes.number,
         site_quantity: PropTypes.number,
+        ozon_url: PropTypes.string,
+        ozon_price: PropTypes.number,
+        ozon_quantity: PropTypes.number,
     }).isRequired,
     onDelisted: PropTypes.func,
 };

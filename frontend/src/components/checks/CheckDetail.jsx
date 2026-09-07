@@ -3,7 +3,7 @@ import PropTypes from 'prop-types';
 import { ArrowLeft, Play, Square, Loader2, Activity } from 'lucide-react';
 import { Button, Segmented } from '../ui';
 import { checksApi, relTime, fmtDuration, plural, SEV } from './checksShared';
-import { SCRIPT_META, AccountBadge } from './ScriptCard';
+import { SCRIPT_META } from './ScriptCard';
 import HealthResults from './HealthResults';
 import LogResult from './LogResult';
 import ExceptionsPanel from './ExceptionsPanel';
@@ -93,7 +93,6 @@ export default function CheckDetail({ scriptId, initial, onBack, backLabel = 'В
                     <div style={{ minWidth: 0, flex: 1 }}>
                         <div style={{ display: 'flex', alignItems: 'center', gap: 9, flexWrap: 'wrap', fontFamily: 'var(--serif)', fontSize: 24, fontWeight: 600, color: 'var(--ink)', lineHeight: 1.15 }}>
                             {initial?.name || scriptId}
-                            {initial?.account && <AccountBadge account={initial.account} />}
                             {meta.hint && <InfoTip text={meta.hint} width={310} />}
                         </div>
                         {meta.what && (

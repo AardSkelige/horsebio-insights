@@ -34,7 +34,7 @@ from rest_framework.response import Response
 from rest_framework import status
 
 from api.exceptions import ExternalServiceError
-from api.services import site_csv, site_exchange, site_feed
+from api.services import ozon_stock, site_csv, site_exchange, site_feed
 from msapi import http as ms_http
 from sync.moysklad import MoySkladAPIClient
 
@@ -224,6 +224,23 @@ def _site_state(product, on_site):
     }
 
 
+def _ozon_state(article, on_ozon):
+    """Что известно про карточку на Ozon: ссылка, цена и остаток.
+
+    Отсутствие карточки на Ozon — не проблема, а обычное дело: там заведена
+    часть уценки. Поэтому «не опубликовано», как у сайта, здесь не показываем —
+    просто нечего показать, и строки на карточке не будет.
+    """
+    if not on_ozon:
+        return {"ozon_url": None, "ozon_price": None, "ozon_quantity": None}
+    offer = on_ozon.get(article) or {}
+    return {
+        "ozon_url": offer.get("url"),
+        "ozon_price": offer.get("price"),
+        "ozon_quantity": offer.get("quantity"),
+    }
+
+
 def _price_of(product, name):
     for entry in product.get("salePrices") or []:
         if (entry.get("priceType") or {}).get("name") == name:
@@ -332,11 +349,13 @@ def _invalidate_cache():
     notifications.invalidate("discounted")
 
 
-def _build_positions(refresh=False, with_days_on_stock=True):
-    """Уценённые позиции: остаток, срок, цена и что сейчас на витрине.
+def _build_positions(refresh=False, with_days_on_stock=True, with_ozon=True):
+    """Уценённые позиции: остаток, срок, цена и что сейчас на витринах.
 
     with_days_on_stock=False пропускает отчёт по документам — он идёт по одному
     запросу на товар и нужен только странице, но не уведомлениям.
+    with_ozon=False пропускает витрину Ozon: поводов для уведомлений там нет —
+    остаток туда едет из МойСклад сам и разойтись с ним не может.
     """
     folder_href, attribute_id = _resolve_refs()
     today = date.today()
@@ -376,6 +395,15 @@ def _build_positions(refresh=False, with_days_on_stock=True):
         logger.warning("Фид сайта недоступен — публикация позиций неизвестна", exc_info=True)
         on_site = None
 
+    # Что показывает Ozon. Недоступность площадки не должна ронять страницу:
+    # без неё раздел просто не покажет строку про Ozon
+    on_ozon = None
+    if with_ozon:
+        try:
+            on_ozon = ozon_stock.offers(p.get("article") for p in products if p.get("article"))
+        except Exception:
+            logger.warning("Ozon недоступен — витрина площадки неизвестна", exc_info=True)
+
     positions = []
     for product_id, product in by_id.items():
         held = stock.get(product_id, {})
@@ -410,6 +438,7 @@ def _build_positions(refresh=False, with_days_on_stock=True):
             # свой идентификатор, и адрес, собранный из id карточки, не открывается.
             "ms_url": (product.get("meta") or {}).get("uuidHref"),
             **_site_state(product, on_site),
+            **_ozon_state(product.get("article") or "", on_ozon),
         })
 
     # Сначала то, с чем надо что-то делать: истёкшие, потом «пора снимать»,
@@ -434,7 +463,7 @@ def positions_snapshot(refresh=False):
         if cached is not None:
             return cached
 
-    positions = _build_positions(refresh=refresh, with_days_on_stock=False)
+    positions = _build_positions(refresh=refresh, with_days_on_stock=False, with_ozon=False)
     cache.set(POSITIONS_CACHE_KEY, positions, POSITIONS_CACHE_TTL)
     return positions
 

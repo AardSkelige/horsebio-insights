@@ -81,13 +81,13 @@ def _get_window(headers: dict, date_from: str, date_to: str, tries: int = 4) -> 
                           params={'dateFrom': date_from, 'dateTo': date_to}, timeout=120)
         if r.status_code == 429:
             wait = int(r.headers.get('X-Ratelimit-Retry', 20)) + 2
-            print(f"    лимит ВБ, ждём {wait}с (попытка {attempt}/{tries})", flush=True)
+            print(f"    лимит Wildberries, ждём {wait}с (попытка {attempt}/{tries})", flush=True)
             time.sleep(wait)
             continue
         r.raise_for_status()
         body = r.json()
         return (body.get('report') if isinstance(body, dict) else body) or []
-    print(f"    окно {date_from}…{date_to} пропущено: ВБ так и не ответил", flush=True)
+    print(f"    окно {date_from}…{date_to} пропущено: Wildberries так и не ответил", flush=True)
     return []
 
 

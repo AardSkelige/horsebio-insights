@@ -1,12 +1,13 @@
-"""Остатки FBS на Ozon: сколько товара площадка считает доступным.
+"""Витрина Ozon: что площадка знает о наших товарах и сколько их у неё в наличии.
 
 Ozon и МойСклад друг о друге не знают: встроенная интеграция везёт к нам заказы,
 но остаток на витрине ведёт сама площадка, и до 07.09.2026 его правили руками.
 Из-за этого уценка продавалась на Ozon в отрыве от склада: остаток на витрине
 жил своей жизнью, заказы приходили на товар, которого уже нет.
 
-Здесь — только запись остатка, ровно то, чего не хватает. Цены, карточки и
-заказы Ozon ведёт по-прежнему сам.
+Здесь запись остатка — то, чего не хватало, — и чтение витрины для страницы
+«Уценка»: ссылка на карточку, цена и остаток. Цены и сами карточки Ozon ведёт
+по-прежнему сам, мы их только показываем рядом с нашими цифрами.
 
 Авторизация — Client-Id/Api-Key, как в ozon/services/ozon_client.py (в
 ozon_logistics свой клиент на OAuth, для Ozon Доставки; общего у них только хост).
@@ -28,6 +29,10 @@ TIMEOUT = 30
 
 # За один запрос Ozon принимает 100 пар «товар — склад»
 BATCH = 100
+
+# Публичная страница товара. Собирается из sku: другого адреса Ozon не отдаёт,
+# а этот открывается и без авторизации продавца.
+PRODUCT_URL = "https://www.ozon.ru/product/{sku}/"
 
 
 class OzonStockError(Exception):
@@ -73,21 +78,76 @@ def warehouse_id():
     return active[0]["warehouse_id"]
 
 
-def known_offers(offer_ids):
-    """Какие из наших артикулов вообще заведены на Ozon.
+def _catalog(offer_ids):
+    """Карточки Ozon по нашим артикулам: {offer_id: {sku, product_id, archived}}.
 
-    Остаток по незаведённому артикулу — не ошибка, а нормальное состояние:
-    на сайте позиций уценки больше, чем на Ozon. Отправлять их бессмысленно,
-    Ozon вернёт на каждую ошибку.
+    Артикул, которого на Ozon нет, просто не попадёт в ответ — это нормальное
+    состояние, а не ошибка: уценки на сайте больше, чем на площадке.
     """
     offer_ids = list(offer_ids)
     if not offer_ids:
-        return set()
-    found = set()
+        return {}
+    found = {}
     for start in range(0, len(offer_ids), 1000):  # фильтр принимает до 1000 идентификаторов
         data = _post("/v3/product/list", {"filter": {"offer_id": offer_ids[start:start + 1000]}, "limit": 1000})
-        found |= {item["offer_id"] for item in data.get("result", {}).get("items", [])}
+        for item in data.get("result", {}).get("items", []):
+            found[item["offer_id"]] = {
+                "sku": item.get("sku"),
+                "product_id": item.get("product_id"),
+                "archived": bool(item.get("archived")),
+            }
     return found
+
+
+def known_offers(offer_ids):
+    """Какие из наших артикулов вообще заведены на Ozon.
+
+    Остаток по незаведённому артикулу отправлять бессмысленно: Ozon вернёт
+    на каждый такой ошибку.
+    """
+    return set(_catalog(offer_ids))
+
+
+def offers(offer_ids):
+    """Что сейчас на витрине Ozon: {offer_id: {url, price, quantity}}.
+
+    Три запроса на всю страницу, а не на позицию: список карточек, цены и
+    остатки. Читается ради страницы «Уценка» — чтобы рядом с нашим складом
+    было видно, что показывает площадка, и можно было открыть карточку.
+
+    Количество — доступное покупателю: наличие минус то, что Ozon уже
+    зарезервировал под свои заказы.
+    """
+    catalog = _catalog(offer_ids)
+    if not catalog:
+        return {}
+
+    product_ids = [str(card["product_id"]) for card in catalog.values() if card.get("product_id")]
+    prices, quantities = {}, {}
+    if product_ids:
+        answer = _post("/v5/product/info/prices",
+                       {"filter": {"product_id": product_ids, "visibility": "ALL"}, "limit": 1000})
+        for item in answer.get("items", []):
+            price = (item.get("price") or {}).get("price")
+            if price is not None:
+                prices[item["offer_id"]] = float(price)
+
+        answer = _post("/v4/product/info/stocks",
+                       {"filter": {"product_id": product_ids, "visibility": "ALL"}, "limit": 1000})
+        for item in answer.get("items", []):
+            fbs = [s for s in item.get("stocks") or [] if s.get("type") == "fbs"]
+            quantities[item["offer_id"]] = sum(
+                (s.get("present") or 0) - (s.get("reserved") or 0) for s in fbs
+            )
+
+    return {
+        offer_id: {
+            "url": PRODUCT_URL.format(sku=card["sku"]) if card.get("sku") else None,
+            "price": prices.get(offer_id),
+            "quantity": quantities.get(offer_id),
+        }
+        for offer_id, card in catalog.items()
+    }
 
 
 def push_stock(items, warehouse):

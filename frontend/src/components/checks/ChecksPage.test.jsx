@@ -56,11 +56,12 @@ beforeEach(() => {
 });
 
 describe('ChecksPage — список', () => {
-    it('показывает строки скриптов с аккаунтом', async () => {
+    it('показывает строки скриптов', async () => {
         renderAt('/checks');
         expect(await screen.findByText('Проверка данных')).toBeInTheDocument();
         expect(screen.getByText('Мониторинг возвратов')).toBeInTheDocument();
-        expect(screen.getAllByText('HorseBio').length).toBeGreaterThan(0);
+        // Бейджа аккаунта нет: аккаунт у всех задач один, различать им нечего
+        expect(screen.queryByText('HorseBio')).not.toBeInTheDocument();
     });
 
     it('показывает статус и время запуска одной компактной строкой', async () => {

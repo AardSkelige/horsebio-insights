@@ -1,4 +1,4 @@
-"""Тесты синхронизации остатков уценки с Ozon.
+"""Тесты синхронизации остатков уценки с Ozon и витрины площадки на доске.
 
 Главное, что здесь проверяется: на витрину Ozon уезжает доступный остаток —
 склад минус резерв под уже принятые заказы, — а позиция, которую пора снимать
@@ -135,3 +135,61 @@ class PushStockTest(SimpleTestCase):
         self.assertEqual(post.call_count, 2)
         self.assertEqual(len(post.call_args_list[0].args[1]["stocks"]), 100)
         self.assertEqual(len(post.call_args_list[1].args[1]["stocks"]), 50)
+
+
+class OzonStateTest(SimpleTestCase):
+    """Строка «На Ozon» на карточке позиции.
+
+    Отсутствие карточки на площадке — обычное дело: там продаётся часть уценки.
+    Поэтому «не опубликовано», как у сайта, не показываем: нечего показать —
+    нет и строки.
+    """
+
+    def test_fills_url_price_and_quantity(self):
+        from api.views.discounted import _ozon_state
+
+        state = _ozon_state("A-UC", {"A-UC": {
+            "url": "https://www.ozon.ru/product/1/", "price": 2300.0, "quantity": 38}})
+
+        self.assertEqual(state["ozon_url"], "https://www.ozon.ru/product/1/")
+        self.assertEqual(state["ozon_price"], 2300.0)
+        self.assertEqual(state["ozon_quantity"], 38)
+
+    def test_card_absent_on_ozon_gives_empty_state(self):
+        from api.views.discounted import _ozon_state
+
+        self.assertEqual(_ozon_state("B-UC", {"A-UC": {"url": "u"}}),
+                         {"ozon_url": None, "ozon_price": None, "ozon_quantity": None})
+
+    def test_ozon_unavailable_is_the_same_as_absent(self):
+        """Площадка не ответила — строки тоже нет: врать про остаток нельзя."""
+        from api.views.discounted import _ozon_state
+
+        self.assertEqual(_ozon_state("A-UC", None),
+                         {"ozon_url": None, "ozon_price": None, "ozon_quantity": None})
+
+
+class OffersTest(SimpleTestCase):
+    """Чтение витрины: три запроса на страницу, а не на позицию."""
+
+    def test_collects_url_price_and_available_quantity(self):
+        answers = [
+            {"result": {"items": [{"offer_id": "A-UC", "product_id": 1, "sku": 555, "archived": False}]}},
+            {"items": [{"offer_id": "A-UC", "price": {"price": "2300"}}]},
+            {"items": [{"offer_id": "A-UC", "stocks": [
+                {"type": "fbs", "present": 40, "reserved": 2},
+                {"type": "fbo", "present": 17, "reserved": 0},
+            ]}]},
+        ]
+        with patch.object(ozon_stock, "_post", side_effect=answers) as post:
+            result = ozon_stock.offers(["A-UC", "B-UC"])
+
+        self.assertEqual(post.call_count, 3)
+        self.assertEqual(result, {"A-UC": {
+            "url": "https://www.ozon.ru/product/555/", "price": 2300.0, "quantity": 38}})
+
+    def test_no_cards_means_no_further_requests(self):
+        with patch.object(ozon_stock, "_post", return_value={"result": {"items": []}}) as post:
+            self.assertEqual(ozon_stock.offers(["A-UC"]), {})
+
+        self.assertEqual(post.call_count, 1)

@@ -4,7 +4,6 @@ import PropTypes from 'prop-types';
 import { ArrowLeft, ExternalLink, Loader2, PackageOpen, ChevronRight } from 'lucide-react';
 import { Button } from '../ui';
 import { checksApi, relTime, fmtRub, plural, PENDING_RETURNS_HINT, PENDING_RETURNS_ID } from './checksShared';
-import { AccountBadge } from './ScriptCard';
 import InfoTip from './InfoTip';
 
 
@@ -27,13 +26,14 @@ function buildBuckets(warnDays) {
 // Маркетплейсы: короткая подпись + цвет точки. Порядок — как показываем в разбивке.
 const MP_ORDER = ['ozon', 'wb', 'other'];
 const MP_META = {
-    ozon:  { label: 'Озон',   color: 'var(--primary)' },
-    wb:    { label: 'ВБ',     color: 'var(--cat-clay)' },
+    ozon:  { label: 'Ozon',   color: 'var(--primary)' },
+    wb:    { label: 'WB',     color: 'var(--cat-clay)' },
     other: { label: 'Прочее', color: 'var(--muted-soft)' },
 };
 
-// Относим возврат к маркетплейсу по имени контрагента (agentOf). Значения в МойСклад —
-// «Озон», «Вайлдберриз (Вб)»; старые записи могли писать Ozon/Wildberries — ловим по подстроке.
+// Относим возврат к маркетплейсу по имени контрагента (agentOf). Сравниваем с тем, как
+// площадки записаны в МойСклад («Озон», «Вайлдберриз (Вб)») — это данные, а не наши
+// подписи, поэтому ловим по подстроке и в латинице тоже.
 function mpKey(it) {
     const a = (agentOf(it) || '').toLowerCase();
     if (a.includes('озон') || a.includes('ozon')) return 'ozon';
@@ -285,7 +285,6 @@ export default function PendingReturnsDetail({ onBack }) {
                 <div style={{ minWidth: 0, flex: 1 }}>
                     <div style={{ display: 'flex', alignItems: 'center', gap: 9, flexWrap: 'wrap', fontFamily: 'var(--serif)', fontSize: 24, fontWeight: 600, color: 'var(--ink)', lineHeight: 1.15 }}>
                         Что разобрать из возвратов
-                        <AccountBadge account="HorseBio" />
                         <InfoTip text={PENDING_RETURNS_HINT} width={320} />
                     </div>
                     <div style={{ fontSize: 12.5, color: 'var(--muted)', marginTop: 5, lineHeight: 1.5 }}>
@@ -318,7 +317,7 @@ export default function PendingReturnsDetail({ onBack }) {
                             label="Едут к нам" value={inTransit.length} color="var(--ink)"
                             sub={mp.length > 0
                                 ? <MpBreakdown rows={mp} mode="count" />
-                                : <div style={kpiSub()}>{plural(inTransit.length, 'возврат', 'возврата', 'возвратов')} с ВБ и Озона</div>}
+                                : <div style={kpiSub()}>{plural(inTransit.length, 'возврат', 'возврата', 'возвратов')} с WB и Ozon</div>}
                         />
                         <Kpi
                             label="Денег в дороге" value={fmtRub(transitRub)} color="var(--ink)"

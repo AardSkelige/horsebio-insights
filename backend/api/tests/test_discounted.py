@@ -80,6 +80,7 @@ class BuildDataTest(SimpleTestCase):
              patch('api.views.discounted._get_all_pages', side_effect=[products, stock_rows]), \
              patch('api.views.discounted._build_analytics', return_value={}), \
              patch('api.views.discounted.site_feed.offers', return_value={}), \
+             patch('api.views.discounted.ozon_stock.offers', return_value={}), \
              patch('api.views.discounted._days_on_stock', return_value=days_on_stock):
             return _build_data()
 
@@ -136,6 +137,7 @@ class BuildDataTest(SimpleTestCase):
         soon = (self.today + timedelta(days=100)).isoformat()
         with patch('api.views.discounted._resolve_refs', return_value=(FOLDER_HREF, ATTR_ID)), \
              patch('api.views.discounted.site_feed.offers', return_value={}), \
+             patch('api.views.discounted.ozon_stock.offers', return_value={}), \
              patch('api.views.discounted._get_all_pages', side_effect=[
                  [_product('p1', 'A-UC', 'С остатком', soon), _product('p2', 'B-UC', 'Пустая', soon)],
                  [_stock('p1', 3.0, 10000)],
@@ -242,6 +244,7 @@ class RequestShapeTest(SimpleTestCase):
         with patch('api.views.discounted._resolve_refs', return_value=(FOLDER_HREF, ATTR_ID)), \
              patch('api.views.discounted._build_analytics', return_value={}), \
              patch('api.views.discounted.site_feed.offers', return_value={}), \
+             patch('api.views.discounted.ozon_stock.offers', return_value={}), \
              patch('api.views.discounted._get_all_pages', side_effect=remember):
             _build_data()
 
@@ -260,6 +263,7 @@ class RequestShapeTest(SimpleTestCase):
         with patch('api.views.discounted._resolve_refs', return_value=(FOLDER_HREF, ATTR_ID)), \
              patch('api.views.discounted._build_analytics', return_value={}), \
              patch('api.views.discounted.site_feed.offers', return_value={}), \
+             patch('api.views.discounted.ozon_stock.offers', return_value={}), \
              patch('api.views.discounted._get_all_pages', side_effect=remember):
             _build_data()
 
@@ -352,6 +356,7 @@ class SiteStateTest(SimpleTestCase):
              patch('api.views.discounted._get_all_pages', side_effect=[products, stock_rows]), \
              patch('api.views.discounted._build_analytics', return_value={}), \
              patch('api.views.discounted.site_feed.offers', **on_site), \
+             patch('api.views.discounted.ozon_stock.offers', return_value={}), \
              patch('api.views.discounted._days_on_stock', return_value=None):
             return _build_data()
 
@@ -415,6 +420,7 @@ class PublishTest(TestCase):
              patch('api.views.discounted._resolve_refs', return_value=(FOLDER_HREF, ATTR_ID)), \
              patch('api.views.discounted._get_all_pages', return_value=[{'stock': stock}]), \
              patch('api.views.discounted.site_feed.offers', return_value=on_site or {}), \
+             patch('api.views.discounted.ozon_stock.offers', return_value={}), \
              patch('api.views.discounted.site_feed.pictures_for', return_value=list(pictures)) as pics, \
              patch('api.views.discounted.site_exchange.publish', return_value=len(pictures)) as publish:
             response = self.client.post('/api/discounted/p1/publish/')
@@ -608,6 +614,7 @@ class RefreshTest(TestCase):
         with patch('api.views.discounted._resolve_refs', return_value=(FOLDER_HREF, ATTR_ID)), \
              patch('api.views.discounted._get_all_pages', side_effect=[[], []]), \
              patch('api.views.discounted._build_analytics', return_value={}), \
+             patch('api.views.discounted.ozon_stock.offers', return_value={}), \
              patch('api.views.discounted.site_feed.offers', return_value={}) as feed:
             self.client.get('/api/discounted/?refresh=1')
 

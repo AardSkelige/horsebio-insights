@@ -24,7 +24,7 @@ import wb_returns  # noqa: E402
 
 
 def main():
-    ap = argparse.ArgumentParser(description="Статусы черновиков возвратов ВБ по отчёту Wildberries")
+    ap = argparse.ArgumentParser(description="Статусы черновиков возвратов Wildberries по отчёту площадки")
     ap.add_argument('--dry-run', action='store_true', help="Показать, ничего не писать в МС")
     ap.add_argument('--results-out', type=str, default=None,
                     help="Путь для структурированного JSON находок (для страницы /checks)")

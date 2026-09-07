@@ -29,7 +29,7 @@ import returns_enrich  # noqa: E402
 
 
 def main():
-    ap = argparse.ArgumentParser(description="Статусы черновиков возвратов Озон по данным Ozon API")
+    ap = argparse.ArgumentParser(description="Статусы черновиков возвратов Ozon по данным Ozon API")
     ap.add_argument('--dry-run', action='store_true', help="Показать, ничего не писать в МС")
     ap.add_argument('--results-out', type=str, default=None,
                     help="Путь для структурированного JSON находок (для страницы /checks)")
