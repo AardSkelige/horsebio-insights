@@ -85,10 +85,13 @@ class Command(BaseCommand):
 
             for i in range(0, len(shipment_ids), UPDATE_BATCH):
                 batch = shipment_ids[i:i + UPDATE_BATCH]
+                # Полным менеджером: разовая доливка данных обязана дойти
+                # и до помеченных удалёнными — документ может вернуться,
+                # и тогда канал у него должен быть уже проставлен.
                 if dry_run:
-                    updated += Shipment.objects.filter(external_id__in=batch).count()
+                    updated += Shipment.all_objects.filter(external_id__in=batch).count()
                 else:
-                    updated += Shipment.objects.filter(external_id__in=batch).update(
+                    updated += Shipment.all_objects.filter(external_id__in=batch).update(
                         sales_channel=channel
                     )
 

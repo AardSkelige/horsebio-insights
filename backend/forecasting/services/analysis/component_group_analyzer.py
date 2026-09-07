@@ -3,7 +3,7 @@
 import pandas as pd
 import numpy as np
 from typing import Dict, List, Tuple
-from django.db.models import Sum, F, Avg, Count
+from django.db.models import Sum, F, Avg, Count, Q
 from django.db import models
 from decimal import Decimal
 import logging
@@ -106,11 +106,16 @@ class ComponentGroupAnalyzer:
         """
         try:
             # Получаем все продукты с техкартами и продажами
+            # Обратную связь менеджер позиций не закрывает — фильтр по
+            # помеченным отгрузкам приходится ставить руками, иначе продажи
+            # считались бы по документам, которых в МойСклад больше нет.
             products = Product.objects.filter(
                 processingplanproduct__isnull=False,
-                shipmentitem__isnull=False
+                shipmentitem__isnull=False,
+                shipmentitem__shipment__deleted_at__isnull=True,
             ).annotate(
-                sales_count=Count('shipmentitem')
+                sales_count=Count('shipmentitem',
+                                  filter=Q(shipmentitem__shipment__deleted_at__isnull=True))
             ).filter(
                 sales_count__gt=0
             )

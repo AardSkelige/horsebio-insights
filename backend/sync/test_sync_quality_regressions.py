@@ -1,12 +1,23 @@
 import json
+from datetime import datetime
+from decimal import Decimal
 from unittest.mock import ANY, AsyncMock, MagicMock, patch
 
 import requests
 from asgiref.sync import async_to_sync
 from django.db import DatabaseError
 from django.test import RequestFactory, SimpleTestCase, TestCase
+from django.utils.timezone import make_aware
 
 from .cache import ProductCache, ProductDetailsFetchError
+from .models import (
+    Counterparty,
+    Product,
+    RawMaterial,
+    RawMaterialUsage,
+    Shipment,
+    ShipmentItem,
+)
 from .moysklad.base_client import PaginationMixin
 from .moysklad.products import ProductsMixin
 from .processors.processing_plans import ProcessingPlanProcessor, ProcessingPlanStorage
@@ -179,6 +190,88 @@ class StorageDatabaseFailureTests(TestCase):
                     args = (args,)
                 with self.assertRaisesRegex(DatabaseError, 'db down'):
                     async_to_sync(method)(*args)
+
+
+class ShipmentSoftDeleteTests(TestCase):
+    """Отгрузка, пропавшая из выгрузки, помечается, а не стирается.
+
+    Стирание уносило каскадом её позиции и расход сырья, и достаточно было
+    одного периода, где МойСклад отдал неполный список, чтобы связи оборвались
+    без следа: вернуть их мог только повторный синк, а заметить пропажу — никто.
+    """
+
+    def setUp(self):
+        self.counterparty = Counterparty.objects.create(external_id='agent', name='ООО «Ромашка»')
+        self.product = Product.objects.create(external_id='product', name='Коллаген')
+        self.material = RawMaterial.objects.create(external_id='material', name='Желатин')
+        self.shipment = Shipment.objects.create(
+            external_id='shipment',
+            number='00042',
+            date=make_aware(datetime(2026, 1, 15)),
+            counterparty=self.counterparty,
+        )
+        self.item = ShipmentItem.objects.create(
+            shipment=self.shipment, product=self.product,
+            quantity=Decimal('2'), price=Decimal('100'),
+        )
+        RawMaterialUsage.objects.create(
+            shipment_item=self.item, raw_material=self.material, quantity=Decimal('4'),
+        )
+
+    def _sync_period_without_shipments(self):
+        """Прогон периода, в котором МойСклад не вернул ни одного документа."""
+        client = MagicMock()
+        client.get_shipments_for_period.return_value = []
+        registry = MagicMock()
+        registry.load_existing_materials = AsyncMock()
+        task = MagicMock()
+        task.should_stop.return_value = False
+        processor = ShipmentProcessor(client, ProductCache(), registry, task)
+        async_to_sync(processor.process)([(
+            make_aware(datetime(2026, 1, 1)), make_aware(datetime(2026, 2, 1)),
+        )])
+
+    def test_missing_shipment_is_marked_and_keeps_its_links(self):
+        self._sync_period_without_shipments()
+
+        self.assertEqual(Shipment.all_objects.count(), 1)
+        self.assertIsNotNone(Shipment.all_objects.get().deleted_at)
+        self.assertEqual(ShipmentItem.all_objects.count(), 1)
+        self.assertEqual(RawMaterialUsage.all_objects.count(), 1)
+
+    def test_marked_shipment_disappears_from_reports(self):
+        """Пометка бесполезна, если позиции продолжают считаться: аналитика
+        и прогнозы ходят в позиции напрямую, минуя отгрузку."""
+        self._sync_period_without_shipments()
+
+        self.assertEqual(Shipment.objects.count(), 0)
+        self.assertEqual(ShipmentItem.objects.count(), 0)
+        # Расход сырья считают прямо по нему, минуя и отгрузку, и позицию:
+        # страницы материалов и закупок, оптимизатор закупок.
+        self.assertEqual(RawMaterialUsage.objects.count(), 0)
+
+    def test_marked_shipment_is_still_reachable_through_its_item(self):
+        """Обход связей пометка ломать не должна — иначе она прячет документ
+        не только из отчётов, но и из самой синхронизации."""
+        self._sync_period_without_shipments()
+
+        item = ShipmentItem.all_objects.get()
+        self.assertEqual(item.shipment.number, '00042')
+
+    def test_returned_shipment_loses_the_mark(self):
+        """Документ вернулся в выгрузку — пометка снимается, дубль не заводится."""
+        Shipment.all_objects.update(deleted_at=make_aware(datetime(2026, 2, 1)))
+        storage = ShipmentStorage(ProductCache(), MagicMock())
+
+        async_to_sync(storage.save_shipment_data)(
+            {'id': 'shipment', 'name': '00042', 'moment': '2026-01-15 10:00:00'},
+            {'id': 'agent', 'name': 'ООО «Ромашка»'},
+        )
+
+        self.assertEqual(Shipment.all_objects.count(), 1)
+        shipment = Shipment.all_objects.get()
+        self.assertIsNone(shipment.deleted_at)
+        self.assertIsNotNone(shipment.last_seen_at)
 
 
 class FailingTask(BaseTask):

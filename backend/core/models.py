@@ -179,6 +179,48 @@ class SalesChannel(models.Model):
         ordering = ['name']
 
 
+class ActiveShipmentManager(models.Manager):
+    """Отгрузки, которые в МойСклад ещё есть.
+
+    Пропавшую из выгрузки отгрузку синхронизация не стирает, а помечает
+    (`deleted_at`): удаление уносило вместе со строкой её позиции и расход
+    сырья, а вернуть их можно было только повторным синком — если вообще
+    заметить. Прятать помеченные приходится менеджером по умолчанию,
+    а не фильтром в каждом месте: читателей полтора десятка, и забывчивость
+    должна закрывать, а не открывать. Всё, включая помеченные, — `all_objects`.
+    """
+
+    def get_queryset(self):
+        return super().get_queryset().filter(deleted_at__isnull=True)
+
+
+class ActiveRawMaterialUsageManager(models.Manager):
+    """Расход сырья по живым отгрузкам.
+
+    Третий менеджер того же ряда: страницы материалов и закупок, а также
+    оптимизатор закупок считают расход прямо по `RawMaterialUsage`, минуя
+    и отгрузку, и её позицию. Без фильтра сырьё «расходовалось» бы
+    по документу, которого в МойСклад больше нет.
+    """
+
+    def get_queryset(self):
+        return super().get_queryset().filter(
+            shipment_item__shipment__deleted_at__isnull=True
+        )
+
+
+class ActiveShipmentItemManager(models.Manager):
+    """Позиции живых отгрузок.
+
+    Аналитика и прогнозы ходят в позиции напрямую, минуя отгрузку, и без
+    этого фильтра позиции помеченной отгрузки продолжали бы попадать в ABC,
+    маржу и сезонность — то есть пометка была бы бесполезной.
+    """
+
+    def get_queryset(self):
+        return super().get_queryset().filter(shipment__deleted_at__isnull=True)
+
+
 class Shipment(models.Model):
     external_id = models.CharField(max_length=255, unique=True, verbose_name='Внешний ID')
     number = models.CharField(max_length=255, null=True, blank=True, verbose_name='Номер отгрузки')
@@ -193,6 +235,11 @@ class Shipment(models.Model):
         verbose_name='Канал продаж',
     )
     moysklad_updated = models.DateTimeField(null=True, blank=True, verbose_name='Обновлено в МойСклад')
+    deleted_at = models.DateTimeField(null=True, blank=True, verbose_name='Пропала из выгрузки')
+    last_seen_at = models.DateTimeField(null=True, blank=True, verbose_name='Последний раз в выгрузке')
+
+    objects = ActiveShipmentManager()
+    all_objects = models.Manager()
 
     def __str__(self):
         return f"{self.number or self.external_id} - {self.date}"
@@ -201,10 +248,15 @@ class Shipment(models.Model):
         db_table = 'parser_shipment'
         verbose_name = 'Отгрузка'
         verbose_name_plural = 'Отгрузки'
+        # Связи ходят через полный менеджер: у позиции помеченной отгрузки
+        # `item.shipment` обязан отвечать, иначе пометка ломала бы обход
+        # связей вместо того, чтобы прятать документ из отчётов.
+        base_manager_name = 'all_objects'
         indexes = [
             models.Index(fields=['date']),
             models.Index(fields=['number']),
             models.Index(fields=['date', 'counterparty']),
+            models.Index(fields=['deleted_at']),
         ]
 
 
@@ -213,6 +265,9 @@ class ShipmentItem(models.Model):
     product = models.ForeignKey(Product, on_delete=models.CASCADE, verbose_name='Продукт')
     quantity = models.DecimalField(max_digits=10, decimal_places=2, verbose_name='Количество')
     price = models.DecimalField(max_digits=10, decimal_places=2, default=0, verbose_name='Цена')
+
+    objects = ActiveShipmentItemManager()
+    all_objects = models.Manager()
 
     @property
     def total_sum(self):
@@ -234,6 +289,7 @@ class ShipmentItem(models.Model):
         db_table = 'parser_shipmentitem'
         verbose_name = 'Позиция отгрузки'
         verbose_name_plural = 'Позиции отгрузки'
+        base_manager_name = 'all_objects'
         indexes = [
             models.Index(fields=['shipment', 'product']),
             models.Index(fields=['product']),
@@ -249,11 +305,15 @@ class RawMaterialUsage(models.Model):
     raw_material = models.ForeignKey(RawMaterial, on_delete=models.CASCADE, verbose_name='Сырьё', db_index=False)
     quantity = models.DecimalField(max_digits=10, decimal_places=2, verbose_name='Количество')
 
+    objects = ActiveRawMaterialUsageManager()
+    all_objects = models.Manager()
+
     def __str__(self):
         return f"{self.raw_material.name} ({self.quantity})"
 
     class Meta:
         db_table = 'parser_rawmaterialusage'
+        base_manager_name = 'all_objects'
         verbose_name = 'Использование материала для производства'
         verbose_name_plural = 'Использование материалов для производства'
         # Индекса по quantity здесь больше нет: по количеству никто не ищет,
@@ -602,3 +662,4 @@ class SyncRun(models.Model):
         if stale_ids:
             cls.objects.filter(id__in=list(stale_ids)).delete()
         return run
+

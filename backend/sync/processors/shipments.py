@@ -66,7 +66,14 @@ class ShipmentStorage:
                         parsed_date = timezone.make_aware(parsed_date)
                     defaults['moysklad_updated'] = parsed_date
 
-                shipment, created = Shipment.objects.update_or_create(
+                # Через полный менеджер: помеченная отгрузка из выборки
+                # `objects` не видна, и апсерт попытался бы завести дубль
+                # с тем же external_id — то есть упал бы на уникальности.
+                # Раз документ снова пришёл из МойСклад, пометку снимаем.
+                defaults['deleted_at'] = None
+                defaults['last_seen_at'] = timezone.now()
+
+                shipment, created = Shipment.all_objects.update_or_create(
                     external_id=shipment_data['id'],
                     defaults=defaults
                 )
@@ -122,7 +129,7 @@ class ShipmentStorage:
                 quantity = Decimal(str(position.get('quantity', 0))).quantize(Decimal('0.01'))
                 price = Decimal(str(position.get('price', 0))).quantize(Decimal('0.01')) / Decimal('100')
 
-                existing_item = ShipmentItem.objects.filter(
+                existing_item = ShipmentItem.all_objects.filter(
                     shipment=shipment,
                     product=product
                 ).first()
@@ -141,7 +148,7 @@ class ShipmentStorage:
                         existing_item.price = price
                         existing_item.save()
 
-                        RawMaterialUsage.objects.filter(shipment_item=existing_item).delete()
+                        RawMaterialUsage.all_objects.filter(shipment_item=existing_item).delete()
                         shipment_item = existing_item
                 else:
                     shipment_item = ShipmentItem.objects.create(
@@ -175,7 +182,7 @@ class ShipmentStorage:
         """Удаление позиций отгрузки, которые больше не присутствуют в данных из МойСклад."""
         try:
             with transaction.atomic():
-                orphaned_items = ShipmentItem.objects.filter(
+                orphaned_items = ShipmentItem.all_objects.filter(
                     shipment=shipment
                 ).exclude(
                     product__external_id__in=valid_product_ids
@@ -183,7 +190,7 @@ class ShipmentStorage:
 
                 count = orphaned_items.count()
                 if count > 0:
-                    RawMaterialUsage.objects.filter(shipment_item__in=orphaned_items).delete()
+                    RawMaterialUsage.all_objects.filter(shipment_item__in=orphaned_items).delete()
                     orphaned_items.delete()
                     logger.info(f"Удалено {count} устаревших позиций из отгрузки {shipment.number}")
 
@@ -249,7 +256,7 @@ class ShipmentProcessor:
                     from django.db.models import Count
                     return {
                         s.external_id: s
-                        for s in Shipment.objects.filter(external_id__in=shipment_ids)
+                        for s in Shipment.all_objects.filter(external_id__in=shipment_ids)
                             .annotate(items_count=Count('items'))
                     }
 
@@ -257,16 +264,47 @@ class ShipmentProcessor:
                 existing_shipments = await get_existing_shipments(shipment_ids)
 
                 @sync_to_async(thread_sensitive=True)
-                def delete_removed_shipments(api_ids, period_start, period_end):
-                    deleted = Shipment.objects.filter(
+                def mark_shipments_seen(api_ids):
+                    """Отметить пришедшие документы и оживить вернувшиеся.
+
+                    Отметка нужна всем пришедшим, а не только изменившимся:
+                    ниже обновляются лишь те, у кого сменилось `updated`,
+                    и без этого «когда мы видели документ в последний раз»
+                    было бы известно только про изменённые.
+                    """
+                    if not api_ids:
+                        return 0
+                    returned = Shipment.all_objects.filter(
+                        external_id__in=api_ids, deleted_at__isnull=False,
+                    ).count()
+                    Shipment.all_objects.filter(external_id__in=api_ids).update(
+                        deleted_at=None, last_seen_at=timezone.now(),
+                    )
+                    return returned
+
+                @sync_to_async(thread_sensitive=True)
+                def mark_missing_shipments(api_ids, period_start, period_end):
+                    """Пометить пропавшие из выгрузки, а не стереть.
+
+                    Стирание уносило вместе со строкой её позиции и расход
+                    сырья (`ShipmentItem` → `RawMaterialUsage`, оба каскадом),
+                    и достаточно было одного периода, где МойСклад отдал
+                    неполный список, чтобы связи оборвались безвозвратно.
+                    Пометка обратима: документ вернулся — пометка снята.
+                    """
+                    return Shipment.all_objects.filter(
                         date__gte=period_start,
                         date__lt=period_end,
-                    ).exclude(external_id__in=api_ids).delete()
-                    return deleted[0]
+                        deleted_at__isnull=True,
+                    ).exclude(external_id__in=api_ids).update(deleted_at=timezone.now())
 
-                deleted_count = await delete_removed_shipments(shipment_ids, start_date, end_date)
-                if deleted_count:
-                    structured_logger.info(f"Удалено {deleted_count} отгрузок (удалены в МойСклад)", indent=2)
+                returned_count = await mark_shipments_seen(shipment_ids)
+                if returned_count:
+                    structured_logger.info(f"Вернулось {returned_count} отгрузок (снята пометка об удалении)", indent=2)
+
+                missing_count = await mark_missing_shipments(shipment_ids, start_date, end_date)
+                if missing_count:
+                    structured_logger.info(f"Помечено {missing_count} отгрузок как удалённые в МойСклад", indent=2)
 
                 shipments_to_update = []
                 for shipment_data in shipments:

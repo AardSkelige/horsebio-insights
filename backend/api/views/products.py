@@ -209,7 +209,8 @@ def product_data(request):
                 # МойСклада содержит и заведённые впрок, а выбор такого
                 # означал бы заведомо пустую таблицу
                 'available_sales_channels': list(
-                    SalesChannel.objects.filter(shipments__isnull=False)
+                    SalesChannel.objects.filter(shipments__isnull=False,
+                                                shipments__deleted_at__isnull=True)
                     .values_list('name', flat=True)
                     .distinct()
                 )
