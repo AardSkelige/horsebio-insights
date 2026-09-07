@@ -26,7 +26,6 @@ import argparse
 import base64
 import email
 import imaplib
-import json
 import os
 import re
 import sys
@@ -50,32 +49,6 @@ load_dotenv(Path(__file__).resolve().parents[5] / '.env')
 IMAP_HOST = os.getenv('ORDER_MAIL_IMAP_HOST')
 IMAP_USER = os.getenv('ORDER_MAIL_IMAP_USER')
 IMAP_PASSWORD = os.getenv('ORDER_MAIL_IMAP_PASSWORD')
-
-# Старое место журнала. Роботы отсюда не читают — файл нужен только сторожу
-# переезда, пока том ещё смонтирован.
-STATE_FILE = Path(__file__).parent.parent / "data" / ".order_email_state.json"
-
-
-def refuse_if_not_migrated(state: dict) -> None:
-    """Не дать роботам начать с пустого журнала, если перенос ещё не сделан.
-
-    Образ выкатывается сам, а `manage.py import_order_emails` запускает человек.
-    В промежутке робот счёл бы неразобранными все письма разом и завёл бы заказы
-    в МойСклад по второму разу.
-    """
-    if state.get("orders") or state.get("processed_message_ids") or not STATE_FILE.exists():
-        return
-    try:
-        left = len(json.loads(STATE_FILE.read_text()).get("orders") or {})
-    except (json.JSONDecodeError, OSError):
-        return
-    if not left:
-        return
-
-    raise SystemExit(
-        f"В базе журнала нет, а в файле заказов: {left}. Сначала перенос:\n"
-        f"  docker compose exec -T backend python manage.py import_order_emails"
-    )
 
 # Отправитель писем-уведомлений Megagroup CMS — подтверждено на живом письме
 NOTIFICATION_SENDER = "noreply@megagroup.ru"
@@ -359,7 +332,6 @@ class OrderEmailReader:
                 self.force = False
             else:
                 self.state = load_state(self.STATE_DEFAULT)
-                refuse_if_not_migrated(self.state)
 
             conn = self._connect()
             try:

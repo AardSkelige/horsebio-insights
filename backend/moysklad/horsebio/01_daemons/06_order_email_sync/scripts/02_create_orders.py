@@ -38,10 +38,8 @@ import argparse
 import re
 import sys
 import time
-import json
 import os
 from datetime import datetime
-from pathlib import Path
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', '..', '..', '_shared'))
 from django_env import refresh_connections
@@ -51,27 +49,6 @@ from order_email_utils import (
     build_discount_label, format_money, format_rubles, site_discount_kopecks,
     split_site_discount, state_lock, load_state, save_state,
 )
-
-# Старое место журнала. Робот отсюда не читает — файл нужен только сторожу
-# переезда, пока том ещё смонтирован.
-STATE_FILE = Path(__file__).parent.parent / "data" / ".order_email_state.json"
-
-
-def refuse_if_not_migrated(state: dict) -> None:
-    """Не дать роботу работать по пустому журналу, если перенос ещё не сделан."""
-    if state.get("orders") or not STATE_FILE.exists():
-        return
-    try:
-        left = len(json.loads(STATE_FILE.read_text()).get("orders") or {})
-    except (json.JSONDecodeError, OSError):
-        return
-    if not left:
-        return
-
-    raise SystemExit(
-        f"В базе журнала нет, а в файле заказов: {left}. Сначала перенос:\n"
-        f"  docker compose exec -T backend python manage.py import_order_emails"
-    )
 
 # Черновик без оплаты дольше этого срока — удаляется из МойСклад автоматически
 CANCEL_AFTER_HOURS = 24
@@ -484,9 +461,6 @@ class OrderCreator:
         with state_lock():
             self.state = load_state({})
             if not self.state.get("orders"):
-                # Пустой журнал — либо почту ещё не читали, либо перенос не сделан.
-                # Второе важнее: заводить заказы по пустому журналу нельзя.
-                refuse_if_not_migrated(self.state)
                 print("Журнал заказов пуст — сначала должен отработать 01_read_order_emails.py")
                 return counts
 

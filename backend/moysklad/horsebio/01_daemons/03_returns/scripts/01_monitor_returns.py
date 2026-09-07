@@ -16,13 +16,11 @@
   python3 01_monitor_returns.py --force      # перепроверить всё с START_DATE
 """
 
-import json
 import time
 import argparse
 import sys
 import os
 from datetime import datetime
-from pathlib import Path
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', '..', '..', '_shared'))
@@ -34,34 +32,8 @@ from msapi import http as ms_http  # noqa: E402
 import ozon_returns as ozr
 import wb_returns as wbr
 
-# Файл состояния
-# Старое место состояния. Монитор отсюда не читает — файл нужен только сторожу
-# переезда, пока том ещё смонтирован.
-STATE_FILE = Path(__file__).parent.parent / "data" / ".returns_state.json"
-
 STORE = DbStore()
 
-
-def refuse_if_not_migrated(state: dict) -> None:
-    """Не дать монитору начать с чистого листа, если перенос ещё не сделан.
-
-    Образ выкатывается сам, а `manage.py import_returns_state` запускает человек.
-    В промежутке монитор счёл бы неразобранным всё, что видел с START_DATE,
-    и завёл бы документы возвратов заново — по второму разу.
-    """
-    if state.get("processed_orders") or not STATE_FILE.exists():
-        return
-    try:
-        left = len(json.loads(STATE_FILE.read_text()).get("processed_orders") or {})
-    except (json.JSONDecodeError, OSError):
-        return
-    if not left:
-        return
-
-    raise SystemExit(
-        f"В базе отметок нет, а в файле их {left}. Сначала перенос:\n"
-        f"  docker compose exec -T backend python manage.py import_returns_state"
-    )
 
 # Стартовая дата — историю до этой даты не трогаем
 START_DATE = "2026-03-04 00:00:00"
@@ -93,11 +65,9 @@ TARGET_AGENTS = ["Вайлдберриз (Вб)", "Вб Вайлдберриз"]
 class ReturnsMonitor:
     """Монитор возвратов покупателей для маркетплейсов ВБ и Озон"""
 
-    def __init__(self, helper: ProductionHelper, dry_run: bool = False,
-                 force: bool = False):
+    def __init__(self, helper: ProductionHelper, dry_run: bool = False):
         self.helper = helper
         self.dry_run = dry_run
-        self.force = force
         self.store = STORE
         self.state = self._load_state()
         # Последний созданный документ — чтобы отчёт мог дать на него ссылку
@@ -110,13 +80,7 @@ class ReturnsMonitor:
         разобран» — единственное, что не даёт завести документ возврата дважды,
         и пропажа тома означала бы повторный разбор всего с START_DATE.
         """
-        state = STORE.load(default_last_run=START_DATE)
-        # При --force сторож молчит: начать с чистого листа — как раз то,
-        # чего этим прогоном и добиваются. Иначе он запрещал бы единственную
-        # команду, которая умеет восстановиться после пустой базы.
-        if not self.force:
-            refuse_if_not_migrated(state)
-        return state
+        return STORE.load(default_last_run=START_DATE)
 
     def _save_state(self):
         STORE.save(self.state)
@@ -796,7 +760,7 @@ def main():
     args = parser.parse_args()
 
     helper = ProductionHelper(MOYSKLAD_TOKEN)
-    monitor = ReturnsMonitor(helper, dry_run=args.dry_run, force=args.force)
+    monitor = ReturnsMonitor(helper, dry_run=args.dry_run)
 
     if args.force:
         if args.dry_run:

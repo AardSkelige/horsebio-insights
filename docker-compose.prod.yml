@@ -17,24 +17,12 @@ services:
       - backend_static:/app/staticfiles
       - django_cache:/app/cache
       - scripts_logs:/app/scripts_logs
-      # Состояние демонов МойСклад: без volume оно живёт в контейнере и стирается
-      # каждым деплоем (демоны пересканируют всю историю с START_DATE).
-      #
-      # Тома уезжают в Postgres по одному (MIGRATION-PLAN.md, этап 6): состояние
-      # там бэкапится вместе с базой и не зависит от того, не забыли ли его
-      # смонтировать. Первым, 06.09.2026, уехал робот накладных СДЭК —
-      # его записи теперь в таблице CdekWaybillState.
-      #
-      # Уже переехали: накладные СДЭК (06.09), заказы сайта и история закупочных
-      # цен (07.09) — их состояние теперь в таблицах, тома сняты.
-      #
-      # Том health-чеков (hb_health_data) снят 07.09.2026 без переезда: его файлы
-      # давно производные. Источник правды — таблица HealthCheckException,
-      # а export_exceptions_to_json переписывает их из неё перед каждым прогоном.
-      # Том оставался с тех времён, когда исключения жили только в файлах.
-      - hb_returns_data:/app/moysklad/horsebio/01_daemons/03_returns/data
-      - hb_deadlines_data:/app/moysklad/horsebio/01_daemons/05_payment_deadline/data
-      - hb_order_email_data:/app/moysklad/horsebio/01_daemons/06_order_email_sync/data
+      # Состояния демонов здесь больше нет: 06–07.09.2026 все восемь томов
+      # разошлись (MIGRATION-PLAN.md, этап 6). Семь состояний переехали
+      # в Postgres — там они бэкапятся вместе с базой и не зависят от того,
+      # не забыли ли смонтировать том. Восьмой, hb_health_data, оказался
+      # производным: его файлы переписывает из базы export_exceptions_to_json
+      # перед каждым прогоном.
       # Состояние бэкапа для проверки «Бэкапы» на странице /checks. Только чтение
       # и только каталог state: в самих архивах лежат .env.prod и приватные ключи,
       # их приложению видеть незачем. Каталог на хосте, а не volume — пишет его
@@ -86,9 +74,6 @@ volumes:
   postgres_data:
   django_cache:
   scripts_logs:
-  hb_returns_data:
-  hb_deadlines_data:
-  hb_order_email_data:
 
 networks:
   app-network:
