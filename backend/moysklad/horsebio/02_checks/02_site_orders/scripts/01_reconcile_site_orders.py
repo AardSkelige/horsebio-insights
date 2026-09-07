@@ -55,6 +55,9 @@ STORE = DbStore()
 # переезда ниже, пока том ещё смонтирован.
 STORE_FILE = Path(__file__).parent.parent / "data" / "site_orders.json"
 
+# Канал продаж «Прочее | Сайт Horse-Bio» — тот же, что проставляет робот
+SALES_CHANNEL_ID = "af781aeb-711c-11f0-0a80-1a56002f3340"
+
 
 def refuse_if_not_migrated(store: dict) -> None:
     """Не дать сверке начать с чистого листа, если перенос ещё не сделан.
