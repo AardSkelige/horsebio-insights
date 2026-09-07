@@ -24,6 +24,7 @@ from pathlib import Path
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', '..', '..', '_shared'))
 from api_client import MOYSKLAD_TOKEN, BASE_URL
+from buy_prices_store import DbStore
 # Запросы к МойСклад идут через общий слой: ожидание лимита, 429, повторы.
 from msapi import http as ms_http  # noqa: E402
 
@@ -34,7 +35,11 @@ HEADERS = {
 }
 
 DATA_DIR = Path(__file__).parent.parent / "data"
+# Старое место истории. Робот отсюда не читает — файл нужен только сторожу
+# переезда, пока том ещё смонтирован.
 STATE_FILE = DATA_DIR / ".sync_state.json"
+
+STORE = DbStore()
 DELAY = 0.2  # секунд между запросами обновления
 HISTORY_KEEP = 90  # сколько запусков хранить в истории
 
@@ -87,16 +92,38 @@ OP_TYPE_TO_PATH = {
 # === State ===
 
 def load_state() -> dict:
-    if STATE_FILE.exists():
-        return json.loads(STATE_FILE.read_text(encoding="utf-8"))
-    return {"last_run": None, "last_stats": {}, "history": []}
+    """История прогонов — из базы.
+
+    До 07.09.2026 все девяносто лежали одним JSON-файлом на томе: пропал бы
+    том — пропала бы история изменений цен, а восстановить её неоткуда.
+    Форма словаря прежняя, поэтому остальной робот о переезде не знает.
+    """
+    return STORE.load()
 
 
 def save_state(state: dict):
-    DATA_DIR.mkdir(exist_ok=True)
-    STATE_FILE.write_text(
-        json.dumps(state, indent=2, ensure_ascii=False, default=str),
-        encoding="utf-8"
+    STORE.save(state)
+
+
+def refuse_if_not_migrated(state: dict) -> None:
+    """Не дать роботу начать с пустой истории, если перенос ещё не сделан.
+
+    Образ выкатывается сам, а `manage.py import_buy_price_history` запускает
+    человек. В промежутке робот записал бы первый прогон в пустую базу, а файл
+    с девяноста прогонами остался бы лежать нетронутым — и разъехались бы.
+    """
+    if state.get("history") or not STATE_FILE.exists():
+        return
+    try:
+        left = len(json.loads(STATE_FILE.read_text(encoding="utf-8")).get("history") or [])
+    except (json.JSONDecodeError, OSError):
+        return
+    if not left:
+        return
+
+    raise SystemExit(
+        f"В базе истории нет, а в файле прогонов: {left}. Сначала перенос:\n"
+        f"  docker compose exec -T backend python manage.py import_buy_price_history"
     )
 
 
@@ -333,6 +360,7 @@ def main():
     print()
 
     state = load_state()
+    refuse_if_not_migrated(state)
     if state.get("last_run"):
         print(f"Последний запуск: {state['last_run']}")
         last = state.get("last_stats", {})

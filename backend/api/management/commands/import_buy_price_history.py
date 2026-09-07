@@ -70,7 +70,10 @@ class Command(BaseCommand):
                 update_fields=['stats', 'changes', 'errors'],
             )
 
+        # «Перезаписано», а не «обновлено»: пакетная запись перекладывает строку
+        # целиком и не отличает изменившуюся от такой же. Врать в отчёте
+        # об изменениях там, где их не было, не стоит.
         self.stdout.write(self.style.SUCCESS(
-            f'Перенесено: заведено {len(fresh)}, обновлено {len(history) - len(fresh)}; '
+            f'Перенесено: новых {len(fresh)}, перезаписано {len(history) - len(fresh)}; '
             f'всего в базе {BuyPriceSyncRun.objects.count()}'
         ))
