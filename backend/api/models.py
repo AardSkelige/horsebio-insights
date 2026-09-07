@@ -314,3 +314,33 @@ class SiteOrdersReconcileState(models.Model):
         отметки второй становились невидимы навсегда: читают всегда первую.
         """
         return cls.objects.get_or_create(pk=1)[0]
+
+
+class BuyPriceSyncRun(models.Model):
+    """Прогон робота закупочных цен: что он сделал и что изменил.
+
+    Раньше все девяносто прогонов лежали одним JSON-файлом на томе
+    (`.sync_state.json`), и держалось это на том, что том не забыли
+    смонтировать. Пропал бы — робот потерял бы историю изменений цен,
+    а восстановить её неоткуда: он показывает, что и когда поменял.
+
+    Строка на прогон. `last_run` и `last_stats`, которые были в файле
+    отдельными ключами, — это просто последняя строка, второй копии им незачем.
+    """
+    # Сколько прогонов храним. Столько же, сколько хранил файл.
+    KEEP_RUNS = 90
+
+    date = models.CharField(max_length=32, unique=True, verbose_name='Когда')
+    stats = models.JSONField(default=dict, verbose_name='Счётчики')
+    changes = models.JSONField(default=list, verbose_name='Что изменилось')
+    errors = models.JSONField(default=list, verbose_name='Ошибки')
+    created_at = models.DateTimeField(auto_now_add=True, verbose_name='Записан')
+
+    class Meta:
+        verbose_name = 'Прогон робота закупочных цен'
+        verbose_name_plural = 'Прогоны робота закупочных цен'
+        ordering = ['-date']
+
+    def __str__(self):
+        stats = self.stats or {}
+        return f"{self.date}: обновлено {stats.get('updated', 0)}, ошибок {stats.get('errors', 0)}"
