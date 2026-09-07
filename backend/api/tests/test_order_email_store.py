@@ -78,6 +78,31 @@ class ImportOrderEmailsTests(TestCase):
             call_command('import_order_emails', '--path', str(path))
 
 
+class EmptyJournalPageTests(TestCase):
+    """«Демон ещё ни разу не запускался» — про отсутствие журнала, а не про
+    журнал, из которого кнопкой удалили последний заказ."""
+
+    def setUp(self):
+        from django.contrib.auth.models import User
+        self.client.force_login(
+            User.objects.create_superuser('admin', 'admin@example.com', 'password'))
+
+    def test_page_says_no_data_until_the_first_run(self):
+        response = self.client.get('/api/site-orders/')
+
+        self.assertEqual(response.json()['status'], 'no_data')
+
+    def test_empty_journal_after_a_run_is_not_no_data(self):
+        with state_lock():
+            save_state({'processed_message_ids': [], 'orders': {},
+                        'last_checked_date': '2026-09-07'})
+
+        response = self.client.get('/api/site-orders/')
+
+        self.assertEqual(response.json()['status'], 'success')
+        self.assertEqual(response.json()['data']['rows'], [])
+
+
 class OrderEmailStoreTests(TestCase):
     def test_round_trip_keeps_the_shape_the_robots_expect(self):
         save_state(STATE)

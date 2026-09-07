@@ -173,6 +173,17 @@ class MarksTests(TestCase):
 
 
 class DateColumnTests(TestCase):
+    def test_odd_date_does_not_break_the_import(self):
+        """Перенос — единственная копия заказов, и он идёт одной транзакцией:
+        дата длиннее колонки откатила бы его целиком."""
+        path = _store_file({'orders': {'x': dict(ORDER, date='2026-08-19T10:00:00+03:00')},
+                            'last_fetch': None, 'last_acknowledge': None})
+        self.addCleanup(path.unlink)
+
+        call_command('import_site_orders', '--path', str(path))
+
+        self.assertEqual(SiteOrderSnapshot.objects.get(order_id='x').date, '2026-08-19')
+
     def test_odd_date_does_not_break_the_save(self):
         """Дата приходит из выгрузки сайта и ничем не проверена. Значение длиннее
         колонки уронило бы запись — и роняло бы каждый прогон, пока заказ в окне."""

@@ -19,6 +19,16 @@ from django_env import setup_django
 LOCK_KEY = 8_150_721
 
 
+class StateLockLost(RuntimeError):
+    """Замок отпустило переподключение к базе — журнал писать нельзя."""
+
+
+# Соединение, на котором взят advisory-замок. Он живёт в сессии Postgres,
+# а не в приложении: оборвалось соединение — замок снят, и Django об этом
+# молчит, он просто подключается заново.
+_locked_on = None
+
+
 @contextmanager
 def state_lock():
     """Эксклюзивный замок на цикл «прочитал → поправил → сохранил».
@@ -37,12 +47,30 @@ def state_lock():
     from django.db import connection, transaction
 
     if connection.vendor == 'postgresql':
+        global _locked_on
+        connection.ensure_connection()
         with connection.cursor() as cursor:
             cursor.execute('SELECT pg_advisory_lock(%s)', [LOCK_KEY])
-            try:
-                yield
-            finally:
-                cursor.execute('SELECT pg_advisory_unlock(%s)', [LOCK_KEY])
+        # Запоминаем само соединение. Внутри замка робот ходит в почту
+        # и МойСклад минутами, и за это время соединение может стать негодным
+        # (ошибка запроса, перезапуск или таймаут Postgres, CONN_MAX_AGE).
+        # Django тогда молча подключится заново — на новом соединении замка
+        # уже нет, и второй процесс войдёт в ту же секцию. Ровно так пропал
+        # заказ 532598916, только вместо переподключения был файл без flock.
+        previous, _locked_on = _locked_on, connection.connection
+        try:
+            yield
+        finally:
+            held = connection.connection is _locked_on
+            _locked_on = previous
+            if held:
+                with connection.cursor() as cursor:
+                    cursor.execute('SELECT pg_advisory_unlock(%s)', [LOCK_KEY])
+            else:
+                # Отпускать нечего: замок ушёл вместе со старым соединением,
+                # а pg_advisory_unlock на новом вернул бы false молча.
+                print('[order_email_store] ВНИМАНИЕ: соединение с базой '
+                      'переоткрылось, замок журнала был потерян')
         return
 
     from api.models import OrderEmailState
@@ -52,6 +80,26 @@ def state_lock():
         if connection.features.has_select_for_update:
             list(rows.select_for_update())
         yield
+
+
+def check_lock() -> None:
+    """Убедиться, что замок всё ещё наш, — перед тем как писать.
+
+    Read-modify-write под потерянным замком и есть потерянный заказ: пока мы
+    ходили в МойСклад, соседний процесс успел записать своё, а мы сохраняем
+    поверх прочитанное до него. Лучше упасть: прогон повторится по расписанию,
+    а затёртый заказ восстановить неоткуда.
+    """
+    if _locked_on is None:
+        return
+    setup_django()
+    from django.db import connection
+
+    if connection.vendor == 'postgresql' and connection.connection is not _locked_on:
+        raise StateLockLost(
+            'Соединение с базой переоткрылось, замок журнала заказов потерян — '
+            'запись отменена, чтобы не затереть чужие изменения'
+        )
 
 
 def load_state(default: dict = None) -> dict:
@@ -77,6 +125,7 @@ def save_state(state: dict) -> None:
     словарь удалением не считаем: это форма только что заведённого состояния,
     а журнал заказов — единственный.
     """
+    check_lock()
     setup_django()
     from django.db import transaction
     from api.models import OrderEmailMessage, OrderEmailOrder, OrderEmailState
@@ -130,6 +179,7 @@ def forget_order(order_id: str) -> dict | None:
     Отметки писем отпускаем, чтобы следующая проверка почты разобрала их заново —
     ради этого кнопку «Удалить» и нажимают.
     """
+    check_lock()
     setup_django()
     from django.db import transaction
     from api.models import OrderEmailMessage, OrderEmailOrder

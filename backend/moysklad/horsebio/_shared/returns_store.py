@@ -28,7 +28,16 @@ class DbStore:
                                  for row in ReturnProcessedOrder.objects.all()},
         }
 
-    def save(self, state: dict) -> None:
+    def save(self, state: dict, replace: bool = False) -> None:
+        """Записать состояние. `replace` — прогон с `--force`: разбор начат
+        заново, и прежние отметки уходят вместе с записью новых.
+
+        Почему замена здесь, а не отдельным сбросом до прогона: `--force`
+        ходит в МойСклад и к маркетплейсам минутами и может оборваться
+        (5xx, лимит запросов, убитый контейнер). Сброс заранее в этом случае
+        стирал бы полторы тысячи отметок насовсем, не записав ничего взамен, —
+        и следующий обычный прогон завёл бы документы возврата повторно.
+        """
         setup_django()
         from django.db import transaction
         from api.models import ReturnProcessedOrder, ReturnsMonitorState
@@ -45,8 +54,15 @@ class DbStore:
                     unique_fields=["order_id"],
                     update_fields=["payload", "updated_at"],
                 )
-            # Ничего не удаляем: робот отметки не чистит, они только копятся.
-            # Забыть всё сразу — отдельное осознанное действие, см. reset().
+                if replace:
+                    ReturnProcessedOrder.objects.exclude(
+                        order_id__in=list(processed)
+                    ).delete()
+            # При обычной записи не удаляем ничего: робот отметки не чистит,
+            # они только копятся. И пустой словарь удалением не считаем даже
+            # при `replace` — прогон, не нашедший ни одного заказа, чаще
+            # означает сбой опроса, чем «забудь всё». Стереть отметки, ничего
+            # не разобрав, — отдельное осознанное действие, см. reset().
             marks = ReturnsMonitorState.get()
             marks.last_run = str(state.get("last_run") or "")[:32]
             marks.save(update_fields=["last_run"])

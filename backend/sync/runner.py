@@ -73,6 +73,9 @@ def launch(start_date=None, end_date=None, months=None):
         # Вывод — в файл, а не в никуда: если процесс умрёт, не успев
         # отметиться в базе, это единственное место, где останется след.
         os.makedirs(_logs_dir(), exist_ok=True)
+        # Чистим до запуска: лог только что порождённого процесса удалять
+        # нельзя — он продолжит писать в удалённый файл, и следа не останется.
+        _prune_logs()
         with open(log_file, 'w', encoding='utf-8') as log_fh:
             subprocess.Popen(
                 argv,
@@ -80,7 +83,6 @@ def launch(start_date=None, end_date=None, months=None):
                 stderr=subprocess.STDOUT,
                 start_new_session=True,
             )
-        _prune_logs()
     except Exception as e:
         logger.exception('Не удалось запустить синхронизацию')
         run.status = SyncRun.STATUS_ERROR
@@ -106,9 +108,21 @@ def _log_path(run_id):
 KEEP_LOGS = 20
 
 
+def _run_id_in_name(path):
+    """Номер прогона из имени лога. Он числовой, и сортировать имена строками
+    нельзя: после сотни `sync_100.log` встаёт между `sync_10` и `sync_11`,
+    и чистка сносит не старые логи, а первые по алфавиту."""
+    name = os.path.basename(path)
+    try:
+        return int(name[len('sync_'):-len('.log')])
+    except ValueError:
+        return -1
+
+
 def _prune_logs():
     try:
-        files = sorted(glob.glob(os.path.join(_logs_dir(), 'sync_*.log')))
+        files = sorted(glob.glob(os.path.join(_logs_dir(), 'sync_*.log')),
+                       key=_run_id_in_name)
         for old in files[:-KEEP_LOGS]:
             os.unlink(old)
     except Exception:
@@ -137,6 +151,7 @@ def execute(triggered_by, start_date=None, end_date=None, months_back=None,
     # и ночные прогоны, и нажатия кнопки.
     heartbeat = None
     run = None
+    failure = None
     try:
         run = _attach_run(run_id, triggered_by)
         period = ({'months_back': months_back} if months_back
@@ -153,15 +168,22 @@ def execute(triggered_by, start_date=None, end_date=None, months_back=None,
     except Exception as e:
         logger.exception('Ошибка синхронизации')
         say(str(e))
-        # Упасть можно и до того, как появилось сердцебиение — тогда закрыть
-        # прогон больше некому, и он остался бы «идущим» до срока годности.
-        _close_run(run.id if run else run_id, SyncRun.STATUS_ERROR, 'Ошибка синхронизации')
+        failure = e
         return EXIT_FAILED
     finally:
         # Останавливаем сердцебиение до снятия блокировки: последний снимок
         # состояния пишет именно оно, и прогон иначе остался бы «идущим».
         if heartbeat:
             heartbeat.stop()
+        # И только теперь закрываем прогон. Наоборот нельзя: последний снимок
+        # сердцебиения пишет объект из памяти, где статус ещё `running`, —
+        # отметка об ошибке, поставленная до него, была бы затёрта обратно
+        # в «идёт», с пустым finished_at и потерянным текстом ошибки.
+        # Упасть можно и до того, как появилось сердцебиение, — тогда закрыть
+        # прогон больше некому, и он остался бы «идущим» до срока годности.
+        if failure is not None:
+            _close_run(run.id if run else run_id, SyncRun.STATUS_ERROR,
+                       'Ошибка синхронизации', error=str(failure))
         try:
             SyncLock.release_lock('moysklad_sync', lock_token)
         except Exception:
@@ -178,10 +200,12 @@ def _attach_run(run_id, triggered_by):
     return SyncRun.start(triggered_by=triggered_by)
 
 
-def _close_run(run_id, status, message):
-    """Закрыть прогон, который так и не начался."""
+def _close_run(run_id, status, message, error=None):
+    """Закрыть прогон — по номеру, а не по объекту в памяти: тот к этому
+    моменту устарел, его последним трогало сердцебиение."""
     if not run_id:
         return
-    SyncRun.objects.filter(pk=run_id).update(
-        status=status, message=message, finished_at=timezone.now(),
-    )
+    fields = {'status': status, 'message': message, 'finished_at': timezone.now()}
+    if error is not None:
+        fields['error'] = error
+    SyncRun.objects.filter(pk=run_id).update(**fields)

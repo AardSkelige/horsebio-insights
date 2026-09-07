@@ -47,6 +47,43 @@ class ExecuteTests(SimpleTestCase):
             # Замок снят — следующий прогон не будет считать себя лишним.
             self.assertFalse(os.path.exists(os.path.join(tmp, 'stub.pid')))
 
+    def test_run_cut_short_with_the_container_is_marked_by_the_next_one(self):
+        """Деплой пересоздаёт контейнер посреди прогона: записать код выхода
+        некому, а лог без кода страница считает удачным. Следующий прогон
+        видит такой лог и отмечает его оборванным."""
+        with tempfile.TemporaryDirectory() as tmp:
+            orphan = os.path.join(tmp, 'stub_2026-09-07_09-00-06.log')
+            with open(orphan, 'w', encoding='utf-8') as f:
+                f.write('прогон шёл и оборвался\n')
+
+            path = _stub(tmp, "print('новый прогон')\n")
+            with override_settings(SCRIPTS_LOGS_DIR=tmp), \
+                    patch.object(script_runner, 'SCRIPTS_BY_ID', _registry(path)):
+                code = script_runner.execute('stub', run_id='2026-09-07_11-33-27')
+
+            self.assertEqual(code, 0)
+            self.assertEqual(open(orphan + '.exit').read(), '-9')
+            self.assertIn('ОСТАНОВЛЕН', open(orphan, encoding='utf-8').read())
+            # Свой собственный лог новый прогон оборванным не считает.
+            self.assertEqual(
+                open(os.path.join(tmp, 'stub_2026-09-07_11-33-27.log.exit')).read(), '0')
+
+    def test_the_sweep_spares_a_newer_run(self):
+        """Кнопка, нажатая дважды подряд, успевает завести лог следующего
+        прогона, пока мы поднимаемся: он ещё пуст, но не оборван — свой итог
+        (пропуск) ему запишет его же команда."""
+        with tempfile.TemporaryDirectory() as tmp:
+            newer = os.path.join(tmp, 'stub_2026-09-07_12-00-00.log')
+            open(newer, 'w', encoding='utf-8').close()
+
+            path = _stub(tmp, "print('прогон пошёл')\n")
+            with override_settings(SCRIPTS_LOGS_DIR=tmp), \
+                    patch.object(script_runner, 'SCRIPTS_BY_ID', _registry(path)):
+                script_runner.execute('stub', run_id='2026-09-07_11-00-00')
+
+            self.assertFalse(os.path.exists(newer + '.exit'),
+                             'лог более позднего прогона трогать нельзя')
+
     def test_second_run_is_skipped_while_the_first_is_alive(self):
         with tempfile.TemporaryDirectory() as tmp:
             path = _stub(tmp, "print('не должен был запуститься')\n")
@@ -121,6 +158,7 @@ class LaunchTests(SimpleTestCase):
             with override_settings(SCRIPTS_LOGS_DIR=tmp), \
                     patch.object(script_runner.subprocess, 'Popen') as popen:
                 popen.return_value.pid = 4242
+                popen.return_value.poll.return_value = None  # команда ещё идёт
                 run_id = script_runner.launch('horsebio_backup')
 
             argv = popen.call_args[0][0]
@@ -129,6 +167,30 @@ class LaunchTests(SimpleTestCase):
             self.assertEqual(argv[argv.index('--run-id') + 1], run_id)
             self.assertTrue(os.path.exists(os.path.join(tmp, f'horsebio_backup_{run_id}.log')))
             self.assertEqual(open(os.path.join(tmp, 'horsebio_backup.pid')).read(), '4242')
+
+    def test_command_that_died_at_once_leaves_no_lock_and_no_silence(self):
+        """Команда может умереть, не успев ничего записать (Django не поднялся,
+        ошибка импорта, OOM). Замок на её номере тогда пережил бы её саму:
+        зомби для `kill -0` живой, а прибирает его только породивший воркер —
+        и проверка молча перестала бы запускаться по расписанию."""
+        # Настоящий Popen берём до подмены: внутри неё `subprocess.Popen` —
+        # уже сама подмена, и вызов ушёл бы в бесконечную рекурсию.
+        real_popen = subprocess.Popen
+
+        def die_at_once(argv, **kwargs):
+            proc = real_popen([sys.executable, '-c', 'raise SystemExit(1)'], **kwargs)
+            proc.wait()
+            return proc
+
+        with tempfile.TemporaryDirectory() as tmp:
+            with override_settings(SCRIPTS_LOGS_DIR=tmp), \
+                    patch.object(script_runner.subprocess, 'Popen', side_effect=die_at_once):
+                run_id = script_runner.launch('horsebio_backup')
+
+            log_file = os.path.join(tmp, f'horsebio_backup_{run_id}.log')
+            self.assertFalse(os.path.exists(os.path.join(tmp, 'horsebio_backup.pid')))
+            self.assertEqual(open(log_file + '.exit').read(),
+                             str(script_runner.EXIT_LAUNCH_FAILED))
 
     def test_command_recognises_the_lock_written_for_it(self):
         """pid, записанный кнопкой, — это pid самой команды, и она не должна
@@ -204,13 +266,21 @@ class StopTests(SimpleTestCase):
             log_file = os.path.join(tmp, 'stub_2026-09-05_10-00-00.log')
             with open(log_file, 'w', encoding='utf-8') as f:
                 f.write('прогон шёл\n')
+            ready = os.path.join(tmp, 'ready')
             deaf = self._spawn(
                 'import signal, time\n'
                 'signal.signal(signal.SIGTERM, lambda *a: None)\n'
+                f'open({ready!r}, "w").close()\n'
                 'time.sleep(30)\n'
             )
             with open(os.path.join(tmp, 'stub.pid'), 'w') as f:
                 f.write(str(deaf.pid))
+            # Сигнал, пришедший до установки обработчика, убил бы процесс
+            # по умолчанию — и «глухим» он бы так и не побыл.
+            for _ in range(100):
+                if os.path.exists(ready):
+                    break
+                time.sleep(0.05)
             try:
                 with override_settings(SCRIPTS_LOGS_DIR=tmp):
                     outcome = script_runner.stop('stub', grace_sec=0.5)

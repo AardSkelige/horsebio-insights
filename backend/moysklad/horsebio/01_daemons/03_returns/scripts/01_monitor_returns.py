@@ -70,6 +70,9 @@ class ReturnsMonitor:
         self.dry_run = dry_run
         self.store = STORE
         self.state = self._load_state()
+        # Прогон с --force забывает прежние отметки — но не сейчас, а вместе
+        # с первой записью нового состояния (см. forget_marks_on_save).
+        self._replace_marks = False
         # Последний созданный документ — чтобы отчёт мог дать на него ссылку
         self._last_created = None
 
@@ -82,8 +85,20 @@ class ReturnsMonitor:
         """
         return STORE.load(default_last_run=START_DATE)
 
+    def forget_marks_on_save(self):
+        """Забыть прежние отметки — но одной транзакцией с записью новых.
+
+        Сброс до прогона не переживает падения на середине: отметки стёрты,
+        новых нет, и следующий обычный прогон разбирает всё с START_DATE
+        заново, заводя документы возврата дублями.
+        """
+        self._replace_marks = True
+
     def _save_state(self):
-        STORE.save(self.state)
+        STORE.save(self.state, replace=self._replace_marks)
+        # Замена нужна только первой записи: в режиме демона следующие
+        # проходы цикла снова только копят отметки.
+        self._replace_marks = False
 
     def _get_orders_with_status(self, status_name: str, state_href: str) -> list:
         """
@@ -768,11 +783,12 @@ def main():
             # только показываем, что было бы при настоящем сбросе.
             print(f"[--force --dry-run] Отметки не трогаем, показываем разбор с {START_DATE}")
         else:
-            # Забываем отметки явно: сохранение их не удаляет — они только
-            # копятся, и стереть полторы тысячи побочным эффектом обычной
-            # записи нельзя.
-            removed = monitor.store.reset()
-            print(f"[--force] Сброс state ({removed} отметок), проверяем всё с {START_DATE}")
+            # Забываем отметки явно, но не раньше, чем будет что записать
+            # взамен: оборвавшийся --force не должен оставить робота вообще
+            # без отметок.
+            monitor.forget_marks_on_save()
+            print(f"[--force] Отметки будут забыты вместе с записью нового "
+                  f"состояния, проверяем всё с {START_DATE}")
         monitor.state = {
             "last_run": START_DATE,
             "processed_orders": {}

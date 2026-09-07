@@ -124,6 +124,16 @@ def pid_is_alive(pid):
         return False
 
 
+def _proc_stat_fields(pid):
+    """Поля /proc/<pid>/stat после имени процесса, или None, если их не взять
+    (вне Linux — на машине разработчика — /proc нет вовсе)."""
+    try:
+        with open(f'/proc/{pid}/stat', 'rb') as f:
+            return f.read().rsplit(b')', 1)[1].split()
+    except Exception:
+        return None
+
+
 def _proc_start_time(pid):
     """Момент запуска процесса (поле 22 в /proc/<pid>/stat) или None.
 
@@ -134,12 +144,26 @@ def _proc_start_time(pid):
     перестала бы запускаться, отмечаясь в журнале безобидным «пропуском».
     Вне Linux (машина разработчика) /proc нет, и тогда проверка пропускается.
     """
-    try:
-        with open(f'/proc/{pid}/stat', 'rb') as f:
-            fields = f.read().rsplit(b')', 1)[1].split()
-        return int(fields[19])
-    except Exception:
+    fields = _proc_stat_fields(pid)
+    if not fields:
         return None
+    try:
+        return int(fields[19])
+    except (IndexError, ValueError):
+        return None
+
+
+def _proc_is_zombie(pid):
+    """Процесс кончился, но его ещё никто не дождался.
+
+    Для `kill -0` зомби живой. Прибирает его только тот воркер gunicorn,
+    который его породил, а воркеров два: без этой проверки замок, оставшийся
+    от рано умершего прогона, второй воркер считал бы занятым живым процессом —
+    карточка навсегда «выполняется», а ночной запуск каждый раз отмечался бы
+    безобидным «пропуском».
+    """
+    fields = _proc_stat_fields(pid)
+    return bool(fields) and fields[0] == b'Z'
 
 
 def _lock_payload(pid):
@@ -167,6 +191,8 @@ def holder_is_alive(pid, start=None):
     """Жив ли владелец замка. Совпадение номера без совпадения момента
     запуска — это чужой процесс, занявший освободившийся номер."""
     if pid is None or pid <= 0 or not pid_is_alive(pid):
+        return False
+    if _proc_is_zombie(pid):
         return False
     if start is not None:
         current = _proc_start_time(pid)
@@ -365,15 +391,40 @@ def _mark_killed(script_id, reason):
     logs = sorted(glob.glob(pattern), reverse=True)
     if not logs:
         return
-    latest = logs[0]
-    if os.path.exists(exit_file(latest)):
+    _mark_log_killed(logs[0], script_id, reason)
+
+
+def _mark_log_killed(log_file, script_id, reason):
+    if os.path.exists(exit_file(log_file)):
         return
     try:
-        _append(latest, f'\n[ОСТАНОВЛЕН] {reason}\n')
-        with open(exit_file(latest), 'w') as f:
+        _append(log_file, f'\n[ОСТАНОВЛЕН] {reason}\n')
+        with open(exit_file(log_file), 'w') as f:
             f.write(str(-signal.SIGKILL))
     except Exception:
         logger.exception('Не удалось отметить остановку %s', script_id)
+
+
+def _mark_orphaned_runs(script_id, except_run_id):
+    """Отметить прогоны, оборванные вместе с процессом.
+
+    Деплой пересоздаёт контейнер прямо посреди работы: `docker compose exec`
+    умирает по SIGKILL, записать код выхода некому — и на странице такой
+    прогон выглядит удачным, хотя проверка не доработала. Вызывается,
+    когда замок уже наш: живых прогонов этой проверки в этот момент нет,
+    значит лог без кода выхода может остаться только от такого обрыва.
+    """
+    pattern = os.path.join(logs_dir(), f'{script_id}_{RUN_ID_GLOB}.log')
+    for log_file in glob.glob(pattern):
+        run_id = os.path.basename(log_file)[len(script_id) + 1:-len('.log')]
+        # Только то, что старше нас. Номер прогона — время запуска, и строки
+        # сравниваются как даты. Кнопка, нажатая дважды подряд, успевает
+        # завести лог следующего прогона, пока мы поднимаемся: он ещё пуст,
+        # но оборванным его считать нельзя — свой итог ему запишет его же
+        # команда, отметив пропуск.
+        if except_run_id and run_id >= except_run_id:
+            continue
+        _mark_log_killed(log_file, script_id, 'прогон оборван вместе с процессом')
 
 
 # ─── Запуск из интерфейса ─────────────────────────────────────────────────────
@@ -420,6 +471,22 @@ def launch(script_id):
     # считает его чужим. Если замок успел занять прогон по расписанию —
     # не отбираем: команда увидит это сама и отметит пропуск.
     _claim_lock(script_id, proc.pid)
+
+    # Команда могла умереть раньше, чем мы дошли сюда (Django не поднялся,
+    # ошибка импорта, OOM) — тогда `_finalize` не отработал, и замок остался
+    # бы на процессе, которого больше нет, а прогон на странице — вечно
+    # «выполняющимся». Проверяем сразу: ждать чужого воркера здесь нечего.
+    if proc.poll() is not None:
+        _reap_finished()  # снимаем зомби, иначе kill -0 на нём успешен
+        holder, _ = read_lock(script_id)
+        if holder == proc.pid:
+            _clear_pid(script_id)
+        if not os.path.exists(exit_file(log_file)):
+            logger.error('run_check %s завершился сразу, код %s', script_id, proc.returncode)
+            _append(log_file, f'\n[ОШИБКА ЗАПУСКА] команда завершилась с кодом {proc.returncode}\n')
+            with open(exit_file(log_file), 'w') as f:
+                f.write(str(EXIT_LAUNCH_FAILED))
+
     return run_id
 
 
@@ -453,6 +520,11 @@ def execute(script_id, run_id=None, timeout=None, log=None):
     run_id = run_id or new_run_id()
     log_file = log_filename(script_id, run_id)
     argv = [sys.executable, '-u', script['script']] + list(script['args'])
+
+    # Замок наш — значит прошлые прогоны этой проверки кончились. Лог без
+    # кода выхода остался от прогона, которому записать итог не дали:
+    # чаще всего его снял деплой, пересоздав контейнер.
+    _mark_orphaned_runs(script_id, run_id)
 
     # Структурированные скрипты пишут находки в .results.json — из него
     # страница /checks и берёт карточки.

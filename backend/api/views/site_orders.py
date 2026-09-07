@@ -229,7 +229,11 @@ def site_orders_list(request):
         logger.exception('Не удалось прочитать журнал заказов сайта')
         return Response({'status': 'error', 'message': str(e)}, status=500)
 
-    if not state.get('orders'):
+    # Пустой журнал — не то же самое, что журнала нет: заказы можно удалить
+    # со страницы все до одного, и тогда «ещё ни разу не запускался» было бы
+    # неправдой про демона, отработавшего минуту назад. Различаем по дате
+    # последней проверки почты: её ставит первый же прогон робота.
+    if not state.get('orders') and not state.get('last_checked_date'):
         return Response({
             'status': 'no_data',
             'message': 'Демон чтения почты ещё ни разу не запускался — данных пока нет.',

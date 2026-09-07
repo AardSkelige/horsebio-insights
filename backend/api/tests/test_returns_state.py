@@ -106,6 +106,28 @@ class ReturnsDbStoreTests(TestCase):
         self.assertEqual(ReturnProcessedOrder.objects.count(), 1)
         self.assertEqual(ReturnsMonitorState.get().last_run, '2026-09-07 10:00:00')
 
+    def test_force_replaces_marks_together_with_the_new_ones(self):
+        """--force разбирает всё заново, и прежние отметки уходят — но одной
+        транзакцией с записью новых, а не сбросом до прогона."""
+        store = DbStore()
+        store.save(STATE)
+
+        store.save({'last_run': '2026-09-07 10:00:00',
+                    'processed_orders': {'новый-заказ': MARK}}, replace=True)
+
+        self.assertEqual(list(ReturnProcessedOrder.objects.values_list('order_id', flat=True)),
+                         ['новый-заказ'])
+
+    def test_force_that_wrote_nothing_leaves_the_marks_alone(self):
+        """Оборвавшийся или ничего не нашедший --force не должен оставить
+        робота вовсе без отметок: следующий прогон завёл бы возвраты дублями."""
+        store = DbStore()
+        store.save(STATE)
+
+        store.save({'last_run': '2026-09-07 10:00:00', 'processed_orders': {}}, replace=True)
+
+        self.assertEqual(ReturnProcessedOrder.objects.count(), 1)
+
     def test_reset_forgets_everything_explicitly(self):
         """Прогон с --force проверяет всё заново — и это отдельное действие,
         а не побочный эффект обычной записи."""

@@ -106,6 +106,20 @@ class BuyPricesDbStoreTests(TestCase):
         self.assertEqual(list(BuyPriceSyncRun.objects.values_list('date', flat=True)),
                          ['2026-09-07 00:50'])
 
+    def test_a_run_written_by_someone_else_survives(self):
+        """Ручной запуск и плановый пересекаются: оба прочитали историю до,
+        и сохраняющий вторым не должен снести прогон первого — восстановить
+        историю изменений цен неоткуда."""
+        store = DbStore()
+        store.save(STATE)
+        BuyPriceSyncRun.objects.create(date='2026-09-07 09:05', stats={'updated': 5},
+                                       changes=[], errors=[])
+
+        store.save(STATE)  # этот прочитал историю до чужой записи
+
+        self.assertEqual(sorted(BuyPriceSyncRun.objects.values_list('date', flat=True)),
+                         ['2026-09-06 00:50', '2026-09-07 00:50', '2026-09-07 09:05'])
+
     def test_empty_history_does_not_wipe_the_only_copy(self):
         store = DbStore()
         store.save(STATE)

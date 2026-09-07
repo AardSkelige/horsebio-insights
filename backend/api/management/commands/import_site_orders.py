@@ -66,7 +66,13 @@ class Command(BaseCommand):
             for order_id, payload in orders.items():
                 SiteOrderSnapshot.objects.update_or_create(
                     order_id=order_id,
-                    defaults={'payload': payload, 'date': (payload or {}).get('date') or ''},
+                    defaults={
+                        'payload': payload,
+                        # Ровно та же обрезка, что и в хранилище: колонка — 10
+                        # символов, а в выгрузке дата попадается со временем.
+                        # Без неё DataError откатывает перенос целиком.
+                        'date': str((payload or {}).get('date') or '')[:10],
+                    },
                 )
             # Отметки двигаем только вперёд. Команду можно запустить и после
             # того, как сверка уже отработала: откат отметки назад означал бы

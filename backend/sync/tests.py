@@ -364,6 +364,30 @@ class SyncRunnerTests(TestCase):
         self.assertEqual(heartbeat.call_args.kwargs['run'], run)
         self.assertEqual(SyncRun.objects.count(), 1)
 
+    def test_crash_is_not_erased_by_the_last_heartbeat_snapshot(self):
+        """Последний снимок сердцебиения пишет объект из памяти, где статус
+        ещё «идёт». Закрой прогон до него — и он вернулся бы в «идёт»
+        с пустым finished_at и потерянным текстом ошибки."""
+        from sync import runner
+
+        run = SyncRun.start(triggered_by='кнопка')
+        task = Mock()
+        task.get_state.return_value = {'status': TaskStatus.RUNNING.value, 'message': 'Отгрузки',
+                                       'processed': 40, 'total': 100, 'error': None}
+
+        with (
+            patch.object(runner, 'ParserTask', return_value=task),
+            patch.object(runner.asyncio, 'run', side_effect=RuntimeError('соединение оборвалось')),
+        ):
+            code = runner.execute(triggered_by='кнопка', months_back=1, run_id=run.id)
+
+        run.refresh_from_db()
+        self.assertEqual(code, runner.EXIT_FAILED)
+        self.assertEqual(run.status, SyncRun.STATUS_ERROR)
+        self.assertIsNotNone(run.finished_at)
+        self.assertIn('соединение оборвалось', run.error)
+        self.assertFalse(run.is_alive)
+
     def test_broken_start_releases_the_lock(self):
         """Задача ходит за токеном и в кеш ещё до первого запроса. Упади она
         там — блокировка висела бы час, и всё это время пропускались бы
