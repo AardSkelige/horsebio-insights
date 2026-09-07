@@ -600,11 +600,17 @@ class SyncRun(models.Model):
 
     STATUS_RUNNING = 'running'
     STATUS_COMPLETED = 'completed'
+    STATUS_PARTIAL = 'partial'
     STATUS_ERROR = 'error'
     STATUS_STOPPED = 'stopped'
     STATUSES = [
         (STATUS_RUNNING, 'Идёт'),
         (STATUS_COMPLETED, 'Завершён'),
+        # «Частично» — не смягчённая ошибка, а отдельный исход: часть сущностей
+        # обновилась, часть осталась вчерашней. Без него прогон, где упали одни
+        # отгрузки, выглядел бы как обычная ошибка — и было бы неясно, свежие
+        # ли приёмки, на которых уже считается маржа.
+        (STATUS_PARTIAL, 'Частично'),
         (STATUS_ERROR, 'Ошибка'),
         (STATUS_STOPPED, 'Остановлен'),
     ]
@@ -663,3 +669,43 @@ class SyncRun(models.Model):
             cls.objects.filter(id__in=list(stale_ids)).delete()
         return run
 
+
+class SyncEntityResult(models.Model):
+    """Чем кончилась синхронизация каждой сущности по отдельности.
+
+    Прогон один, а сущностей пять, и падение одной больше не отменяет
+    остальные: раньше исключение в техкартах прерывало всё, и приёмки
+    с отгрузками не обновлялись вовсе — при этом по одной строке прогона
+    нельзя было сказать, что именно осталось вчерашним. Маржа считалась
+    на смеси свежего и старого, и заметить это было нечем.
+    """
+
+    STATUS_OK = 'ok'
+    STATUS_FAILED = 'failed'
+    STATUS_STOPPED = 'stopped'
+    STATUSES = [
+        (STATUS_OK, 'Обновлено'),
+        (STATUS_FAILED, 'Ошибка'),
+        (STATUS_STOPPED, 'Остановлено'),
+    ]
+
+    run = models.ForeignKey(SyncRun, on_delete=models.CASCADE, related_name='entities',
+                            verbose_name='Прогон')
+    entity = models.CharField(max_length=32, verbose_name='Сущность')
+    name = models.CharField(max_length=64, verbose_name='Название')
+    status = models.CharField(max_length=20, choices=STATUSES, verbose_name='Итог')
+    error = models.TextField(blank=True, verbose_name='Ошибка')
+    started_at = models.DateTimeField(null=True, blank=True, verbose_name='Начата')
+    finished_at = models.DateTimeField(null=True, blank=True, verbose_name='Закончена')
+
+    class Meta:
+        db_table = 'parser_syncentityresult'
+        verbose_name = 'Итог по сущности'
+        verbose_name_plural = 'Итоги по сущностям'
+        constraints = [
+            models.UniqueConstraint(fields=['run', 'entity'], name='unique_entity_per_run'),
+        ]
+        ordering = ['id']
+
+    def __str__(self):
+        return f"{self.name} — {self.get_status_display()}"

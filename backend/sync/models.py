@@ -18,6 +18,7 @@ from core.models import (
     SupplyItem,
     SyncLock,
     SyncRun,
+    SyncEntityResult,
 )
 
 __all__ = [
@@ -38,4 +39,5 @@ __all__ = [
     'SupplyItem',
     'SyncLock',
     'SyncRun',
+    'SyncEntityResult',
 ]

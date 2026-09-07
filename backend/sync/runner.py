@@ -34,6 +34,11 @@ logger = logging.getLogger(__name__)
 # иначе «уже идёт» неотличимо от «упало».
 EXIT_OK = 0
 EXIT_FAILED = 1
+# Часть сущностей обновилась, часть нет. Свой код, а не общая единица: иначе
+# в журнале cron прогон, где не дались одни отгрузки, выглядит ровно так же,
+# как прогон, где не вышло ничего, — а разница между ними и есть весь смысл
+# статуса «частично».
+EXIT_PARTIAL = 65
 EXIT_BUSY = 75
 
 
@@ -161,6 +166,9 @@ def execute(triggered_by, start_date=None, end_date=None, months_back=None,
         heartbeat.start()
 
         asyncio.run(task.run())
+        if task.progress.status == TaskStatus.PARTIAL:
+            say(task.progress.message or 'Синхронизация прошла частично')
+            return EXIT_PARTIAL
         if task.progress.status != TaskStatus.COMPLETED:
             say(task.progress.error or task.progress.message or 'Синхронизация не завершена')
             return EXIT_FAILED

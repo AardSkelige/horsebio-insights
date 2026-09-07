@@ -36,7 +36,7 @@ class ParserTaskMaterialErrorTests(TestCase):
     @patch('sync.processors.supplies.SupplyProcessor.process', new_callable=AsyncMock)
     @patch('sync.processors.purchases.PurchaseOrderProcessor.process', new_callable=AsyncMock)
     @patch('sync.processors.processing_plans.ProcessingPlanProcessor.process', new_callable=AsyncMock)
-    def test_material_error_prevents_success_and_following_stages(
+    def test_material_error_does_not_cancel_the_other_entities(
         self,
         processing_plans_process,
         purchase_orders_process,
@@ -44,6 +44,9 @@ class ParserTaskMaterialErrorTests(TestCase):
         shipments_process,
         client_class,
     ):
+        """Приёмки не виноваты в том, что материалы не отдались: их свежие
+        данные нужны сегодня, а не после починки материалов. Раньше падение
+        одной сущности отменяло все следующие."""
         client_class.return_value.get_materials_updated_since.side_effect = RuntimeError(
             'MoySklad unavailable'
         )
@@ -52,12 +55,121 @@ class ParserTaskMaterialErrorTests(TestCase):
         async_to_sync(task.run)()
 
         processing_plans_process.assert_awaited_once()
-        purchase_orders_process.assert_not_awaited()
-        supplies_process.assert_not_awaited()
-        shipments_process.assert_not_awaited()
-        self.assertEqual(task.progress.status, TaskStatus.ERROR)
+        purchase_orders_process.assert_awaited_once()
+        supplies_process.assert_awaited_once()
+        shipments_process.assert_awaited_once()
+
+    @patch('sync.sync_task.MoySkladAPIClient')
+    @patch('sync.processors.shipments.ShipmentProcessor.process', new_callable=AsyncMock)
+    @patch('sync.processors.supplies.SupplyProcessor.process', new_callable=AsyncMock)
+    @patch('sync.processors.purchases.PurchaseOrderProcessor.process', new_callable=AsyncMock)
+    @patch('sync.processors.processing_plans.ProcessingPlanProcessor.process', new_callable=AsyncMock)
+    def test_one_failed_entity_makes_the_run_partial(
+        self,
+        processing_plans_process,
+        purchase_orders_process,
+        supplies_process,
+        shipments_process,
+        client_class,
+    ):
+        """«Частично» — не смягчённая ошибка: маржа уже считается на смеси
+        свежего и вчерашнего, и это должно быть видно."""
+        client_class.return_value.get_materials_updated_since.side_effect = RuntimeError(
+            'MoySklad unavailable'
+        )
+        task = ParserTask()
+
+        async_to_sync(task.run)()
+
+        self.assertEqual(task.progress.status, TaskStatus.PARTIAL)
+        self.assertIn('материалы', task.progress.message)
         self.assertEqual(task.progress.error, 'MoySklad unavailable')
+        # Отметка свежести — только после полной удачи: на неё смотрят
+        # и ночной прогон, и страницы.
         self.assertIsNone(cache.get('last_successful_update'))
+
+        entities = {record['entity']: record['status'] for record in task.get_state()['entities']}
+        self.assertEqual(entities['materials'], ParserTask.ENTITY_FAILED)
+        self.assertEqual(entities['supplies'], ParserTask.ENTITY_OK)
+
+    @patch('sync.sync_task.MoySkladAPIClient')
+    @patch('sync.processors.shipments.ShipmentProcessor.process', new_callable=AsyncMock)
+    @patch('sync.processors.supplies.SupplyProcessor.process', new_callable=AsyncMock)
+    @patch('sync.processors.purchases.PurchaseOrderProcessor.process', new_callable=AsyncMock)
+    @patch('sync.processors.processing_plans.ProcessingPlanProcessor.process', new_callable=AsyncMock)
+    def test_every_entity_failing_is_still_an_error(
+        self,
+        processing_plans_process,
+        purchase_orders_process,
+        supplies_process,
+        shipments_process,
+        client_class,
+    ):
+        """Если не обновилось вообще ничего, «частично» было бы враньём."""
+        for mock in (processing_plans_process, purchase_orders_process,
+                     supplies_process, shipments_process):
+            mock.side_effect = RuntimeError('MoySklad unavailable')
+        client_class.return_value.get_materials_updated_since.side_effect = RuntimeError(
+            'MoySklad unavailable'
+        )
+        task = ParserTask()
+
+        async_to_sync(task.run)()
+
+        self.assertEqual(task.progress.status, TaskStatus.ERROR)
+        self.assertIsNone(cache.get('last_successful_update'))
+
+    @patch('sync.sync_task.MoySkladAPIClient')
+    @patch('sync.processors.shipments.ShipmentProcessor.process', new_callable=AsyncMock)
+    @patch('sync.processors.supplies.SupplyProcessor.process', new_callable=AsyncMock)
+    @patch('sync.processors.purchases.PurchaseOrderProcessor.process', new_callable=AsyncMock)
+    @patch('sync.processors.processing_plans.ProcessingPlanProcessor.process', new_callable=AsyncMock)
+    def test_entity_timestamps_carry_a_timezone(
+        self,
+        processing_plans_process,
+        purchase_orders_process,
+        supplies_process,
+        shipments_process,
+        client_class,
+    ):
+        """Отметки уезжают в DateTimeField: наивное время в контейнере (UTC)
+        Django истолковал бы как московское — сдвиг на три часа."""
+        from django.utils.dateparse import parse_datetime
+
+        client_class.return_value.get_materials_updated_since.return_value = []
+        task = ParserTask()
+
+        async_to_sync(task.run)()
+
+        for record in task.get_state()['entities']:
+            for field in ('started_at', 'finished_at'):
+                moment = parse_datetime(record[field])
+                self.assertIsNotNone(moment.tzinfo, f'{record["entity"]}.{field} без зоны')
+
+    @patch('sync.sync_task.MoySkladAPIClient')
+    @patch('sync.processors.shipments.ShipmentProcessor.process', new_callable=AsyncMock)
+    @patch('sync.processors.supplies.SupplyProcessor.process', new_callable=AsyncMock)
+    @patch('sync.processors.purchases.PurchaseOrderProcessor.process', new_callable=AsyncMock)
+    @patch('sync.processors.processing_plans.ProcessingPlanProcessor.process', new_callable=AsyncMock)
+    def test_clean_run_marks_freshness(
+        self,
+        processing_plans_process,
+        purchase_orders_process,
+        supplies_process,
+        shipments_process,
+        client_class,
+    ):
+        client_class.return_value.get_materials_updated_since.return_value = []
+        task = ParserTask()
+
+        async_to_sync(task.run)()
+
+        self.assertEqual(task.progress.status, TaskStatus.COMPLETED)
+        self.assertIsNotNone(cache.get('last_successful_update'))
+        self.assertEqual(
+            [record['status'] for record in task.get_state()['entities']],
+            [ParserTask.ENTITY_OK] * 5,
+        )
 
 
 class AutoSyncWeeklyCommandTests(TestCase):
@@ -121,6 +233,28 @@ class TaskStatusFromDatabaseTests(TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertFalse(response.json()['is_running'])
         self.assertIsNone(response.json()['state'])
+
+    def test_entity_results_are_visible_to_the_page(self):
+        """Страница должна называть сущности, оставшиеся вчерашними, —
+        иначе «частично» ничем не отличается от обычной ошибки."""
+        from .models import SyncEntityResult
+
+        run = SyncRun.objects.create(status=SyncRun.STATUS_PARTIAL,
+                                     message='Обновлено частично, не удались: отгрузки')
+        SyncEntityResult.objects.create(run=run, entity='supplies', name='Приёмки',
+                                        status=SyncEntityResult.STATUS_OK)
+        SyncEntityResult.objects.create(run=run, entity='shipments', name='Отгрузки',
+                                        status=SyncEntityResult.STATUS_FAILED,
+                                        error='МойСклад недоступен')
+
+        state = self.client.get('/parser/task-status/').json()['state']
+
+        self.assertEqual(state['status'], SyncRun.STATUS_PARTIAL)
+        self.assertEqual(
+            [(entity['entity'], entity['status']) for entity in state['entities']],
+            [('supplies', 'ok'), ('shipments', 'failed')],
+        )
+        self.assertEqual(state['entities'][1]['error'], 'МойСклад недоступен')
 
     def test_running_sync_is_visible_to_everyone(self):
         SyncRun.objects.create(message='Обработка отгрузок', processed=60,
@@ -195,6 +329,52 @@ class SyncHeartbeatMirrorTests(TestCase):
         self.assertEqual(run.status, SyncRun.STATUS_COMPLETED)
         self.assertIsNotNone(run.finished_at)
         self.assertFalse(run.is_alive)
+
+    def test_entity_results_get_their_own_rows(self):
+        """Итог по сущности виден отдельно: по одной строке прогона нельзя
+        сказать, что именно осталось вчерашним."""
+        run = SyncRun.objects.create()
+        heartbeat = self._heartbeat(run, {
+            'status': 'partial', 'message': 'Обновлено частично, не удались: отгрузки',
+            'processed': 100, 'total': 100, 'error': 'МойСклад недоступен',
+            'entities': [
+                {'entity': 'supplies', 'name': 'Приёмки', 'status': 'ok', 'error': None,
+                 'started_at': '2026-09-07T10:00:00', 'finished_at': '2026-09-07T10:01:00'},
+                {'entity': 'shipments', 'name': 'Отгрузки', 'status': 'failed',
+                 'error': 'МойСклад недоступен',
+                 'started_at': '2026-09-07T10:01:00', 'finished_at': '2026-09-07T10:02:00'},
+                # Идущая сущность ещё не итог — её не пишем.
+                {'entity': 'materials', 'name': 'Материалы', 'status': None, 'error': None,
+                 'started_at': '2026-09-07T10:02:00', 'finished_at': None},
+            ],
+        })
+
+        heartbeat._mirror_progress(final=True)
+
+        run.refresh_from_db()
+        self.assertEqual(run.status, SyncRun.STATUS_PARTIAL)
+        self.assertEqual(
+            [(row.entity, row.status) for row in run.entities.all()],
+            [('supplies', 'ok'), ('shipments', 'failed')],
+        )
+        self.assertEqual(run.entities.get(entity='shipments').error, 'МойСклад недоступен')
+
+    def test_entity_results_are_written_once(self):
+        """Сердцебиение бьётся раз в секунду, а строка на сущность — одна."""
+        run = SyncRun.objects.create()
+        state = {
+            'status': 'running', 'message': 'Отгрузки', 'processed': 80, 'total': 100,
+            'error': None,
+            'entities': [{'entity': 'supplies', 'name': 'Приёмки', 'status': 'ok',
+                          'error': None, 'started_at': '2026-09-07T10:00:00',
+                          'finished_at': '2026-09-07T10:01:00'}],
+        }
+        heartbeat = self._heartbeat(run, state)
+
+        heartbeat._mirror_progress()
+        heartbeat._mirror_progress()
+
+        self.assertEqual(run.entities.count(), 1)
 
     def test_broken_row_does_not_break_the_sync(self):
         """Прогон важнее его отображения: не смогли записать — не мешаем."""
@@ -387,6 +567,26 @@ class SyncRunnerTests(TestCase):
         self.assertIsNotNone(run.finished_at)
         self.assertIn('соединение оборвалось', run.error)
         self.assertFalse(run.is_alive)
+
+    def test_partial_run_has_its_own_exit_code(self):
+        """Общая единица делала частичный прогон неотличимым от упавшего:
+        в журнале cron обе строки читались как «ОШИБКА»."""
+        from sync import runner
+
+        run = SyncRun.start(triggered_by='расписание')
+        task = Mock()
+        task.progress.status = TaskStatus.PARTIAL
+        task.progress.message = 'Обновлено частично, не удались: отгрузки'
+
+        with (
+            patch.object(runner, 'ParserTask', return_value=task),
+            patch.object(runner.asyncio, 'run'),
+            patch.object(runner, 'SyncHeartbeat'),
+        ):
+            code = runner.execute(triggered_by='расписание', months_back=1, run_id=run.id)
+
+        self.assertEqual(code, runner.EXIT_PARTIAL)
+        self.assertNotEqual(runner.EXIT_PARTIAL, runner.EXIT_FAILED)
 
     def test_broken_start_releases_the_lock(self):
         """Задача ходит за токеном и в кеш ещё до первого запроса. Упади она

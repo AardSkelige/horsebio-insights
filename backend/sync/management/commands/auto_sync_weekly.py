@@ -8,6 +8,7 @@
 а ещё она ставит отметку о времени последнего автопрогона.
 """
 import logging
+import sys
 from datetime import timedelta
 
 from django.core.management.base import BaseCommand, CommandError
@@ -52,6 +53,15 @@ class Command(BaseCommand):
             # Не ошибка: очередь синхронизаций хуже пропущенного запуска.
             self.stdout.write(self.style.WARNING('Синхронизация уже выполняется. Пропускаем.'))
             return
+
+        if code == runner.EXIT_PARTIAL:
+            # Не ошибка и не удача: часть данных свежая, часть вчерашняя.
+            # Код выхода отдаём как есть, чтобы обёртка cron написала
+            # «частично», а не «ОШИБКА», — и отметку свежести не ставим.
+            self.stdout.write(self.style.WARNING(
+                'Синхронизация прошла частично: часть сущностей не обновилась'
+            ))
+            sys.exit(runner.EXIT_PARTIAL)
 
         if code != runner.EXIT_OK:
             raise CommandError('Синхронизация не была завершена')

@@ -1,7 +1,7 @@
 // src/components/common/FloatingLoadingCard.jsx
 import { useState, useEffect, useRef } from 'react';
 import { m } from 'motion/react';
-import { CheckCircle2, Loader2, XCircle, AlertCircle, X, ChevronUp, ChevronDown, Database, Square } from 'lucide-react';
+import { CheckCircle2, Loader2, XCircle, AlertCircle, AlertTriangle, X, ChevronUp, ChevronDown, Database, Square } from 'lucide-react';
 import { useLoading } from '../../contexts/LoadingContext';
 import { formatDate } from '../../utils/formatters';
 
@@ -40,6 +40,12 @@ const FloatingLoadingCard = () => {
     const hideTimerRef = useRef(null);
     const resetTimerRef = useRef(null);
 
+    // Сущности, которые не обновились. Прогон при этом мог кончиться
+    // «частично»: остальное свежее, а эти остались вчерашними — и молчать
+    // об этом нельзя, отчёты считаются уже на смеси.
+    const failedEntities = (loadingProgress?.entities || []).filter(entity => entity.status === 'failed');
+    const keepOpen = failedEntities.length > 0;
+
     const clearTimers = () => {
         if (hideTimerRef.current) clearTimeout(hideTimerRef.current);
         if (resetTimerRef.current) clearTimeout(resetTimerRef.current);
@@ -57,7 +63,10 @@ const FloatingLoadingCard = () => {
 
     // Отдельный useEffect для таймера скрытия
     useEffect(() => {
-        if (isCompleted) {
+        // Карточку с несработавшими сущностями не прячем: это единственное
+        // место, где написано, что именно осталось вчерашним, а три секунды
+        // на прочитать список — не время. Закрывает её пользователь сам.
+        if (isCompleted && !keepOpen) {
             // Показываем результат 3 секунды, затем плавно скрываем
             hideTimerRef.current = setTimeout(() => {
                 setIsHiding(true);
@@ -74,7 +83,7 @@ const FloatingLoadingCard = () => {
                 clearTimers();
             };
         }
-    }, [isCompleted, resetStates]);
+    }, [isCompleted, keepOpen, resetStates]);
 
     // Сброс состояния завершения при новой загрузке
     useEffect(() => {
@@ -119,17 +128,18 @@ const FloatingLoadingCard = () => {
 
     const getStatusIcon = () => {
         if (!loadingProgress) return null;
-        
-        // Если загрузка завершена, показываем галочку
-        if (isCompleted) {
-            return <CheckCircle2 size={16} color="var(--success)" />;
-        }
-        
+
         switch (loadingProgress.status) {
             case 'running':
-                return <Loader2 size={16} color="var(--primary)" className="animate-spin" />;
+                // Строка ещё говорит «идёт», а загрузка уже кончилась —
+                // прогон закрылся между опросами.
+                return isCompleted
+                    ? <CheckCircle2 size={16} color="var(--success)" />
+                    : <Loader2 size={16} color="var(--primary)" className="animate-spin" />;
             case 'completed':
                 return <CheckCircle2 size={16} color="var(--success)" />;
+            case 'partial':
+                return <AlertTriangle size={16} color="var(--warning)" />;
             case 'error':
                 return <XCircle size={16} color="var(--error)" />;
             default:
@@ -139,9 +149,9 @@ const FloatingLoadingCard = () => {
 
     const getTone = () => {
         if (!loadingProgress) return '--primary';
-        if (isCompleted || loadingProgress.status === 'completed') return '--success';
         if (loadingProgress.status === 'error') return '--error';
-        if (loadingProgress.status === 'stopped') return '--warning';
+        if (loadingProgress.status === 'partial' || loadingProgress.status === 'stopped') return '--warning';
+        if (isCompleted || loadingProgress.status === 'completed') return '--success';
         return '--primary';
     };
 
@@ -229,6 +239,34 @@ const FloatingLoadingCard = () => {
                             </button>
                         </div>
                     </div>
+
+                    {/* Что осталось вчерашним. Показываем и в свёрнутой карточке:
+                        это то, ради чего прогон вообще отмечен «частично». */}
+                    {failedEntities.length > 0 && (
+                        <div style={{
+                            marginTop: '12px',
+                            border: `1px solid ${toneBorder('--warning')}`,
+                            borderRadius: '8px',
+                            background: toneSurface('--warning'),
+                            padding: '8px 10px',
+                        }}>
+                            <div style={{ fontFamily: 'var(--sans)', fontSize: '11px', color: 'var(--muted)', marginBottom: '4px' }}>
+                                Не обновились
+                            </div>
+                            {failedEntities.map(entity => (
+                                <div key={entity.entity} style={{ marginTop: '4px' }}>
+                                    <div style={{ fontFamily: 'var(--sans)', fontSize: '12px', color: 'var(--ink)', fontWeight: 500 }}>
+                                        {entity.name}
+                                    </div>
+                                    {entity.error && (
+                                        <div style={{ fontFamily: 'var(--sans)', fontSize: '11px', color: 'var(--muted)', lineHeight: 1.35 }}>
+                                            {entity.error}
+                                        </div>
+                                    )}
+                                </div>
+                            ))}
+                        </div>
+                    )}
 
                     {/* Progress bar */}
                     {progress.total > 0 && !isCompleted && (

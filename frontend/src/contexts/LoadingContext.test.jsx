@@ -82,6 +82,26 @@ describe('LoadingContext', () => {
         await waitFor(() => expect(screen.getByTestId('state').textContent).toBe('не идёт'));
     });
 
+    it('заканчивает загрузку и на частичном прогоне', async () => {
+        // «Частично» — тоже итог: часть сущностей обновилась, часть осталась
+        // вчерашней. Не считать его концом значило бы крутить полосу вечно.
+        parserAPI.getTaskStatus.mockResolvedValue({
+            is_running: false,
+            state: {
+                id: 42, status: 'partial', processed: 100, total: 100,
+                message: 'Обновлено частично, не удались: отгрузки',
+                entities: [{ entity: 'shipments', name: 'Отгрузки', status: 'failed', error: 'МойСклад недоступен' }],
+            },
+        });
+
+        renderProbe();
+        await start();
+
+        await act(async () => { await vi.advanceTimersByTimeAsync(4000); });
+
+        await waitFor(() => expect(screen.getByTestId('state').textContent).toBe('не идёт'));
+    });
+
     it('не ждёт вечно прогон, о котором сервер больше не слышит', async () => {
         // Процесс умер, не закрыв запись: статус в ней навсегда «идёт».
         parserAPI.getTaskStatus.mockResolvedValue({

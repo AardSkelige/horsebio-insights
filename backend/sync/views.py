@@ -158,6 +158,18 @@ def get_task_status(request):
                 'completed_at': run.finished_at.isoformat() if run.finished_at else None,
                 'error': run.error or None,
                 'triggered_by': run.triggered_by,
+                # Итог по каждой сущности: по одному статусу прогона нельзя
+                # сказать, что осталось вчерашним, а маржа считается уже
+                # на смеси свежего и старого.
+                'entities': [
+                    {
+                        'entity': entity.entity,
+                        'name': entity.name,
+                        'status': entity.status,
+                        'error': entity.error or None,
+                    }
+                    for entity in run.entities.all()
+                ],
             },
         })
     except Exception as e:

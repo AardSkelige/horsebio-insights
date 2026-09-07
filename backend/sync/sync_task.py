@@ -15,10 +15,11 @@ from django.conf import settings
 from django.core.cache import cache
 from django.db import close_old_connections
 from django.utils import timezone
+from django.utils.dateparse import parse_datetime
 from asgiref.sync import sync_to_async
 
 from .logger import logger, structured_logger
-from .models import RawMaterial, SyncLock, SyncRun
+from .models import RawMaterial, SyncEntityResult, SyncLock, SyncRun
 from .moysklad import MoySkladAPIClient
 from .cache import MaterialRegistry, ProductCache
 from .utils import get_group_from_pathname
@@ -31,6 +32,10 @@ class TaskStatus(Enum):
     IDLE = "idle"
     RUNNING = "running"
     COMPLETED = "completed"
+    # Часть сущностей обновилась, часть осталась вчерашней. Отдельный статус,
+    # а не «ошибка»: разница между «ничего не обновилось» и «обновилось всё,
+    # кроме отгрузок» — это разница между «подожди» и «маржа сейчас врёт».
+    PARTIAL = "partial"
     ERROR = "error"
     STOPPED = "stopped"
 
@@ -51,12 +56,40 @@ class TaskProgress:
 class BaseTask(ABC):
     """Базовый класс для всех задач"""
 
+    # Итоги по сущностям. Живут в памяти задачи, а в базу их переносит
+    # сердцебиение — из asyncio-цикла обращаться к ORM Django не даёт.
+    ENTITY_OK = 'ok'
+    ENTITY_FAILED = 'failed'
+    ENTITY_STOPPED = 'stopped'
+
     def __init__(self):
         self._progress = TaskProgress(
             status=TaskStatus.IDLE,
             message="Задача создана"
         )
         self._stop_requested = False
+        self._entities = []
+
+    def entity_started(self, entity: str, name: str) -> None:
+        # timezone.now(), а не datetime.now(): отметки уезжают в DateTimeField
+        # при USE_TZ, и наивное время в контейнере (UTC) Django истолковал бы
+        # как московское — все отметки сдвинулись бы на три часа.
+        self._entities.append({
+            'entity': entity, 'name': name, 'status': None, 'error': None,
+            'started_at': timezone.now().isoformat(), 'finished_at': None,
+        })
+
+    def entity_finished(self, entity: str, status: str, error: str = None) -> None:
+        for record in reversed(self._entities):
+            if record['entity'] == entity:
+                record['status'] = status
+                record['error'] = error
+                record['finished_at'] = timezone.now().isoformat()
+                return
+
+    @property
+    def failed_entities(self) -> list:
+        return [record for record in self._entities if record['status'] == self.ENTITY_FAILED]
 
     @property
     def progress(self) -> TaskProgress:
@@ -89,7 +122,8 @@ class BaseTask(ABC):
         if should_update:
             if kwargs.get('status') == TaskStatus.RUNNING and not self._progress.started_at:
                 self._progress.started_at = datetime.now()
-            elif kwargs.get('status') in [TaskStatus.COMPLETED, TaskStatus.ERROR, TaskStatus.STOPPED]:
+            elif kwargs.get('status') in [TaskStatus.COMPLETED, TaskStatus.PARTIAL,
+                                         TaskStatus.ERROR, TaskStatus.STOPPED]:
                 self._progress.completed_at = datetime.now()
 
     def get_state(self) -> dict:
@@ -101,7 +135,8 @@ class BaseTask(ABC):
             'total': self._progress.total,
             'started_at': self._progress.started_at.isoformat() if self._progress.started_at else None,
             'completed_at': self._progress.completed_at.isoformat() if self._progress.completed_at else None,
-            'error': self._progress.error
+            'error': self._progress.error,
+            'entities': [dict(record) for record in self._entities],
         }
 
 
@@ -136,6 +171,7 @@ class SyncHeartbeat:
         self._thread = None
         self._last_mirror = None
         self._last_touch = 0.0
+        self._mirrored_entities = set()
 
     def start(self) -> None:
         self._thread = threading.Thread(target=self._run, daemon=True)
@@ -167,7 +203,8 @@ class SyncHeartbeat:
 
     # Статусы, при которых прогон считается законченным.
     FINAL_STATUSES = (
-        SyncRun.STATUS_COMPLETED, SyncRun.STATUS_ERROR, SyncRun.STATUS_STOPPED,
+        SyncRun.STATUS_COMPLETED, SyncRun.STATUS_PARTIAL,
+        SyncRun.STATUS_ERROR, SyncRun.STATUS_STOPPED,
     )
 
     def _mirror_progress(self, final: bool = False) -> None:
@@ -177,6 +214,10 @@ class SyncHeartbeat:
         try:
             state = self.task.get_state()
             status = state.get('status')
+
+            # Итоги по сущностям переносим до проверки «состояние не менялось»:
+            # сущность могла кончиться, не сдвинув ни процент, ни сообщение.
+            self._mirror_entities(state.get('entities') or [])
 
             # Первый удар сердца может прийтись на момент, когда задача ещё
             # только создана: у неё статус `idle`, которого у прогона нет.
@@ -213,6 +254,33 @@ class SyncHeartbeat:
                 close_old_connections()
             except Exception:
                 pass
+
+    def _mirror_entities(self, entities) -> None:
+        """Переносит итоги по сущностям в `SyncEntityResult`.
+
+        Пишем только законченные и только изменившиеся: строка на сущность
+        за прогон, а сердцебиение бьётся раз в секунду.
+        """
+        if not self.run or not entities:
+            return
+        for record in entities:
+            status = record.get('status')
+            if not status:
+                continue
+            key = (record['entity'], status)
+            if key in self._mirrored_entities:
+                continue
+            SyncEntityResult.objects.update_or_create(
+                run=self.run, entity=record['entity'],
+                defaults={
+                    'name': record['name'],
+                    'status': status,
+                    'error': (record.get('error') or '')[:2000],
+                    'started_at': parse_datetime(record['started_at']) if record.get('started_at') else None,
+                    'finished_at': parse_datetime(record['finished_at']) if record.get('finished_at') else None,
+                },
+            )
+            self._mirrored_entities.add(key)
 
     def _check_stop_request(self) -> None:
         """Остановку просят через базу: нажавший «Стоп» сидит в другом процессе.
@@ -408,6 +476,31 @@ class ParserTask(BaseTask):
         finally:
             structured_logger.section_end("Синхронизация материалов")
 
+    async def _sync_entity(self, entity: str, name: str, work) -> bool:
+        """Провести одну сущность и запомнить, чем она кончилась.
+
+        Падение одной сущности больше не отменяет остальные: приёмки
+        не виноваты в том, что МойСклад ответил 429 на отгрузках, а их
+        свежие данные нужны сегодня, а не после починки отгрузок. Прогон
+        при этом закончится «частично» — смесь свежего и вчерашнего должна
+        быть видна, а не выглядеть удачей.
+        """
+        self.entity_started(entity, name)
+        try:
+            await work()
+        except Exception as e:
+            structured_logger.error(f"{name}: не обновлены — {e}")
+            logger.exception("Ошибка синхронизации: %s", name)
+            self.entity_finished(entity, self.ENTITY_FAILED, str(e))
+            return False
+
+        if self.should_stop():
+            self.entity_finished(entity, self.ENTITY_STOPPED)
+            return False
+
+        self.entity_finished(entity, self.ENTITY_OK)
+        return True
+
     async def run(self):
         """Основной метод выполнения задачи"""
         # Import processors here to avoid circular imports
@@ -432,73 +525,77 @@ class ParserTask(BaseTask):
             # Этап 1: Обработка техкарт (0% - 20%)
             self._update_stage_progress(1, 0.0, "Загрузка техкарт", "Подготовка к загрузке техкарт производства")
 
-            processor = ProcessingPlanProcessor(self.client, self.product_cache, self)
-            await processor.process()
+            ok = await self._sync_entity(
+                'processing_plans', 'Техкарты',
+                lambda: ProcessingPlanProcessor(self.client, self.product_cache, self).process(),
+            )
             if self.should_stop():
                 return
 
-            self._update_stage_progress(1, 1.0, "Загрузка техкарт завершена", "Техкарты загружены успешно")
+            self._update_stage_progress(
+                1, 1.0,
+                "Загрузка техкарт завершена" if ok else "Техкарты не обновлены",
+                "Техкарты загружены успешно" if ok else "Идём дальше: остальные сущности не виноваты",
+            )
 
             # Этап 2: Синхронизация материалов (20% - 40%)
             self._update_stage_progress(2, 0.0, "Синхронизация материалов", "Подготовка к синхронизации")
 
-            await self.sync_materials()
+            ok = await self._sync_entity('materials', 'Материалы', self.sync_materials)
             if self.should_stop():
                 return
 
-            self._update_stage_progress(2, 1.0, "Синхронизация материалов завершена", "Материалы синхронизированы")
+            self._update_stage_progress(
+                2, 1.0,
+                "Синхронизация материалов завершена" if ok else "Материалы не обновлены",
+                "Материалы синхронизированы" if ok else "Идём дальше",
+            )
 
             # Этап 3: Обработка заказов поставщиков (40% - 60%)
             time_ranges = self._get_time_ranges()
             self._update_stage_progress(3, 0.0, "Загрузка заказов поставщикам", "Подготовка к загрузке заказов")
 
-            purchase_processor = PurchaseOrderProcessor(self.client, self.product_cache, self)
-            await purchase_processor.process(time_ranges)
+            ok = await self._sync_entity(
+                'purchase_orders', 'Заказы поставщикам',
+                lambda: PurchaseOrderProcessor(self.client, self.product_cache, self).process(time_ranges),
+            )
             if self.should_stop():
                 return
 
-            self._update_stage_progress(3, 1.0, "Загрузка заказов завершена", "Заказы поставщикам загружены")
+            self._update_stage_progress(
+                3, 1.0,
+                "Загрузка заказов завершена" if ok else "Заказы поставщикам не обновлены",
+                "Заказы поставщикам загружены" if ok else "Идём дальше",
+            )
 
             # Этап 4: Обработка приемок (60% - 80%)
             self._update_stage_progress(4, 0.0, "Загрузка приемок", "Подготовка к загрузке приемок")
 
-            supply_processor = SupplyProcessor(self.client, self.product_cache, self)
-            await supply_processor.process(time_ranges)
+            ok = await self._sync_entity(
+                'supplies', 'Приёмки',
+                lambda: SupplyProcessor(self.client, self.product_cache, self).process(time_ranges),
+            )
             if self.should_stop():
                 return
 
-            self._update_stage_progress(4, 1.0, "Загрузка приемок завершена", "Приемки загружены")
+            self._update_stage_progress(
+                4, 1.0,
+                "Загрузка приемок завершена" if ok else "Приёмки не обновлены",
+                "Приемки загружены" if ok else "Идём дальше",
+            )
 
             # Этап 5: Обработка отгрузок (80% - 100%)
             self._update_stage_progress(5, 0.0, "Загрузка отгрузок", "Подготовка к загрузке отгрузок")
 
-            shipment_processor = ShipmentProcessor(
-                self.client,
-                self.product_cache,
-                self.material_registry,
-                self
+            await self._sync_entity(
+                'shipments', 'Отгрузки',
+                lambda: ShipmentProcessor(
+                    self.client, self.product_cache, self.material_registry, self,
+                ).process(time_ranges),
             )
-            await shipment_processor.process(time_ranges)
 
             if not self.should_stop():
-                structured_logger.section_end("Парсер задач", "Все компоненты обработаны успешно")
-                self.update_progress(
-                    status=TaskStatus.COMPLETED,
-                    message="Задача успешно завершена",
-                    processed=100,
-                    total=100,
-                    details="Все этапы обработки завершены"
-                )
-                update_time = timezone.now()
-
-                cache.set('last_successful_update', update_time, timeout=None)
-
-                is_auto = hasattr(self, 'is_auto_sync') and self.is_auto_sync
-
-                if is_auto:
-                    cache.set('last_auto_sync_update', update_time, timeout=None)
-                else:
-                    cache.set('last_manual_update', update_time, timeout=None)
+                self._finish()
 
         except Exception as e:
             structured_logger.error(f"Критическая ошибка при выполнении задачи: {str(e)}")
@@ -508,3 +605,59 @@ class ParserTask(BaseTask):
                 message="Ошибка при выполнении задачи",
                 error=str(e)
             )
+
+    def _finish(self):
+        """Итог прогона: удача, «частично» или ошибка.
+
+        Отметку свежести (`last_successful_update`) ставим только после
+        полной удачи: на неё смотрит и ночной прогон, и страницы — сказать
+        «данные свежие», когда отгрузки остались вчерашними, значит соврать
+        ровно там, где это никто не проверит.
+        """
+        failed = self.failed_entities
+        names = ', '.join(record['name'].lower() for record in failed)
+        # Остановленные в знаменатель не берём: прогон, где всё упало, а
+        # последнюю сущность успели остановить, — это не «частично».
+        attempted = [record for record in self._entities
+                     if record['status'] != self.ENTITY_STOPPED]
+
+        if failed and len(failed) == len(attempted):
+            structured_logger.error("Ни одна сущность не обновилась")
+            self.update_progress(
+                status=TaskStatus.ERROR,
+                message="Синхронизация не удалась",
+                processed=100,
+                total=100,
+                details=f"Не обновились: {names}",
+                error=failed[0]['error'],
+            )
+            return
+
+        if failed:
+            structured_logger.error(f"Обновлено частично, не удались: {names}")
+            self.update_progress(
+                status=TaskStatus.PARTIAL,
+                message=f"Обновлено частично, не удались: {names}",
+                processed=100,
+                total=100,
+                details="Остальные сущности обновлены",
+                error=failed[0]['error'],
+            )
+            return
+
+        structured_logger.section_end("Парсер задач", "Все компоненты обработаны успешно")
+        self.update_progress(
+            status=TaskStatus.COMPLETED,
+            message="Задача успешно завершена",
+            processed=100,
+            total=100,
+            details="Все этапы обработки завершены"
+        )
+        update_time = timezone.now()
+
+        cache.set('last_successful_update', update_time, timeout=None)
+
+        if getattr(self, 'is_auto_sync', False):
+            cache.set('last_auto_sync_update', update_time, timeout=None)
+        else:
+            cache.set('last_manual_update', update_time, timeout=None)

@@ -101,7 +101,10 @@ export const LoadingProvider = ({ children }) => {
     const handleLoadingComplete = useCallback((status) => {
         if (status === 'error') {
             setError('Произошла ошибка при загрузке данных');
-        } else if (status === 'completed') {
+        } else if (status === 'completed' || status === 'partial') {
+            // «Частично» — данные всё-таки поменялись: часть сущностей
+            // обновилась, и страницы должны их перечитать. Что именно
+            // не обновилось, показывает карточка загрузки.
             setSyncVersion(v => v + 1);
         }
         // Не сбрасываем состояние сразу, оставляем для отображения результата
@@ -160,10 +163,11 @@ export const LoadingProvider = ({ children }) => {
                     message: state.message || 'Загрузка данных...',
                     processed: state.processed,
                     total: state.total,
+                    entities: state.entities || [],
                 });
             }
 
-            if (state.status === 'completed' || state.status === 'error' || state.status === 'stopped') {
+            if (['completed', 'partial', 'error', 'stopped'].includes(state.status)) {
                 setProgress({ processed: 0, total: 0 });
                 window.setTimeout(() => {
                     if (isMounted) handleLoadingComplete(state.status);
