@@ -74,6 +74,38 @@ def save_store(path: Path, store: dict) -> None:
     os.replace(tmp, path)
 
 
+class FileStore:
+    """Хранилище в JSON-файле. В бою заказы живут в базе (`DbStore`), а этот
+    остался для тестов: они гоняют порядок шагов sync_window на временных
+    файлах, и заводить ради них базу незачем."""
+
+    def __init__(self, path):
+        self.path = Path(path)
+
+    def load(self) -> dict:
+        return load_store(self.path)
+
+    def save(self, store: dict) -> None:
+        save_store(self.path, store)
+
+
+def as_store(target):
+    """Путь — файловое хранилище, всё остальное — уже готовое."""
+    return FileStore(target) if isinstance(target, (str, Path)) else target
+
+
+def legacy_orders_count(path) -> int:
+    """Сколько заказов лежит в старом файловом хранилище (0 — файла нет).
+
+    Нужно сторожу переезда: образ выкатывается сам, а перенос запускает человек,
+    и между этими моментами сверка не должна начать с чистого листа.
+    """
+    path = Path(path)
+    if not path.exists():
+        return 0
+    return len(load_store(path).get("orders") or {})
+
+
 def prune(store: dict, now: datetime = None) -> int:
     edge = ((now or datetime.now()) - timedelta(days=KEEP_DAYS)).strftime("%Y-%m-%d")
     # Записи без даты не трогаем: пустая строка меньше любого edge, и они
@@ -94,7 +126,7 @@ def merge(store: dict, orders: list) -> int:
     return fresh
 
 
-def sync_window(export, path: Path, acknowledge: bool, now: datetime = None) -> dict:
+def sync_window(export, target, acknowledge: bool, now: datetime = None) -> dict:
     """Прочитать окно выгрузки, сохранить, подтвердить и почистить хранилище.
 
     Порядок здесь не косметический, каждый шаг стоит на своём месте:
@@ -110,29 +142,31 @@ def sync_window(export, path: Path, acknowledge: bool, now: datetime = None) -> 
     Подтверждаем при этом не всегда — только полное окно, см. WINDOW_SIZE.
 
     export — объект с fetch()/acknowledge() (SiteOrdersExport или его двойник).
+    target — хранилище: путь к файлу или готовый бэкенд (в бою — база).
     """
+    store_io = as_store(target)
     orders = export.fetch()
     refused = getattr(export, "refused", False)
 
-    store = load_store(path)
+    store = store_io.load()
     fresh = merge(store, orders)
     # last_fetch двигаем только после настоящего ответа: по нему потом считаем,
     # давно ли сайт вообще что-то отдавал
     if not refused:
         store["last_fetch"] = (now or datetime.now()).isoformat(timespec="seconds")
-    save_store(path, store)
+    store_io.save(store)
 
     ack, lost = None, []
     # Неполное окно значит «мы догнали»: подтверждать нечего и, главное, вредно
     if acknowledge and len(orders) >= WINDOW_SIZE:
-        saved = load_store(path)["orders"]
+        saved = store_io.load()["orders"]
         lost = [o.order_id for o in orders if o.order_id not in saved]
         if not lost:
             ack = export.acknowledge()
             store["last_acknowledge"] = (now or datetime.now()).isoformat(timespec="seconds")
 
     dropped = prune(store, now=now)
-    save_store(path, store)
+    store_io.save(store)
     return {"fresh": fresh, "window": len(orders), "ack": ack, "lost": lost,
             "dropped": dropped, "refused": refused,
             "stale_days": fetch_age_days(store, now=now)}

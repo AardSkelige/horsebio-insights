@@ -259,3 +259,58 @@ class CdekWaybillState(models.Model):
         name = (self.payload or {}).get('name') or self.order_id
         status = (self.payload or {}).get('status') or 'без статуса'
         return f'Заказ {name} — {status}'
+
+
+class SiteOrderSnapshot(models.Model):
+    """Заказ сайта из выгрузки CommerceML — единственная его копия у нас.
+
+    Сайт отдаёт заказы окном и, получив подтверждение, больше их не отдаёт
+    никогда. До 07.09.2026 они лежали в JSON-файле на томе: пропал бы том —
+    пропали бы заказы, восстановить их было бы неоткуда. Здесь они бэкапятся
+    вместе с базой.
+
+    Запись хранится целиком в `payload` — той же формой, что читает и пишет
+    сверка (`SiteOrder.as_dict`). Отдельной колонкой вынесена только дата:
+    по ней хранилище чистится от слишком старых.
+    """
+    order_id = models.CharField(max_length=64, unique=True, verbose_name='Заказ на сайте')
+    date = models.CharField(max_length=10, blank=True, db_index=True,
+                            verbose_name='Дата заказа')
+    payload = models.JSONField(default=dict, verbose_name='Заказ целиком')
+    updated_at = models.DateTimeField(auto_now=True, verbose_name='Обновлён')
+
+    class Meta:
+        verbose_name = 'Заказ сайта (копия выгрузки)'
+        verbose_name_plural = 'Заказы сайта (копия выгрузки)'
+
+    def __str__(self):
+        payload = self.payload or {}
+        return f"Заказ {payload.get('number') or self.order_id} от {self.date or '—'}"
+
+
+class SiteOrdersReconcileState(models.Model):
+    """Отметки сверки заказов сайта: когда окно последний раз читали и подтверждали.
+
+    Строка одна. Отметки хранятся строками ровно в том виде, в каком их пишет
+    сверка: по ним считается, сколько дней сайт молчит, и разбирает их тот же
+    код, что и писал.
+    """
+    last_fetch = models.CharField(max_length=32, blank=True, verbose_name='Последняя выгрузка')
+    last_acknowledge = models.CharField(max_length=32, blank=True,
+                                        verbose_name='Последнее подтверждение')
+
+    class Meta:
+        verbose_name = 'Сверка заказов сайта (отметки)'
+        verbose_name_plural = 'Сверка заказов сайта (отметки)'
+
+    def __str__(self):
+        return f"выгрузка {self.last_fetch or '—'}, подтверждение {self.last_acknowledge or '—'}"
+
+    @classmethod
+    def get(cls):
+        """Строка всегда одна и та же.
+
+        Через `first() or create()` два процесса могли завести по строке, и
+        отметки второй становились невидимы навсегда: читают всегда первую.
+        """
+        return cls.objects.get_or_create(pk=1)[0]
