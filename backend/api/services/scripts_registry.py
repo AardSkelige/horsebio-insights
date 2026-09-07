@@ -233,6 +233,16 @@ SCRIPTS_CONFIG = [
         'args': ['resolve_ozon_ms_duplicates', '--apply'],
     },
     {
+        'id': 'horsebio_discounted_ozon',
+        'topic': 'Обновление данных',
+        'name': 'Остатки уценки на Ozon',
+        'account': 'HorseBio',
+        'schedule': 'Каждые 15 мин',
+        'description': 'Остаток уценённых карточек на витрине Ozon равен доступному остатку в МойСклад; просроченное обнуляется (Django-команда sync_discounted_ozon)',
+        'script': '/app/manage.py',
+        'args': ['sync_discounted_ozon'],
+    },
+    {
         'id': 'horsebio_inventory_check',
         'topic': 'Обновление данных',
         'name': 'Инвентаризация',

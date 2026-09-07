@@ -18,7 +18,6 @@ from api.views.discounted import (
     STATE_DELIST, STATE_EXPIRED, STATE_NO_DATE, STATE_OK, _build_data, _state_of,
 )
 
-STORE_HREF = 'https://api.moysklad.ru/api/remap/1.2/entity/store/store-uc'
 FOLDER_HREF = 'https://api.moysklad.ru/api/remap/1.2/entity/productfolder/folder-uc'
 ATTR_ID = 'attr-godendo'
 
@@ -77,7 +76,7 @@ class BuildDataTest(SimpleTestCase):
     def _run(self, products, stock_rows, days_on_stock=None):
         # Аналитика за период проверяется отдельно (AnalyticsTest) и ходит в свои
         # отчёты — здесь она только мешала бы считать вызовы
-        with patch('api.views.discounted._resolve_refs', return_value=(STORE_HREF, FOLDER_HREF, ATTR_ID)), \
+        with patch('api.views.discounted._resolve_refs', return_value=(FOLDER_HREF, ATTR_ID)), \
              patch('api.views.discounted._get_all_pages', side_effect=[products, stock_rows]), \
              patch('api.views.discounted._build_analytics', return_value={}), \
              patch('api.views.discounted.site_feed.offers', return_value={}), \
@@ -135,7 +134,7 @@ class BuildDataTest(SimpleTestCase):
     def test_days_on_stock_only_for_positions_with_stock(self):
         """Отчёт по документам стоит запроса на товар — для пустых карточек не дёргаем."""
         soon = (self.today + timedelta(days=100)).isoformat()
-        with patch('api.views.discounted._resolve_refs', return_value=(STORE_HREF, FOLDER_HREF, ATTR_ID)), \
+        with patch('api.views.discounted._resolve_refs', return_value=(FOLDER_HREF, ATTR_ID)), \
              patch('api.views.discounted.site_feed.offers', return_value={}), \
              patch('api.views.discounted._get_all_pages', side_effect=[
                  [_product('p1', 'A-UC', 'С остатком', soon), _product('p2', 'B-UC', 'Пустая', soon)],
@@ -240,7 +239,7 @@ class RequestShapeTest(SimpleTestCase):
             calls.append((path, dict(params or {})))
             return []
 
-        with patch('api.views.discounted._resolve_refs', return_value=(STORE_HREF, FOLDER_HREF, ATTR_ID)), \
+        with patch('api.views.discounted._resolve_refs', return_value=(FOLDER_HREF, ATTR_ID)), \
              patch('api.views.discounted._build_analytics', return_value={}), \
              patch('api.views.discounted.site_feed.offers', return_value={}), \
              patch('api.views.discounted._get_all_pages', side_effect=remember):
@@ -258,7 +257,7 @@ class RequestShapeTest(SimpleTestCase):
             calls.append((path, dict(params or {})))
             return []
 
-        with patch('api.views.discounted._resolve_refs', return_value=(STORE_HREF, FOLDER_HREF, ATTR_ID)), \
+        with patch('api.views.discounted._resolve_refs', return_value=(FOLDER_HREF, ATTR_ID)), \
              patch('api.views.discounted._build_analytics', return_value={}), \
              patch('api.views.discounted.site_feed.offers', return_value={}), \
              patch('api.views.discounted._get_all_pages', side_effect=remember):
@@ -266,15 +265,18 @@ class RequestShapeTest(SimpleTestCase):
 
         stock_call = next(c for c in calls if c[0] == '/report/stock/all')
         self.assertEqual(stock_call[1]['groupBy'], 'product')
-        self.assertIn(f'store={STORE_HREF}', stock_call[1]['filter'])
+        # Остаток считаем по всем складам: уценка лежит на складе готовой продукции
+        # вместе с обычным товаром, отделяет её карточка, а не склад
+        self.assertNotIn('store=', stock_call[1]['filter'])
+        self.assertIn(f'productFolder={FOLDER_HREF}', stock_call[1]['filter'])
 
 
 class AnalyticsTest(SimpleTestCase):
     """Итоги за период: уценено, продано, списано.
 
     Списание не берётся из документов, а считается как разница — всё, что ушло
-    со склада, но не продалось. Здесь проверяется, что арифметика сходится и
-    что возвраты не удваивают продажи.
+    с уценённых карточек, но не продалось. Здесь проверяется, что арифметика
+    сходится и что возвраты не удваивают продажи.
     """
 
     def setUp(self):
@@ -286,7 +288,7 @@ class AnalyticsTest(SimpleTestCase):
     def _run(self, turnover, profit):
         from api.views.discounted import _build_analytics
         with patch('api.views.discounted._get_all_pages', side_effect=[turnover, profit]):
-            return _build_analytics(STORE_HREF, 365)
+            return _build_analytics(FOLDER_HREF, ['p1'], 365)
 
     def test_written_off_is_what_left_but_was_not_sold(self):
         data = self._run(
@@ -346,7 +348,7 @@ class SiteStateTest(SimpleTestCase):
         cache.clear()
 
     def _run(self, products, stock_rows, on_site):
-        with patch('api.views.discounted._resolve_refs', return_value=(STORE_HREF, FOLDER_HREF, ATTR_ID)), \
+        with patch('api.views.discounted._resolve_refs', return_value=(FOLDER_HREF, ATTR_ID)), \
              patch('api.views.discounted._get_all_pages', side_effect=[products, stock_rows]), \
              patch('api.views.discounted._build_analytics', return_value={}), \
              patch('api.views.discounted.site_feed.offers', **on_site), \
@@ -410,7 +412,7 @@ class PublishTest(TestCase):
 
     def _post(self, product, pictures=('https://horse-bio.ru/d/a.png',), stock=7.0, on_site=None):
         with patch('api.views.discounted._get', return_value=product), \
-             patch('api.views.discounted._resolve_refs', return_value=(STORE_HREF, FOLDER_HREF, ATTR_ID)), \
+             patch('api.views.discounted._resolve_refs', return_value=(FOLDER_HREF, ATTR_ID)), \
              patch('api.views.discounted._get_all_pages', return_value=[{'stock': stock}]), \
              patch('api.views.discounted.site_feed.offers', return_value=on_site or {}), \
              patch('api.views.discounted.site_feed.pictures_for', return_value=list(pictures)) as pics, \
@@ -603,7 +605,7 @@ class RefreshTest(TestCase):
         cache.clear()
 
     def test_refresh_rereads_the_feed(self):
-        with patch('api.views.discounted._resolve_refs', return_value=(STORE_HREF, FOLDER_HREF, ATTR_ID)), \
+        with patch('api.views.discounted._resolve_refs', return_value=(FOLDER_HREF, ATTR_ID)), \
              patch('api.views.discounted._get_all_pages', side_effect=[[], []]), \
              patch('api.views.discounted._build_analytics', return_value={}), \
              patch('api.views.discounted.site_feed.offers', return_value={}) as feed:

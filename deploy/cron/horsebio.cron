@@ -5,7 +5,7 @@
 # одно ядро), и переезд на manage.py — не повод их пересматривать.
 #
 # Устанавливается вручную: crontab -l > /tmp/c && cat horsebio.cron >> /tmp/c && crontab /tmp/c
-# Проверить: crontab -l | grep -c '^[^#].*horsebio-check'   → должно быть 21
+# Проверить: crontab -l | grep -c '^[^#].*horsebio-check'   → должно быть 22
 # (счёт только по рабочим строкам: этот комментарий тоже попадёт в crontab)
 
 # ─── Себестоимость ───────────────────────────────────────────────────────────
@@ -45,6 +45,7 @@
 */5 * * * * sleep 120 && /root/horsebio/deploy/cron/horsebio-check.sh horsebio_ozon_postings
 */5 * * * * sleep 150 && /root/horsebio/deploy/cron/horsebio-check.sh horsebio_ozon_duplicates
 */5 * * * * sleep 180 && /root/horsebio/deploy/cron/horsebio-check.sh horsebio_ozon_returns
+*/15 * * * * sleep 210 && /root/horsebio/deploy/cron/horsebio-check.sh horsebio_discounted_ozon
 35 9 * * * /root/horsebio/deploy/cron/horsebio-check.sh horsebio_ozon_products
 45 9 * * * /root/horsebio/deploy/cron/horsebio-check.sh horsebio_ozon_points
 

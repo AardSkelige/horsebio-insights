@@ -1,5 +1,5 @@
 """
-Уценка — что лежит на складе уценённого товара и что с ним пора делать.
+Уценка — что лежит на уценённых карточках и что с этим пора делать.
 
 Уценяем только по одной причине — подходит срок годности. Правила (Лиля, Катя):
 уценка при остатке срока 4 месяца, снятие с продажи при остатке 2 месяца,
@@ -10,7 +10,14 @@
 всё остальное: сколько дней осталось и пора ли снимать позицию с продажи.
 
 Источник — три запроса к МойСклад: карточки из группы «Товары/Уценка» (там же
-доп. поле и цены), остатки по складу «Уценка» и себестоимость из того же отчёта.
+доп. поле и цены), остатки по этим карточкам и себестоимость из того же отчёта.
+
+Отдельного склада у уценки нет: она лежит на складе готовой продукции, отделённая
+карточкой с суффиксом -UC и физически — стеллажом. Учётный склад «Уценка» был
+упразднён 07.09.2026: заказы Ozon и сайта приходят на склад готовой продукции,
+и товар приходилось перед каждым заказом перемещать руками, а перемещения
+отчёт по складу считал расходом — то есть списанием.
+
 Отчёт по документам (дни на складе) дёргается только для позиций с остатком —
 их единицы, а запрос идёт по одному товару за раз.
 """
@@ -35,9 +42,8 @@ logger = logging.getLogger(__name__)
 
 BASE_URL = MoySkladAPIClient.BASE_URL
 
-# Склад и группа ищутся по имени: id разные в проде и в тестовом аккаунте,
-# а имена стабильны и видны пользователю (тот же приём, что в fbo_stock).
-STORE_NAME = "Уценка"
+# Группа ищется по имени: id разные в проде и в тестовом аккаунте, а имена
+# стабильны и видны пользователю (тот же приём, что в fbo_stock).
 FOLDER_NAME = "Уценка"
 FOLDER_PARENT = "Товары"
 ATTRIBUTE_NAME = "Годен до"
@@ -81,7 +87,9 @@ DISCOUNT_RATE = 0.30          # скидка от розничной цены с
 MONTHS_TO_DELIST = 2          # за сколько месяцев до конца срока снимаем с продажи
 DAYS_TO_DELIST = MONTHS_TO_DELIST * 30
 
-REFS_CACHE_KEY = "discounted_refs"
+# Имя ключа сменилось вместе с составом refs: в кеше прода лежит кортеж прежнего
+# кода, со складом, и распаковать его в две переменные нельзя
+REFS_CACHE_KEY = "discounted_folder_refs"
 REFS_CACHE_TTL = 24 * 60 * 60
 
 DATA_CACHE_KEY = "discounted_report"
@@ -133,14 +141,10 @@ def _get_all_pages(path, params=None):
 
 
 def _resolve_refs():
-    """href склада «Уценка», href группы «Товары/Уценка» и id доп. поля «Годен до»."""
+    """href группы «Товары/Уценка» и id доп. поля «Годен до»."""
     cached = cache.get(REFS_CACHE_KEY)
     if cached:
         return cached
-
-    stores = _get("/entity/store", {"filter": f"name={STORE_NAME}", "limit": 1}).get("rows", [])
-    if not stores:
-        raise ExternalServiceError(f"Склад «{STORE_NAME}» не найден в МойСклад")
 
     # Имя группы уникально только внутри родителя: «Уценка» лежит в «Товары»
     folders = _get("/entity/productfolder", {"filter": f"name={FOLDER_NAME}", "limit": 10}).get("rows", [])
@@ -153,7 +157,7 @@ def _resolve_refs():
     if not attribute:
         raise ExternalServiceError(f"Доп. поле товара «{ATTRIBUTE_NAME}» не заведено в МойСклад")
 
-    refs = (stores[0]["meta"]["href"], folder["meta"]["href"], attribute["id"])
+    refs = (folder["meta"]["href"], attribute["id"])
     cache.set(REFS_CACHE_KEY, refs, REFS_CACHE_TTL)
     return refs
 
@@ -256,33 +260,44 @@ def _days_on_stock(product_id):
     return round(max(days)) if days else None
 
 
-def _build_analytics(store_href, days):
-    """Итоги по складу «Уценка» за период: уценено, продано, списано.
+def _build_analytics(folder_href, product_ids, days):
+    """Итоги по уценённым карточкам за период: уценено, продано, списано.
 
     Два отчёта вместо разбора документов:
-      • «Обороты» дают приход (это и есть уценённое) и весь расход со склада;
+      • «Обороты» дают приход (техоперация — это и есть уценённое) и весь расход;
       • «Прибыль по товарам» — сколько из этого расхода ушло продажами, по какой
         цене и с какой себестоимостью.
 
-    Списание считается как остаток: что ушло со склада, но не было продано.
-    Возвраты вычитаем из продаж, иначе вернувшийся товар посчитался бы проданным
-    дважды — один раз продажей, второй раз попал бы в «списано» с минусом.
+    Списание считается как остаток: что ушло, но не было продано. Возвраты
+    вычитаем из продаж, иначе вернувшийся товар посчитался бы проданным дважды —
+    один раз продажей, второй раз попал бы в «списано» с минусом.
+
+    «Обороты» фильтровать по группе товаров не умеют, а поле product принимают
+    только одно за запрос (ошибка 1030), поэтому идём по карточке за раз — их
+    единицы. Отчёт же по всему ассортименту за год МойСклад отдавать отказывается.
     """
     moment_to = datetime.now()
     moment_from = moment_to - timedelta(days=days)
     period = {
         "momentFrom": moment_from.strftime("%Y-%m-%d 00:00:00"),
         "momentTo": moment_to.strftime("%Y-%m-%d %H:%M:%S"),
-        "filter": f"store={store_href}",
     }
 
-    turnover = _get_all_pages("/report/turnover/all", period)
+    turnover = []
+    for product_id in product_ids:
+        turnover += _get_all_pages(
+            "/report/turnover/all",
+            {**period, "filter": f"product={BASE_URL}/entity/product/{product_id}"},
+        )
     marked_qty = sum((r.get("income") or {}).get("quantity") or 0 for r in turnover)
     marked_cost = sum((r.get("income") or {}).get("sum") or 0 for r in turnover) / 100
     left_qty = sum((r.get("outcome") or {}).get("quantity") or 0 for r in turnover)
     left_cost = sum((r.get("outcome") or {}).get("sum") or 0 for r in turnover) / 100
 
-    profit = _get_all_pages("/report/profit/byproduct", period)
+    profit = _get_all_pages(
+        "/report/profit/byproduct",
+        {**period, "filter": f"productFolder={folder_href};withSubFolders=true"},
+    )
     sold_qty = sum((r.get("sellQuantity") or 0) - (r.get("returnQuantity") or 0) for r in profit)
     revenue = sum((r.get("sellSum") or 0) - (r.get("returnSum") or 0) for r in profit) / 100
     sold_cost = sum((r.get("sellCostSum") or 0) - (r.get("returnCostSum") or 0) for r in profit) / 100
@@ -302,7 +317,7 @@ def _build_analytics(store_href, days):
 
 
 def _invalidate_cache():
-    """Сбросить всё, что посчитано по складу «Уценка».
+    """Сбросить всё, что посчитано по уценённым карточкам.
 
     Кешей три: страница, облегчённые позиции для уведомлений и сами уведомления.
     Разъехавшись, они показывают в колокольчике то, что человек уже исправил,
@@ -318,12 +333,12 @@ def _invalidate_cache():
 
 
 def _build_positions(refresh=False, with_days_on_stock=True):
-    """Позиции склада «Уценка»: остаток, срок, цена и что сейчас на витрине.
+    """Уценённые позиции: остаток, срок, цена и что сейчас на витрине.
 
     with_days_on_stock=False пропускает отчёт по документам — он идёт по одному
     запросу на товар и нужен только странице, но не уведомлениям.
     """
-    store_href, folder_href, attribute_id = _resolve_refs()
+    folder_href, attribute_id = _resolve_refs()
     today = date.today()
 
     # Карточки ищем по пути группы, а не по ссылке на неё: /entity/product не знает
@@ -337,7 +352,7 @@ def _build_positions(refresh=False, with_days_on_stock=True):
     stock_rows = _get_all_pages(
         "/report/stock/all",
         {
-            "filter": f"store={store_href};productFolder={folder_href};withSubFolders=true",
+            "filter": f"productFolder={folder_href};withSubFolders=true",
             "groupBy": "product",
         },
     )
@@ -426,7 +441,7 @@ def positions_snapshot(refresh=False):
 
 def _build_data(period_days=DEFAULT_PERIOD_DAYS, refresh=False):
     """Собрать отчёт из МойСклад. Тяжёлая часть — кешируется вызывающим."""
-    store_href, _, _ = _resolve_refs()
+    folder_href, _ = _resolve_refs()
     positions = _build_positions(refresh=refresh)
 
     in_stock = [p for p in positions if p["quantity"] > 0]
@@ -441,7 +456,7 @@ def _build_data(period_days=DEFAULT_PERIOD_DAYS, refresh=False):
     return {
         "positions": positions,
         "summary": summary,
-        "analytics": _build_analytics(store_href, period_days),
+        "analytics": _build_analytics(folder_href, [p["id"] for p in positions], period_days),
         "rules": {
             "discount_rate": DISCOUNT_RATE,
             "months_to_delist": MONTHS_TO_DELIST,
@@ -452,7 +467,7 @@ def _build_data(period_days=DEFAULT_PERIOD_DAYS, refresh=False):
 
 @api_view(["GET"])
 def discounted_list(request):
-    """Позиции на складе «Уценка» с расчётом, что пора снимать с продажи."""
+    """Уценённые позиции с расчётом, что пора снимать с продажи."""
     refresh = request.GET.get("refresh") == "1"
     if refresh:
         _invalidate_cache()
@@ -513,11 +528,9 @@ def discounted_publish(request, product_id):
             f"У карточки не заполнена цена «{RETAIL_PRICE_NAME}» — публиковать нечего"
         )
 
-    store_href, _, _ = _resolve_refs()
     stock_rows = _get_all_pages(
         "/report/stock/all",
-        {"filter": f"store={store_href};product={BASE_URL}/entity/product/{product_id}",
-         "groupBy": "product"},
+        {"filter": f"product={BASE_URL}/entity/product/{product_id}", "groupBy": "product"},
     )
     quantity = int(sum(row.get("stock") or 0 for row in stock_rows))
 
