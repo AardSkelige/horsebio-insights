@@ -29,8 +29,11 @@ class MsHttpTests(SimpleTestCase):
     START = 1000.0
 
     def setUp(self):
-        # Пауза глобальна на процесс — иначе тесты влияют друг на друга.
+        # Пауза и счётчик 429 глобальны на процесс — иначе тесты влияют
+        # друг на друга: серия 429 из одного теста дотягивалась бы до другого.
         ms_http._pause_until = 0.0
+        ms_http.reset_breaker()
+        self.addCleanup(ms_http.reset_breaker)
         self.now = self.START
         patchers = [
             patch("msapi.http.time.monotonic", lambda: self.now),
@@ -80,6 +83,51 @@ class MsHttpTests(SimpleTestCase):
 
         self.assertEqual(response.status_code, 429)
         self.assertEqual(mock_request.call_count, ms_http.MAX_ATTEMPTS)
+
+    @patch("msapi.http.requests.request")
+    def test_endless_429_stops_the_requests_altogether(self, mock_request):
+        """Вежливость одного запроса не спасает, когда их сотни: 200 ошибочных
+        ответов в минуту — и МойСклад отключает аккаунту API на час, вместе
+        со всем, что ходит под этим токеном."""
+        mock_request.return_value = _response(status=429)
+
+        with self.assertRaises(ms_http.RateLimitTripped):
+            for _ in range(ms_http.BREAKER_STREAK):
+                ms_http.get("https://api.moysklad.ru/api/remap/1.2/entity/product")
+
+        calls_before = mock_request.call_count
+        with self.assertRaises(ms_http.RateLimitTripped):
+            ms_http.get("https://api.moysklad.ru/api/remap/1.2/entity/product")
+        self.assertEqual(mock_request.call_count, calls_before,
+                         'после срабатывания запросы не уходят вовсе')
+
+    @patch("msapi.http.requests.request")
+    def test_a_single_good_answer_breaks_the_streak(self, mock_request):
+        """Одиночный 429 — обычное дело: корзина пуста, подождали, пошли дальше.
+        Останавливать на этом было бы хуже, чем не останавливать вовсе."""
+        # Циклов заведомо больше порога: серия рвётся каждым удачным ответом.
+        cycles = ms_http.BREAKER_STREAK * 2
+        mock_request.side_effect = [_response(status=429), _response(status=200)] * cycles
+
+        for _ in range(cycles):
+            response = ms_http.get("https://api.moysklad.ru/api/remap/1.2/entity/product")
+            self.assertEqual(response.status_code, 200)
+
+    @patch("msapi.http.requests.request")
+    def test_breaker_lets_go_after_the_cooldown(self, mock_request):
+        """Молчим не навсегда: за паузу корзина восстанавливается, а прогон
+        по расписанию должен пойти сам, без ручного вмешательства."""
+        mock_request.return_value = _response(status=429)
+        with self.assertRaises(ms_http.RateLimitTripped):
+            for _ in range(ms_http.BREAKER_STREAK):
+                ms_http.get("https://api.moysklad.ru/api/remap/1.2/entity/product")
+
+        self.now += ms_http.BREAKER_COOLDOWN_S + 1
+        mock_request.return_value = _response(status=200)
+
+        response = ms_http.get("https://api.moysklad.ru/api/remap/1.2/entity/product")
+
+        self.assertEqual(response.status_code, 200)
 
     @patch("msapi.http.requests.request")
     def test_low_remaining_pauses_next_request(self, mock_request):
