@@ -26,6 +26,7 @@ import argparse
 import base64
 import email
 import imaplib
+import json
 import os
 import re
 import sys
@@ -38,6 +39,7 @@ from pathlib import Path
 from dotenv import load_dotenv
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', '..', '..', '_shared'))
+from django_env import refresh_connections
 from order_email_utils import (
     build_order_label, build_order_delete_action, format_money, format_phone,
     state_lock, load_state, save_state,
@@ -49,7 +51,31 @@ IMAP_HOST = os.getenv('ORDER_MAIL_IMAP_HOST')
 IMAP_USER = os.getenv('ORDER_MAIL_IMAP_USER')
 IMAP_PASSWORD = os.getenv('ORDER_MAIL_IMAP_PASSWORD')
 
+# Старое место журнала. Роботы отсюда не читают — файл нужен только сторожу
+# переезда, пока том ещё смонтирован.
 STATE_FILE = Path(__file__).parent.parent / "data" / ".order_email_state.json"
+
+
+def refuse_if_not_migrated(state: dict) -> None:
+    """Не дать роботам начать с пустого журнала, если перенос ещё не сделан.
+
+    Образ выкатывается сам, а `manage.py import_order_emails` запускает человек.
+    В промежутке робот счёл бы неразобранными все письма разом и завёл бы заказы
+    в МойСклад по второму разу.
+    """
+    if state.get("orders") or state.get("processed_message_ids") or not STATE_FILE.exists():
+        return
+    try:
+        left = len(json.loads(STATE_FILE.read_text()).get("orders") or {})
+    except (json.JSONDecodeError, OSError):
+        return
+    if not left:
+        return
+
+    raise SystemExit(
+        f"В базе журнала нет, а в файле заказов: {left}. Сначала перенос:\n"
+        f"  docker compose exec -T backend python manage.py import_order_emails"
+    )
 
 # Отправитель писем-уведомлений Megagroup CMS — подтверждено на живом письме
 NOTIFICATION_SENDER = "noreply@megagroup.ru"
@@ -324,15 +350,16 @@ class OrderEmailReader:
             "error": 0,
         }
 
-        # Лок держим на весь цикл load→process→save — иначе 02_create_orders.py,
-        # читающий и переписывающий тот же файл параллельно, может затереть то,
-        # что мы вот-вот сюда запишем (см. state_lock() в order_email_utils.py)
-        with state_lock(STATE_FILE):
+        # Замок держим на весь цикл load→process→save — иначе 02_create_orders.py,
+        # работающий с тем же журналом параллельно, может затереть то, что мы
+        # вот-вот запишем (см. state_lock() в order_email_store.py)
+        with state_lock():
             if self.force:
                 self.state = dict(self.STATE_DEFAULT)
                 self.force = False
             else:
-                self.state = load_state(STATE_FILE, self.STATE_DEFAULT)
+                self.state = load_state(self.STATE_DEFAULT)
+                refuse_if_not_migrated(self.state)
 
             conn = self._connect()
             try:
@@ -361,7 +388,7 @@ class OrderEmailReader:
 
             if not self.dry_run:
                 self.state["last_checked_date"] = datetime.now().strftime("%Y-%m-%d")
-                save_state(STATE_FILE, self.state)
+                save_state(self.state)
 
         total_orders = len(self.state["orders"])
         paid_orders = sum(
@@ -482,6 +509,10 @@ def main():
         iteration = 0
         while True:
             iteration += 1
+            # Соединение с базой не вечно: Django закрывает просроченные только
+            # на границе запроса, а её здесь нет. Без этого демон, простоявший
+            # ночь, падает на первом же обращении вместо переподключения.
+            refresh_connections()
             try:
                 reader.run_once()
             except Exception as e:

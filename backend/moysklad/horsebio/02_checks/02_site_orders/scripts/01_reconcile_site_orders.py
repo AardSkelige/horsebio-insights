@@ -44,40 +44,14 @@ from api_client import ProductionHelper, MOYSKLAD_TOKEN, BASE_URL  # noqa: E402
 from site_orders_export import SiteOrdersExport, SiteExportError  # noqa: E402
 from site_orders_store import DbStore  # noqa: E402
 from reconcile_core import (  # noqa: E402
-    ROBOT_START, WINDOW_SIZE, build_payload, compare, fetch_age_days,
-    legacy_orders_count, sync_window,
+    ROBOT_START, WINDOW_SIZE, build_payload, compare, fetch_age_days, sync_window,
 )
 
 # Заказы живут в базе: они единственная копия, а том мог не смонтироваться.
 STORE = DbStore()
 
-# Старое место хранилища. Сверка отсюда не читает — файл нужен только сторожу
-# переезда ниже, пока том ещё смонтирован.
-STORE_FILE = Path(__file__).parent.parent / "data" / "site_orders.json"
-
 # Канал продаж «Прочее | Сайт Horse-Bio» — тот же, что проставляет робот
 SALES_CHANNEL_ID = "af781aeb-711c-11f0-0a80-1a56002f3340"
-
-
-def refuse_if_not_migrated(store: dict) -> None:
-    """Не дать сверке начать с чистого листа, если перенос ещё не сделан.
-
-    Образ выкатывается сам, а `manage.py import_site_orders` запускает человек.
-    Между этими моментами сверка увидела бы пустое хранилище и отчиталась бы
-    бодрым «сверено 0 заказов, расхождений нет» — вся история просто исчезла бы
-    с глаз, ничего при этом не сломав.
-    """
-    if store.get("orders"):
-        return
-    left = legacy_orders_count(STORE_FILE)
-    if not left:
-        return
-
-    raise SystemExit(
-        f"В базе заказов нет, а в файле их {left}. Сначала перенос:\n"
-        f"  docker compose exec -T backend python manage.py import_site_orders"
-    )
-
 
 def ms_orders_by_external_code(helper: ProductionHelper) -> dict:
     channel = f"{BASE_URL}/entity/saleschannel/{SALES_CHANNEL_ID}"
@@ -97,8 +71,6 @@ def main():
     args = parser.parse_args()
 
     print(f"{'=' * 64}\nСверка заказов сайта: {datetime.now():%Y-%m-%d %H:%M:%S}\n{'=' * 64}")
-
-    refuse_if_not_migrated(STORE.load())
 
     export_error, stale_days = None, None
     try:

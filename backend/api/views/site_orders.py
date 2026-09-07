@@ -1,10 +1,8 @@
-import json
 import logging
 import os
 import sys
 from collections import defaultdict
 from datetime import datetime
-from pathlib import Path
 
 from rest_framework.decorators import api_view
 from rest_framework.response import Response
@@ -16,14 +14,13 @@ from .scripts_monitor import scripts_auth
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', '..', 'moysklad', 'horsebio', '_shared'))
 from order_email_utils import (  # noqa: E402 — те же helper'ы, что и в 02_create_orders.py
     build_customer_name, build_discount_label, site_discount_kopecks,
-    state_lock, load_state, save_state, forget_order,
+    state_lock, load_state, save_state, forget_order, last_checked_at,
 )
 
 logger = logging.getLogger(__name__)
 
 # Тот же путь, что и в SCRIPTS_CONFIG (scripts_monitor.py) — контейнер бэкенда
 # всегда монтирует backend/ в /app, локально и в проде (см. docker-compose*.yml)
-STATE_FILE = Path('/app/moysklad/horsebio/01_daemons/06_order_email_sync/data/.order_email_state.json')
 
 MOYSKLAD_ORDER_URL = 'https://online.moysklad.ru/app/#customerorder/edit?id={}'
 
@@ -226,17 +223,17 @@ def site_orders_list(request):
     ?dir=          — asc|desc (по умолчанию desc)
     ?limit=&offset= — пагинация (по умолчанию limit=20)
     """
-    if not STATE_FILE.exists():
+    try:
+        state = load_state({})
+    except Exception as e:
+        logger.exception('Не удалось прочитать журнал заказов сайта')
+        return Response({'status': 'error', 'message': str(e)}, status=500)
+
+    if not state.get('orders'):
         return Response({
             'status': 'no_data',
             'message': 'Демон чтения почты ещё ни разу не запускался — данных пока нет.',
         })
-
-    try:
-        state = json.loads(STATE_FILE.read_text())
-    except Exception as e:
-        logger.exception('Не удалось прочитать state-файл заказов сайта')
-        return Response({'status': 'error', 'message': str(e)}, status=500)
 
     orders_by_id = {}
     rows = []
@@ -281,7 +278,10 @@ def site_orders_list(request):
         row['ozon'] = ozon_by_order.get(row['order_id'])
         row['timeline'] = _build_timeline(orders_by_id[row['order_id']], orders_by_id[row['order_id']].get('ms') or {})
 
-    last_checked = datetime.fromtimestamp(STATE_FILE.stat().st_mtime).isoformat()
+    # Когда журнал трогали в последний раз. Раньше это было время изменения
+    # файла состояния; теперь журнал в базе, и отметку хранит она же.
+    checked_at = last_checked_at()
+    last_checked = checked_at.isoformat() if checked_at else None
 
     return Response({
         'status': 'success',
@@ -300,22 +300,17 @@ def site_order_delete(request, order_id):
     DELETE /api/site-orders/{order_id}/ — убрать заказ из журнала автоматизации
     (используется кнопкой «Удалить» на находках /checks и на странице «Заказы
     сайта» — для тестовых/ошибочных записей). Само письмо в почте и документы
-    в МойСклад не трогает — только внутренний state-файл. Убираем заодно
-    Message-ID письма(-ем) этого заказа из processed_message_ids, чтобы при
-    следующей проверке почты письмо могло быть разобрано заново.
+    в МойСклад не трогает — только внутренний журнал. Убираем заодно
+    Message-ID письма(-ем) этого заказа, чтобы при следующей проверке почты
+    письмо могло быть разобрано заново.
     """
-    if not STATE_FILE.exists():
-        return Response({'status': 'error', 'message': 'Файл состояния не найден'}, status=404)
-
-    # Тот же лок, что держат 01_read_order_emails.py / 02_create_orders.py: без него
-    # это read-modify-write гонится с демонами и молча затирает только что созданный
-    # ими заказ (см. state_lock() и инцидент с заказом 532598916 в order_email_utils.py)
+    # Тот же замок, что держат 01_read_order_emails.py / 02_create_orders.py: без него
+    # это read-modify-write гонится с роботами и молча затирает только что созданный
+    # ими заказ (см. state_lock() и инцидент с заказом 532598916 в order_email_store.py)
     try:
-        with state_lock(STATE_FILE):
-            state = load_state(STATE_FILE, {})
-            if forget_order(state, order_id) is None:
+        with state_lock():
+            if forget_order(order_id) is None:
                 return Response({'status': 'error', 'message': 'Заказ не найден в журнале'}, status=404)
-            save_state(STATE_FILE, state)
     except Exception as e:
         logger.exception('Не удалось удалить заказ %s из state-файла', order_id)
         return Response({'status': 'error', 'message': str(e)}, status=500)

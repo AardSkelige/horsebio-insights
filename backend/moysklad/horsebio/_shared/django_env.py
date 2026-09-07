@@ -35,3 +35,16 @@ def setup_django() -> None:
     import django
     django.setup()
     _ready = True
+
+
+def refresh_connections() -> None:
+    """Закрыть просроченные соединения с базой.
+
+    Нужно демон-циклам: Django убирает их сам только на границе запроса,
+    а её там нет. Без этого демон, простоявший ночь, падает на первом же
+    обращении вместо переподключения.
+    """
+    setup_django()
+    from django.db import close_old_connections
+
+    close_old_connections()

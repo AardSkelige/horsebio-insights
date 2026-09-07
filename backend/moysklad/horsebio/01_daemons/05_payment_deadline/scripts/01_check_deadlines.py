@@ -7,7 +7,8 @@
   - или на самой отгрузке стоит "Индивидуальный срок (дней)"
   - и сумма ещё не оплачена полностью
 
-Выводит в консоль и пишет лог в data/deadlines.log.
+Выводит в консоль, пишет лог в scripts_logs/deadlines.log, а снимок
+результата — в базу (его читает страница «Сроки оплаты»).
 
 Использование:
     python3 01_check_deadlines.py
@@ -23,6 +24,7 @@ from pathlib import Path
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', '..', '..', '_shared'))
 from api_client import MOYSKLAD_TOKEN, BASE_URL
+from django_env import setup_django
 # Запросы к МойСклад идут через общий слой: ожидание лимита, 429, повторы.
 from msapi import http as ms_http  # noqa: E402
 
@@ -32,8 +34,9 @@ HEADERS = {
     "Accept-Encoding": "gzip",
 }
 
-DATA_DIR = Path(__file__).parent.parent / "data"
-LOG_FILE = DATA_DIR / "deadlines.log"
+# Лог — рядом с логами прогонов проверок: этот том смонтирован и переживает
+# деплой, а каталог data/ у робота уезжает вместе с переездом снимка в базу.
+LOG_FILE = Path(os.getenv("SCRIPTS_LOGS_DIR", "/app/scripts_logs")) / "deadlines.log"
 
 FIELD_COUNTERPARTY_DAYS = "Срок отсрочки (дней)"
 FIELD_DEMAND_DAYS = "Индивидуальный срок (дней)"
@@ -210,7 +213,7 @@ def analyze_documents(docs: list, counterparty_map: dict, show_all: bool, doc_ki
     return results, skipped_commission
 
 
-def save_json(results: list, data_dir: Path) -> None:
+def save_json(results: list) -> None:
     today = datetime.now()
     overdue = [r for r in results if not r["is_paid"] and r["days_left"] < 0]
     warning = [r for r in results if not r["is_paid"] and 0 <= r["days_left"] <= WARN_DAYS]
@@ -230,9 +233,12 @@ def save_json(results: list, data_dir: Path) -> None:
             "paid": len(paid),
         },
     }
-    data_dir.mkdir(exist_ok=True)
-    with open(data_dir / "deadlines.json", "w", encoding="utf-8") as f:
-        json.dump(payload, f, ensure_ascii=False, indent=2)
+    # Снимок — в базу: его читает страница «Сроки оплаты», и файл на томе
+    # означал бы пустую страницу от каждого деплоя до ближайшего прогона.
+    setup_django()
+    from api.models import PaymentDeadlineSnapshot
+
+    PaymentDeadlineSnapshot.store(payload)
 
 
 def print_results(results: list) -> str:
@@ -369,7 +375,7 @@ def main():
     print(output)
 
     if not args.all:
-        save_json(results, DATA_DIR)
+        save_json(results)
 
     if args.results_out:
         try:
@@ -377,7 +383,7 @@ def main():
         except Exception as e:
             print(f"Ошибка сохранения результатов JSON: {e}")
 
-    DATA_DIR.mkdir(exist_ok=True)
+    LOG_FILE.parent.mkdir(parents=True, exist_ok=True)
     with open(LOG_FILE, "a", encoding="utf-8") as f:
         f.write(header + "\n")
         f.write(output + "\n")

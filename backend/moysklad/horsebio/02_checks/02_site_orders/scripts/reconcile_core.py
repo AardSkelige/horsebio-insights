@@ -94,18 +94,6 @@ def as_store(target):
     return FileStore(target) if isinstance(target, (str, Path)) else target
 
 
-def legacy_orders_count(path) -> int:
-    """Сколько заказов лежит в старом файловом хранилище (0 — файла нет).
-
-    Нужно сторожу переезда: образ выкатывается сам, а перенос запускает человек,
-    и между этими моментами сверка не должна начать с чистого листа.
-    """
-    path = Path(path)
-    if not path.exists():
-        return 0
-    return len(load_store(path).get("orders") or {})
-
-
 def prune(store: dict, now: datetime = None) -> int:
     edge = ((now or datetime.now()) - timedelta(days=KEEP_DAYS)).strftime("%Y-%m-%d")
     # Записи без даты не трогаем: пустая строка меньше любого edge, и они

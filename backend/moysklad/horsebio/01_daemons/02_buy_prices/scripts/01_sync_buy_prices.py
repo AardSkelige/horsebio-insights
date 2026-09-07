@@ -35,10 +35,6 @@ HEADERS = {
 }
 
 DATA_DIR = Path(__file__).parent.parent / "data"
-# Старое место истории. Робот отсюда не читает — файл нужен только сторожу
-# переезда, пока том ещё смонтирован.
-STATE_FILE = DATA_DIR / ".sync_state.json"
-
 STORE = DbStore()
 DELAY = 0.2  # секунд между запросами обновления
 HISTORY_KEEP = 90  # сколько запусков хранить в истории
@@ -103,28 +99,6 @@ def load_state() -> dict:
 
 def save_state(state: dict):
     STORE.save(state)
-
-
-def refuse_if_not_migrated(state: dict) -> None:
-    """Не дать роботу начать с пустой истории, если перенос ещё не сделан.
-
-    Образ выкатывается сам, а `manage.py import_buy_price_history` запускает
-    человек. В промежутке робот записал бы первый прогон в пустую базу, а файл
-    с девяноста прогонами остался бы лежать нетронутым — и разъехались бы.
-    """
-    if state.get("history") or not STATE_FILE.exists():
-        return
-    try:
-        left = len(json.loads(STATE_FILE.read_text(encoding="utf-8")).get("history") or [])
-    except (json.JSONDecodeError, OSError):
-        return
-    if not left:
-        return
-
-    raise SystemExit(
-        f"В базе истории нет, а в файле прогонов: {left}. Сначала перенос:\n"
-        f"  docker compose exec -T backend python manage.py import_buy_price_history"
-    )
 
 
 # === API ===
@@ -360,7 +334,6 @@ def main():
     print()
 
     state = load_state()
-    refuse_if_not_migrated(state)
     if state.get("last_run"):
         print(f"Последний запуск: {state['last_run']}")
         last = state.get("last_stats", {})
@@ -551,7 +524,7 @@ def main():
             state["history"] = state["history"][-HISTORY_KEEP:]
 
         save_state(state)
-        print(f"\nState сохранён: {STATE_FILE}")
+        print("\nИстория прогона сохранена")
     else:
         print(f"\n(dry-run — state не обновляется)")
 

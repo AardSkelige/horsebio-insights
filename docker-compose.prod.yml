@@ -25,17 +25,16 @@ services:
       # смонтировать. Первым, 06.09.2026, уехал робот накладных СДЭК —
       # его записи теперь в таблице CdekWaybillState.
       #
+      # Уже переехали: накладные СДЭК (06.09), заказы сайта и история закупочных
+      # цен (07.09) — их состояние теперь в таблицах, тома сняты.
+      #
       # Том health-чеков (hb_health_data) снят 07.09.2026 без переезда: его файлы
       # давно производные. Источник правды — таблица HealthCheckException,
       # а export_exceptions_to_json переписывает их из неё перед каждым прогоном.
       # Том оставался с тех времён, когда исключения жили только в файлах.
       - hb_returns_data:/app/moysklad/horsebio/01_daemons/03_returns/data
-      - hb_buy_prices_data:/app/moysklad/horsebio/01_daemons/02_buy_prices/data
       - hb_deadlines_data:/app/moysklad/horsebio/01_daemons/05_payment_deadline/data
       - hb_order_email_data:/app/moysklad/horsebio/01_daemons/06_order_email_sync/data
-      # Копия заказов сайта: подтверждённые в выгрузке заказы сайт больше не
-      # отдаёт, так что этот файл — единственный их экземпляр
-      - hb_site_orders_data:/app/moysklad/horsebio/02_checks/02_site_orders/data
       # Состояние бэкапа для проверки «Бэкапы» на странице /checks. Только чтение
       # и только каталог state: в самих архивах лежат .env.prod и приватные ключи,
       # их приложению видеть незачем. Каталог на хосте, а не volume — пишет его
@@ -88,10 +87,8 @@ volumes:
   django_cache:
   scripts_logs:
   hb_returns_data:
-  hb_buy_prices_data:
   hb_deadlines_data:
   hb_order_email_data:
-  hb_site_orders_data:
 
 networks:
   app-network:

@@ -1300,9 +1300,7 @@ class SiteOrdersTests(TestCase):
         }}}}
 
     def _run(self, state, client=None):
-        path = Path(tempfile.mkdtemp()) / 'state.json'
-        path.write_text(json.dumps(state), encoding='utf-8')
-        return site_orders.process_paid_orders(state_path=path, client=client)
+        return site_orders.process_paid_orders(state=state, client=client)
 
     def test_creates_order_for_paid_site_order(self):
         client = FakeOrderClient()
@@ -1369,8 +1367,8 @@ class SiteOrdersTests(TestCase):
         self.quote.refresh_from_db()
         self.assertEqual(self.quote.status, OzonDeliveryQuote.STATUS_FAILED)
 
-    def test_missing_state_file_is_not_an_error(self):
-        stats = site_orders.process_paid_orders(state_path='/nonexistent/state.json')
+    def test_empty_journal_is_not_an_error(self):
+        stats = site_orders.process_paid_orders(state={})
         self.assertEqual(stats, {'checked': 0, 'created': 0, 'skipped': 0, 'failed': 0})
 
 
@@ -1429,9 +1427,7 @@ class MalformedQuoteIdTests(TestCase):
             'paid': '1', 'total': '100', 'items': [],
             'field': {'ozon_quote_id': quote_id, 'phone': '79161112233'},
         }}}}
-        path = Path(tempfile.mkdtemp()) / 'state.json'
-        path.write_text(json.dumps(state), encoding='utf-8')
-        return site_orders.process_paid_orders(state_path=path, client=FakeOrderClient())
+        return site_orders.process_paid_orders(state=state, client=FakeOrderClient())
 
     def test_garbage_does_not_break_the_run(self):
         stats = self._run('не-uuid-а-мусор')

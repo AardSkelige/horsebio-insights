@@ -29,25 +29,10 @@ sys.path.insert(0, str(Path(settings.BASE_DIR) / 'moysklad' / 'horsebio' / '_sha
 from order_email_utils import split_site_discount  # noqa: E402
 
 QUOTE_FIELD = 'ozon_quote_id'
-STATE_FILE = (
-    Path(settings.BASE_DIR)
-    / 'moysklad' / 'horsebio' / '01_daemons' / '06_order_email_sync'
-    / 'data' / '.order_email_state.json'
-)
 
-
-def _read_state(path=None):
-    """Читает state демона 06. Отсутствие файла — не ошибка: писем ещё не было."""
-    path = Path(path or STATE_FILE)
-    if not path.exists():
-        logger.info('Ozon Доставка: state-файл заказов сайта не найден (%s)', path)
-        return {}
-    try:
-        with open(path, encoding='utf-8') as fh:
-            return json.load(fh)
-    except (ValueError, OSError) as exc:
-        logger.error('Ozon Доставка: не читается state заказов сайта: %s', exc)
-        return {}
+# Журнал заказов сайта живёт в базе (см. api.models.OrderEmailOrder): до
+# 07.09.2026 он был JSON-файлом на томе, и этот модуль читал файл напрямую.
+from order_email_store import load_state  # noqa: E402
 
 
 def _money(raw):
@@ -128,9 +113,13 @@ def _buyer(latest):
     }
 
 
-def process_paid_orders(*, state_path=None, client=None):
-    """Создаёт в Ozon заказы по оплаченным заказам сайта с сохранённым расчётом."""
-    state = _read_state(state_path)
+def process_paid_orders(*, state=None, client=None):
+    """Создаёт в Ozon заказы по оплаченным заказам сайта с сохранённым расчётом.
+
+    Журнал берётся из базы; передать его напрямую можно в тестах.
+    """
+    if state is None:
+        state = load_state({})
     stats = {'checked': 0, 'created': 0, 'skipped': 0, 'failed': 0}
 
     for order_id, entry in (state.get('orders') or {}).items():

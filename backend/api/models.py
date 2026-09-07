@@ -344,3 +344,135 @@ class BuyPriceSyncRun(models.Model):
     def __str__(self):
         stats = self.stats or {}
         return f"{self.date}: обновлено {stats.get('updated', 0)}, ошибок {stats.get('errors', 0)}"
+
+
+class ReturnProcessedOrder(models.Model):
+    """Заказ, который монитор возвратов уже разобрал.
+
+    По этой отметке он не берётся за заказ дважды: у ВБ и Озона возврат
+    приходит несколько раз, и без отметки робот заводил бы дубли документов.
+    Раньше отметки лежали одним JSON-файлом на томе — пропал бы том, и робот
+    завёл бы заново всё, что видел с START_DATE.
+
+    Записи только копятся: робот их не чистит, поэтому и сохранение ничего
+    не удаляет. Забыть всё сразу можно только явно — прогоном с `--force`.
+    """
+    order_id = models.CharField(max_length=64, unique=True, verbose_name='Заказ в МойСклад')
+    payload = models.JSONField(default=dict, verbose_name='Отметка разбора')
+    updated_at = models.DateTimeField(auto_now=True, verbose_name='Обновлена')
+
+    class Meta:
+        verbose_name = 'Разобранный возврат'
+        verbose_name_plural = 'Разобранные возвраты'
+
+    def __str__(self):
+        payload = self.payload or {}
+        return f"Заказ {payload.get('order_name') or self.order_id} — {payload.get('status_name') or '—'}"
+
+
+class ReturnsMonitorState(models.Model):
+    """Докуда монитор возвратов дошёл в прошлый раз. Строка одна."""
+    last_run = models.CharField(max_length=32, blank=True, verbose_name='Последний прогон')
+
+    class Meta:
+        verbose_name = 'Монитор возвратов (отметка)'
+        verbose_name_plural = 'Монитор возвратов (отметка)'
+
+    def __str__(self):
+        return f"последний прогон {self.last_run or '—'}"
+
+    @classmethod
+    def get(cls):
+        return cls.objects.get_or_create(pk=1)[0]
+
+
+class OrderEmailOrder(models.Model):
+    """Заказ сайта, собранный из писем: что известно и что заведено в МойСклад.
+
+    Раньше журнал лежал одним JSON-файлом на томе. Его читают и пишут три
+    процесса — робот чтения почты, робот заведения заказов и страница «Заказы
+    сайта», — и файл они переписывали целиком: 21.07.2026 из-за этого пропал
+    заказ 532598916, записанный одним процессом поверх копии другого.
+    """
+    order_id = models.CharField(max_length=64, unique=True, verbose_name='Номер на сайте')
+    payload = models.JSONField(default=dict, verbose_name='Заказ')
+    updated_at = models.DateTimeField(auto_now=True, verbose_name='Обновлён')
+
+    class Meta:
+        verbose_name = 'Заказ сайта из писем'
+        verbose_name_plural = 'Заказы сайта из писем'
+
+    def __str__(self):
+        latest = (self.payload or {}).get('latest') or {}
+        return f"Заказ {self.order_id} — {latest.get('status') or 'без статуса'}"
+
+
+class OrderEmailMessage(models.Model):
+    """Письмо, которое робот уже разобрал.
+
+    По этой отметке письмо не разбирается второй раз. Удаление заказа из журнала
+    убирает и отметки его писем — тогда следующая проверка почты разберёт их
+    заново (см. `forget_order`).
+    """
+    message_id = models.CharField(max_length=500, unique=True, verbose_name='Message-ID')
+    created_at = models.DateTimeField(auto_now_add=True, verbose_name='Разобрано')
+
+    class Meta:
+        verbose_name = 'Разобранное письмо о заказе'
+        verbose_name_plural = 'Разобранные письма о заказах'
+
+    def __str__(self):
+        return self.message_id
+
+
+class OrderEmailState(models.Model):
+    """Отметки робота писем. Строка одна.
+
+    `updated_at` заменил время изменения файла: по нему страница «Заказы сайта»
+    показывает, когда почту проверяли в последний раз.
+    """
+    last_checked_date = models.CharField(max_length=32, blank=True,
+                                         verbose_name='Последняя проверенная дата')
+    updated_at = models.DateTimeField(auto_now=True, verbose_name='Обновлено')
+
+    class Meta:
+        verbose_name = 'Робот писем (отметки)'
+        verbose_name_plural = 'Робот писем (отметки)'
+
+    def __str__(self):
+        return f"проверено по {self.last_checked_date or '—'}"
+
+    @classmethod
+    def get(cls):
+        return cls.objects.get_or_create(pk=1)[0]
+
+
+class PaymentDeadlineSnapshot(models.Model):
+    """Снимок последней проверки сроков оплаты — то, что показывает страница.
+
+    Это не состояние робота, а его результат: он пересобирает снимок целиком
+    каждый прогон. Раньше снимок лежал файлом на томе, и страница читала файл;
+    без тома она оставалась бы пустой от деплоя до ближайшего ночного прогона.
+
+    Строка одна: прошлые снимки никому не нужны, робот ходит ежедневно.
+    """
+    payload = models.JSONField(default=dict, verbose_name='Снимок')
+    updated_at = models.DateTimeField(auto_now=True, verbose_name='Собран')
+
+    class Meta:
+        verbose_name = 'Сроки оплаты (снимок)'
+        verbose_name_plural = 'Сроки оплаты (снимок)'
+
+    def __str__(self):
+        return f"снимок от {(self.payload or {}).get('generated_at') or '—'}"
+
+    @classmethod
+    def get(cls):
+        return cls.objects.get_or_create(pk=1)[0]
+
+    @classmethod
+    def store(cls, payload: dict):
+        row = cls.get()
+        row.payload = payload
+        row.save(update_fields=['payload', 'updated_at'])
+        return row

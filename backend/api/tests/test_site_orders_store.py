@@ -157,21 +157,6 @@ class DbStoreTests(TestCase):
         self.assertEqual(export.acknowledged, 0)
 
 
-class MigrationGuardTests(TestCase):
-    """Между выкатом образа и ручным переносом сверка не должна начать
-    с чистого листа: «сверено 0 заказов, расхождений нет» выглядит спокойно,
-    а на деле означает, что вся история пропала с глаз."""
-
-    def test_legacy_file_with_orders_is_seen(self):
-        path = _store_file()
-        self.addCleanup(path.unlink)
-
-        self.assertEqual(core.legacy_orders_count(path), 1)
-
-    def test_missing_file_means_nothing_left_behind(self):
-        self.assertEqual(core.legacy_orders_count('/nope/site_orders.json'), 0)
-
-
 class MarksTests(TestCase):
     def test_import_does_not_move_marks_backwards(self):
         """Команду можно запустить и после того, как сверка уже отработала:
