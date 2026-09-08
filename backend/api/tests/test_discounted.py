@@ -46,6 +46,41 @@ def _stock(pid, quantity, cost_kopecks):
     }
 
 
+def _operation(doc_type, quantity, cost_kopecks, doc_id='doc'):
+    """Строка отчёта «Обороты по операциям»: приход в плюс, расход в минус."""
+    return {
+        'operation': {
+            'meta': {
+                'href': f'https://api.moysklad.ru/api/remap/1.2/entity/{doc_type}/{doc_id}',
+                'type': doc_type,
+            },
+            'name': doc_id,
+        },
+        'quantity': quantity,
+        'sum': cost_kopecks,
+    }
+
+
+def _document(doc_id, positions):
+    """Документ продажи с позициями (id товара, количество, цена, скидка %)."""
+    return {
+        'id': doc_id,
+        'positions': {
+            'meta': {'size': len(positions)},
+            'rows': [
+                {
+                    'assortment': {'meta': {'href': f'https://api.moysklad.ru/api/remap/1.2/entity/product/{pid}'}},
+                    'quantity': quantity,
+                    'price': price,
+                    'discount': position[3] if len(position) > 3 else 0.0,
+                }
+                for position in positions
+                for pid, quantity, price in [position[:3]]
+            ],
+        },
+    }
+
+
 class StateTest(SimpleTestCase):
     """Правило «снимаем за 2 месяца» — граница и то, что по обе стороны от неё."""
 
@@ -278,9 +313,11 @@ class RequestShapeTest(SimpleTestCase):
 class AnalyticsTest(SimpleTestCase):
     """Итоги за период: уценено, продано, списано.
 
-    Списание не берётся из документов, а считается как разница — всё, что ушло
-    с уценённых карточек, но не продалось. Здесь проверяется, что арифметика
-    сходится и что возвраты не удваивают продажи.
+    Считаются по обороту в разрезе операций, где у каждой строки виден тип
+    документа. Главное, что здесь проверяется: продажа опознаётся по документу,
+    а не вычитанием из расхода, — иначе отгрузка комиссионеру (Ozon) уезжает
+    в «списано». Плюс: перемещения не движение товара, возврат не удваивает
+    продажу, выручка берётся из позиций документа.
     """
 
     def setUp(self):
@@ -289,49 +326,82 @@ class AnalyticsTest(SimpleTestCase):
     def tearDown(self):
         cache.clear()
 
-    def _run(self, turnover, profit):
-        from api.views.discounted import _build_analytics
-        with patch('api.views.discounted._get_all_pages', side_effect=[turnover, profit]):
-            return _build_analytics(FOLDER_HREF, ['p1'], 365)
+    def _run(self, operations, documents=()):
+        """operations — строки отчёта по операциям, documents — сами документы.
 
-    def test_written_off_is_what_left_but_was_not_sold(self):
-        data = self._run(
-            [{'income': {'quantity': 30.0, 'sum': 900000},
-              'outcome': {'quantity': 20.0, 'sum': 600000}}],
-            [{'sellQuantity': 12.0, 'sellSum': 2016000, 'sellCostSum': 360000,
-              'returnQuantity': 0.0, 'returnSum': 0, 'returnCostSum': 0}],
-        )
+        Документы отдаём по тому же фильтру, что и МойСклад: только те, чьи id
+        спрошены, — иначе продажа и возврат достались бы обоим запросам сразу.
+        """
+        from api.views.discounted import _build_analytics
+        by_id = {d['id']: d for d in documents}
+
+        def fetch(path, params=None):
+            asked = [f.split('=', 1)[1] for f in (params or {}).get('filter', '').split(';') if f]
+            return {'rows': [by_id[i] for i in asked if i in by_id]}
+
+        with patch('api.views.discounted._get_all_pages', return_value=list(operations)), \
+             patch('api.views.discounted._get', side_effect=fetch):
+            return _build_analytics(['p1'], 365)
+
+    def test_marked_is_income_of_the_processing(self):
+        data = self._run([_operation('processing', 30.0, 900000)])
         self.assertEqual(data['marked']['quantity'], 30.0)
         self.assertEqual(data['marked']['cost'], 9000.0)
-        self.assertEqual(data['sold']['quantity'], 12.0)
-        self.assertEqual(data['sold']['revenue'], 20160.0)
-        self.assertEqual(data['written_off']['quantity'], 8.0)   # 20 ушло − 12 продано
-        self.assertEqual(data['written_off']['cost'], 2400.0)    # 6000 − 3600
+
+    def test_sale_is_taken_from_the_document_not_from_the_profit_report(self):
+        """Отгрузка комиссионеру — продажа: отчёт прибыли её ещё не видит."""
+        data = self._run(
+            [_operation('processing', 30.0, 900000), _operation('demand', -2.0, -60000, 'd1')],
+            [_document('d1', [('p1', 2.0, 230000)])],
+        )
+        self.assertEqual(data['sold']['quantity'], 2.0)
+        self.assertEqual(data['sold']['revenue'], 4600.0)
+        self.assertEqual(data['sold']['cost'], 600.0)
+        self.assertEqual(data['written_off']['quantity'], 0)
+
+    def test_write_off_is_a_document_not_the_remainder(self):
+        data = self._run(
+            [_operation('processing', 10.0, 300000), _operation('loss', -3.0, -90000)],
+        )
+        self.assertEqual(data['written_off']['quantity'], 3.0)
+        self.assertEqual(data['written_off']['cost'], 900.0)
+        self.assertEqual(data['sold']['quantity'], 0)
+
+    def test_transfers_are_not_a_movement(self):
+        """Перемещение между складами — не приход и не расход уценки."""
+        data = self._run(
+            [_operation('processing', 10.0, 300000),
+             _operation('move', -10.0, -300000), _operation('move', 10.0, 300000)],
+        )
+        self.assertEqual(data['marked']['quantity'], 10.0)
+        self.assertEqual(data['written_off']['quantity'], 0)
 
     def test_returns_do_not_inflate_sales(self):
         """Вернувшийся товар не должен считаться проданным."""
         data = self._run(
-            [{'income': {'quantity': 10.0, 'sum': 300000},
-              'outcome': {'quantity': 5.0, 'sum': 150000}}],
-            [{'sellQuantity': 5.0, 'sellSum': 840000, 'sellCostSum': 150000,
-              'returnQuantity': 2.0, 'returnSum': 336000, 'returnCostSum': 60000}],
+            [_operation('demand', -5.0, -150000, 'd1'), _operation('salesreturn', 2.0, 60000, 'r1')],
+            [_document('d1', [('p1', 5.0, 168000)]), _document('r1', [('p1', 2.0, 168000)])],
         )
         self.assertEqual(data['sold']['quantity'], 3.0)
-        self.assertEqual(data['sold']['revenue'], 5040.0)
+        self.assertEqual(data['sold']['cost'], 900.0)
 
-    def test_rounding_never_shows_negative_write_off(self):
-        """Два отчёта округляют по-своему — «списано −0.3 шт» на экран не пускаем."""
+    def test_revenue_ignores_other_goods_in_the_same_document(self):
+        """В отгрузке рядом с уценкой едет обычный товар — он не наша выручка."""
         data = self._run(
-            [{'income': {'quantity': 5.0, 'sum': 150000},
-              'outcome': {'quantity': 5.0, 'sum': 150000}}],
-            [{'sellQuantity': 5.3, 'sellSum': 890000, 'sellCostSum': 160000,
-              'returnQuantity': 0.0, 'returnSum': 0, 'returnCostSum': 0}],
+            [_operation('demand', -1.0, -30000, 'd1')],
+            [_document('d1', [('p1', 1.0, 168000), ('other', 3.0, 500000)])],
         )
-        self.assertEqual(data['written_off']['quantity'], 0)
-        self.assertEqual(data['written_off']['cost'], 0)
+        self.assertEqual(data['sold']['revenue'], 1680.0)
+
+    def test_discount_in_the_position_lowers_revenue(self):
+        data = self._run(
+            [_operation('demand', -1.0, -30000, 'd1')],
+            [_document('d1', [('p1', 1.0, 200000, 10.0)])],
+        )
+        self.assertEqual(data['sold']['revenue'], 1800.0)
 
     def test_empty_store_gives_zeros_not_errors(self):
-        data = self._run([], [])
+        data = self._run([])
         self.assertEqual(data['marked']['quantity'], 0)
         self.assertEqual(data['sold']['revenue'], 0)
         self.assertEqual(data['written_off']['quantity'], 0)

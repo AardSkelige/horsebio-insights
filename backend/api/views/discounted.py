@@ -103,6 +103,18 @@ POSITIONS_CACHE_TTL = 10 * 60
 
 PAGE_LIMIT = 1000
 
+# Типы документов, которыми уценка уходит с карточки. Продажа — отгрузка или
+# розничная продажа; возврат покупателя её уменьшает; перемещение не движение
+# товара наружу вовсе. Всё остальное расходное — списание.
+SALE_TYPES = ("demand", "retaildemand")
+RETURN_TYPES = ("salesreturn", "retailsalesreturn")
+TRANSFER_TYPES = ("move",)
+
+# Сколько документов запрашиваем одним фильтром по id. Больше сотни строк
+# МойСклад с expand не отдаёт — оттуда и предел
+EXPAND_LIMIT = 100
+DOCS_PER_REQUEST = 50
+
 # За какой период считаем итоги, если период не задан явно
 DEFAULT_PERIOD_DAYS = 365
 
@@ -277,21 +289,85 @@ def _days_on_stock(product_id):
     return round(max(days)) if days else None
 
 
-def _build_analytics(folder_href, product_ids, days):
+def _document_positions(doc_type, document):
+    """Позиции документа. При expand МойСклад отдаёт их не больше сотни за раз.
+
+    Столько в отгрузке уценки не бывает, но остаться без выручки из-за молча
+    обрезанного списка — плохая цена за сэкономленный запрос: если позиций
+    больше, дочитываем их отдельно.
+    """
+    positions = document.get("positions") or {}
+    rows = positions.get("rows") or []
+    total = (positions.get("meta") or {}).get("size") or len(rows)
+    if total <= len(rows):
+        return rows
+
+    rows = []
+    offset = 0
+    while True:
+        page = _get(
+            f"/entity/{doc_type}/{document['id']}/positions",
+            {"limit": EXPAND_LIMIT, "offset": offset},
+        ).get("rows", [])
+        rows += page
+        offset += EXPAND_LIMIT
+        if len(page) < EXPAND_LIMIT:
+            return rows
+
+
+def _sales_revenue(docs_by_type, product_ids):
+    """Выручка по уценённым позициям в документах продаж и возвратов.
+
+    Отчёт по операциям знает себестоимость, но не цену продажи, поэтому за ней
+    идём в сами документы. Их единицы — уценка продаётся штучно, — и берём мы
+    их пачками: фильтр по id МойСклад объединяет по ИЛИ.
+
+    Товар в позиции узнаём по ссылке, а не по развёрнутой карточке: expand
+    вложен в expand, и МойСклад на это отвечает пустым списком позиций.
+    """
+    revenue = 0.0
+    for doc_type, doc_ids in docs_by_type.items():
+        sign = -1 if doc_type in RETURN_TYPES else 1
+        doc_ids = sorted(doc_ids)
+        for start in range(0, len(doc_ids), DOCS_PER_REQUEST):
+            batch = doc_ids[start:start + DOCS_PER_REQUEST]
+            documents = _get(
+                f"/entity/{doc_type}",
+                {
+                    "filter": ";".join(f"id={doc_id}" for doc_id in batch),
+                    "expand": "positions",
+                    "limit": EXPAND_LIMIT,
+                },
+            ).get("rows", [])
+            for document in documents:
+                for position in _document_positions(doc_type, document):
+                    href = ((position.get("assortment") or {}).get("meta") or {}).get("href", "")
+                    if href.rsplit("/", 1)[-1].split("?")[0] not in product_ids:
+                        continue
+                    price = (position.get("price") or 0) / 100
+                    discount = position.get("discount") or 0
+                    revenue += sign * price * (position.get("quantity") or 0) * (1 - discount / 100)
+    return revenue
+
+
+def _build_analytics(product_ids, days):
     """Итоги по уценённым карточкам за период: уценено, продано, списано.
 
-    Два отчёта вместо разбора документов:
-      • «Обороты» дают приход (техоперация — это и есть уценённое) и весь расход;
-      • «Прибыль по товарам» — сколько из этого расхода ушло продажами, по какой
-        цене и с какой себестоимостью.
+    Считаем по обороту в разрезе операций: у каждой строки виден тип документа,
+    и этого хватает, чтобы разложить движение по смыслу, а не угадывать его
+    вычитанием.
 
-    Списание считается как остаток: что ушло, но не было продано. Возвраты
-    вычитаем из продаж, иначе вернувшийся товар посчитался бы проданным дважды —
-    один раз продажей, второй раз попал бы в «списано» с минусом.
+    Отчёт «Прибыль по товарам», на котором итоги стояли раньше, для уценки не
+    годится: Ozon работает по комиссионному договору, и отгрузку комиссионеру
+    он продажей не считает — выручка появляется там только с отчётом
+    комиссионера, а он приходит раз в месяц. До тех пор продажа на Ozon (а это
+    один из двух каналов сбыта уценки) не опознавалась как продажа и попадала
+    в «списано»: в сентябре 2026 две бутылки масла, проданные за 4 600 ₽,
+    показывались потерей на 516 ₽.
 
-    «Обороты» фильтровать по группе товаров не умеют, а поле product принимают
-    только одно за запрос (ошибка 1030), поэтому идём по карточке за раз — их
-    единицы. Отчёт же по всему ассортименту за год МойСклад отдавать отказывается.
+    Перемещения пропускаем: товар не ушёл, а переехал. Раньше они гасились сами
+    собой — приход и расход по одной карточке в сумме давали ноль, — но молча,
+    и любая половинка на границе периода уезжала в итоги.
     """
     moment_to = datetime.now()
     moment_from = moment_to - timedelta(days=days)
@@ -300,35 +376,53 @@ def _build_analytics(folder_href, product_ids, days):
         "momentTo": moment_to.strftime("%Y-%m-%d %H:%M:%S"),
     }
 
-    turnover = []
+    # Отчёт принимает только одну номенклатуру за запрос (ошибка 1030), поэтому
+    # идём по карточке за раз — их единицы
+    rows = []
     for product_id in product_ids:
-        turnover += _get_all_pages(
-            "/report/turnover/all",
+        rows += _get_all_pages(
+            "/report/turnover/byoperations",
             {**period, "filter": f"product={BASE_URL}/entity/product/{product_id}"},
         )
-    marked_qty = sum((r.get("income") or {}).get("quantity") or 0 for r in turnover)
-    marked_cost = sum((r.get("income") or {}).get("sum") or 0 for r in turnover) / 100
-    left_qty = sum((r.get("outcome") or {}).get("quantity") or 0 for r in turnover)
-    left_cost = sum((r.get("outcome") or {}).get("sum") or 0 for r in turnover) / 100
 
-    profit = _get_all_pages(
-        "/report/profit/byproduct",
-        {**period, "filter": f"productFolder={folder_href};withSubFolders=true"},
-    )
-    sold_qty = sum((r.get("sellQuantity") or 0) - (r.get("returnQuantity") or 0) for r in profit)
-    revenue = sum((r.get("sellSum") or 0) - (r.get("returnSum") or 0) for r in profit) / 100
-    sold_cost = sum((r.get("sellCostSum") or 0) - (r.get("returnCostSum") or 0) for r in profit) / 100
+    marked_qty = marked_cost = 0.0
+    sold_qty = sold_cost = 0.0
+    written_off_qty = written_off_cost = 0.0
+    sale_docs = {}
+    product_ids = set(product_ids)
 
-    # Отрицательным быть не должно, но округления двух разных отчётов лучше не
-    # выпускать на экран в виде «списано −0.3 шт»
-    written_off_qty = max(left_qty - sold_qty, 0)
-    written_off_cost = max(left_cost - sold_cost, 0)
+    for row in rows:
+        meta = (row.get("operation") or {}).get("meta") or {}
+        doc_type = meta.get("type")
+        if doc_type in TRANSFER_TYPES:
+            continue
+
+        # Приход положительный, расход отрицательный — и там, и там в штуках
+        # и в себестоимости
+        quantity = row.get("quantity") or 0
+        cost = (row.get("sum") or 0) / 100
+
+        if doc_type in SALE_TYPES or doc_type in RETURN_TYPES:
+            # Возврат приходит приходом и уменьшает продажу — и штуки, и выручку
+            sold_qty -= quantity
+            sold_cost -= cost
+            sale_docs.setdefault(doc_type, set()).add(meta.get("href", "").rsplit("/", 1)[-1].split("?")[0])
+        elif quantity > 0:
+            marked_qty += quantity
+            marked_cost += cost
+        else:
+            written_off_qty -= quantity
+            written_off_cost -= cost
 
     return {
         "period_days": days,
         "period_from": moment_from.date().isoformat(),
         "marked": {"quantity": round(marked_qty, 2), "cost": round(marked_cost, 2)},
-        "sold": {"quantity": round(sold_qty, 2), "revenue": round(revenue, 2), "cost": round(sold_cost, 2)},
+        "sold": {
+            "quantity": round(sold_qty, 2),
+            "revenue": round(_sales_revenue(sale_docs, product_ids), 2),
+            "cost": round(sold_cost, 2),
+        },
         "written_off": {"quantity": round(written_off_qty, 2), "cost": round(written_off_cost, 2)},
     }
 
@@ -470,7 +564,6 @@ def positions_snapshot(refresh=False):
 
 def _build_data(period_days=DEFAULT_PERIOD_DAYS, refresh=False):
     """Собрать отчёт из МойСклад. Тяжёлая часть — кешируется вызывающим."""
-    folder_href, _ = _resolve_refs()
     positions = _build_positions(refresh=refresh)
 
     in_stock = [p for p in positions if p["quantity"] > 0]
@@ -485,7 +578,7 @@ def _build_data(period_days=DEFAULT_PERIOD_DAYS, refresh=False):
     return {
         "positions": positions,
         "summary": summary,
-        "analytics": _build_analytics(folder_href, [p["id"] for p in positions], period_days),
+        "analytics": _build_analytics([p["id"] for p in positions], period_days),
         "rules": {
             "discount_rate": DISCOUNT_RATE,
             "months_to_delist": MONTHS_TO_DELIST,
