@@ -46,8 +46,8 @@ from django_env import refresh_connections
 from api_client import ProductionHelper, MOYSKLAD_TOKEN, BASE_URL
 from order_email_utils import (
     build_customer_name, build_order_label, build_order_delete_action,
-    build_discount_label, format_money, format_rubles, site_discount_kopecks,
-    split_site_discount, state_lock, load_state, save_state,
+    build_discount_label, delivery_address, format_money, format_rubles,
+    site_discount_kopecks, split_site_discount, state_lock, load_state, save_state,
 )
 
 # Черновик без оплаты дольше этого срока — удаляется из МойСклад автоматически
@@ -104,7 +104,7 @@ def build_delivery_line(latest: dict) -> str:
     delivery_name = (latest.get("delivery_name") or "").strip()
     if not delivery_name:
         return ""
-    address = (latest.get("delivery_field", {}).get("Полный адрес доставки") or "").strip()
+    address = delivery_address(latest)
     return f"Способ доставки: {delivery_name}" + (" ПВЗ" if not address else "")
 
 
@@ -169,7 +169,7 @@ class OrderCreator:
         field = latest.get("field", {})
         phone = normalize_phone(field.get("phone", ""))
         email = (field.get("email") or "").strip()
-        address = (latest.get("delivery_field", {}).get("Полный адрес доставки") or "").strip()
+        address = delivery_address(latest)
 
         existing = self._find_counterparty(phone, email)
         if existing:
@@ -281,7 +281,7 @@ class OrderCreator:
             "description": build_description(latest),
             "positions": positions,
         }
-        shipment_address = (latest.get("delivery_field", {}).get("Полный адрес доставки") or "").strip()
+        shipment_address = delivery_address(latest)
         shipment_comment = build_shipment_comment(latest)
         if shipment_address or shipment_comment:
             shipment_address_full = {}

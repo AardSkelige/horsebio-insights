@@ -13,7 +13,8 @@ from django.test import SimpleTestCase
 _HORSEBIO = os.path.join(os.path.dirname(__file__), '..', '..', 'moysklad', 'horsebio')
 sys.path.insert(0, os.path.join(_HORSEBIO, '_shared'))
 from order_email_utils import (  # noqa: E402
-    build_discount_label, format_rubles, site_discount_kopecks, split_site_discount,
+    build_discount_label, delivery_address, format_rubles, site_discount_kopecks,
+    split_site_discount,
 )
 
 
@@ -188,3 +189,26 @@ HB_ORDER_DATA-->"""
         self.assertEqual(data["discounts"], [])
         self.assertEqual(build_discount_label({**data, "items": [
             {"price": i["price"], "quantity": i["quantity"]} for i in data["items"]]}), "1500 ₽")
+
+
+class DeliveryAddressTests(SimpleTestCase):
+    """Имя адресного поля задаёт CMS сайта, и оно меняется — см. delivery_address."""
+
+    def test_reads_full_address_field(self):
+        latest = {"delivery_field": {"Полный адрес доставки": "MSK2424, Москва, б-р Жулебинский"}}
+        self.assertEqual(delivery_address(latest), "MSK2424, Москва, б-р Жулебинский")
+
+    def test_reads_short_address_field(self):
+        # Заказ 22298118 (08.09.2026): СДЭК «Посылка до ПВЗ» пришёл с этим именем поля,
+        # адрес потерялся, и накладная СДЭК не создалась
+        latest = {"delivery_field": {"Адрес доставки": "PVS2, Первоуральск, ул. Белинского"}}
+        self.assertEqual(delivery_address(latest), "PVS2, Первоуральск, ул. Белинского")
+
+    def test_ignores_non_address_and_empty_fields(self):
+        latest = {"delivery_field": {"Тариф": "Посылка до ПВЗ", "Адрес доставки": "",
+                                     "Полный адрес доставки": "SPB285, Санкт-Петербург"}}
+        self.assertEqual(delivery_address(latest), "SPB285, Санкт-Петербург")
+
+    def test_no_delivery_field_at_all(self):
+        self.assertEqual(delivery_address({}), "")
+        self.assertEqual(delivery_address({"delivery_field": {}}), "")
