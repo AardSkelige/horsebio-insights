@@ -13,8 +13,9 @@ FIFO-себестоимость готовой продукции занижае
 Наши роботы всегда проставляют demand, поэтому находки тут — это ручные документы
 и сборные возвраты с ФБО, которые Лера заводит без основания.
 
-Убрать из отчёта: написать [ok] в описании возврата или добавить его id в
-data/zero_cost_acknowledged.json.
+Убрать из отчёта: написать [ok] в описании возврата. Второй способ — список id
+в файле рядом со скриптом — умер вместе с томом состояния (07.09.2026), да и
+пометка в самом документе лучше: она видна тому, кто откроет возврат.
 
 Раньше жило внутри Health Check. Переехало сюда, чтобы вся тема возвратов была
 в одном месте.
@@ -29,7 +30,6 @@ import os
 import sys
 import time
 from datetime import datetime, timedelta
-from pathlib import Path
 
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
@@ -45,20 +45,7 @@ MS_HEADERS = {
 }
 
 MONTHS_BACK = 3
-ACK_FILE = Path(__file__).parent.parent / 'data' / 'zero_cost_acknowledged.json'
 MS_DOC_URL = 'https://online.moysklad.ru/app/#salesreturn/edit?id='
-
-
-def load_ack() -> set:
-    """id возвратов, которые человек посмотрел и признал нормальными."""
-    if not ACK_FILE.exists():
-        return set()
-    try:
-        data = json.loads(ACK_FILE.read_text(encoding='utf-8'))
-        return set(data if isinstance(data, list) else data.get('ids', []))
-    except Exception as e:
-        print(f"  Не смог прочитать {ACK_FILE.name}: {e}")
-        return set()
 
 
 def fetch_posted() -> list:
@@ -136,14 +123,13 @@ def main():
     args = ap.parse_args()
 
     print(f"{'=' * 64}\nВозвраты без себестоимости: {datetime.now():%Y-%m-%d %H:%M:%S}\n{'=' * 64}")
-    ack = load_ack()
     docs = fetch_posted()
     print(f"Проведённых возвратов за {MONTHS_BACK} мес: {len(docs)}")
 
     found, checked = [], 0
     for i, doc in enumerate(docs, 1):
         desc = doc.get('description') or ''
-        if doc['id'] in ack or '[ok]' in desc.lower():
+        if '[ok]' in desc.lower():
             continue
         # С привязкой к отгрузке МойСклад считает себестоимость сам — поля cost нет
         if 'demand' in doc:
