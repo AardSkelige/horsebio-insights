@@ -172,8 +172,8 @@ jobs:
             cd /root/horsebio
 
             # scp не сохраняет бит исполнения — без этого cron молча
-            # не запустит ни одной проверки.
-            chmod +x /root/horsebio/deploy/cron/*.sh
+            # не запустит ни одной проверки, а бэкап не соберётся.
+            chmod +x /root/horsebio/deploy/cron/*.sh /root/horsebio/deploy/backup/*.sh
 
             # Тянем ТОЛЬКО образ бэкенда, а не все четыре.
             #
