@@ -153,7 +153,6 @@ _BASE_CSRF_ORIGINS = [
     "http://localhost:8001",
     "http://frontend:3001",
     "http://insight.horse-bio.ru",
-    "http://insight.horse-bio.ru:8001",
     "https://insight.horse-bio.ru",
 ]
 _extra_csrf = os.getenv('CSRF_TRUSTED_ORIGINS', '')

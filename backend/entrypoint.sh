@@ -46,8 +46,10 @@ fi
 
 if [ "${DJANGO_DEV_SERVER}" = "1" ]; then
     # Машина разработчика: runserver сам перечитывает изменённый код.
+    # --insecure: DEBUG здесь False, а статику админки с 09.09.2026 отдавать
+    # некому — локальный nginx убран, на боевом её отдаёт Caddy из тома.
     echo "Starting Django development server..."
-    exec python manage.py runserver 0.0.0.0:8000
+    exec python manage.py runserver --insecure 0.0.0.0:8000
 fi
 
 # Боевой сервер. Параметры — те же, что у StarPony, они там обкатаны:
