@@ -1,18 +1,13 @@
 """
-Переезд журнала заказов из писем в базу.
+Журнал заказов из писем в базе.
 
 Журнал читают и пишут три процесса: робот почты, робот заведения заказов
 и страница «Заказы сайта». Файл они переписывали целиком — 21.07.2026 так
 пропал заказ 532598916.
 """
-import json
 import os
 import sys
-import tempfile
-from pathlib import Path
 
-from django.core.management import call_command
-from django.core.management.base import CommandError
 from django.test import TestCase
 
 from api.models import OrderEmailMessage, OrderEmailOrder, OrderEmailState
@@ -29,53 +24,6 @@ ORDER = {'latest': {'status': 'Оплачен', 'paid': True},
 STATE = {'processed_message_ids': ['<a@site.m>', '<b@site.m>'],
          'orders': {'535513316': ORDER},
          'last_checked_date': '2026-09-07'}
-
-
-def _state_file(data=None):
-    tmp = tempfile.NamedTemporaryFile('w', suffix='.json', delete=False, encoding='utf-8')
-    json.dump(STATE if data is None else data, tmp, ensure_ascii=False)
-    tmp.close()
-    return Path(tmp.name)
-
-
-class ImportOrderEmailsTests(TestCase):
-    def test_import_moves_orders_messages_and_date(self):
-        path = _state_file()
-        self.addCleanup(path.unlink)
-
-        call_command('import_order_emails', '--path', str(path))
-
-        self.assertEqual(OrderEmailOrder.objects.get(order_id='535513316').payload, ORDER)
-        self.assertEqual(OrderEmailMessage.objects.count(), 2)
-        self.assertEqual(OrderEmailState.get().last_checked_date, '2026-09-07')
-
-    def test_import_is_idempotent(self):
-        path = _state_file()
-        self.addCleanup(path.unlink)
-
-        call_command('import_order_emails', '--path', str(path))
-        call_command('import_order_emails', '--path', str(path))
-
-        self.assertEqual(OrderEmailOrder.objects.count(), 1)
-        self.assertEqual(OrderEmailMessage.objects.count(), 2)
-
-    def test_checked_date_never_moves_backwards(self):
-        marks = OrderEmailState.get()
-        marks.last_checked_date = '2026-09-08'
-        marks.save()
-        path = _state_file()
-        self.addCleanup(path.unlink)
-
-        call_command('import_order_emails', '--path', str(path))
-
-        self.assertEqual(OrderEmailState.get().last_checked_date, '2026-09-08')
-
-    def test_empty_file_is_refused(self):
-        path = _state_file({'processed_message_ids': [], 'orders': {}})
-        self.addCleanup(path.unlink)
-
-        with self.assertRaisesRegex(CommandError, 'ни заказов, ни писем'):
-            call_command('import_order_emails', '--path', str(path))
 
 
 class EmptyJournalPageTests(TestCase):

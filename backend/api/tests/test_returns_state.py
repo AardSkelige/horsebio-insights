@@ -1,18 +1,13 @@
 """
-Переезд состояния монитора возвратов из файла в базу.
+Состояние монитора возвратов в базе.
 
 Отметки «этот заказ уже разобран» — единственное, что не даёт роботу завести
 документ возврата дважды: у ВБ и Озона один и тот же возврат приходит несколько
 раз. Пропажа тома означала бы повторный разбор всего с START_DATE.
 """
-import json
 import os
 import sys
-import tempfile
-from pathlib import Path
 
-from django.core.management import call_command
-from django.core.management.base import CommandError
 from django.test import TestCase
 
 from api.models import ReturnProcessedOrder, ReturnsMonitorState
@@ -26,61 +21,6 @@ MARK = {'order_name': '07688', 'agent': 'Озон', 'status_name': 'Возвра
         'status': 'no_demand', 'shipped_sum': 0.0, 'processed_at': '2026-05-03T18:12:45'}
 STATE = {'last_run': '2026-09-07 00:00:07',
          'processed_orders': {'377da132-6aff': MARK}}
-
-
-def _state_file(data=None):
-    tmp = tempfile.NamedTemporaryFile('w', suffix='.json', delete=False, encoding='utf-8')
-    json.dump(STATE if data is None else data, tmp, ensure_ascii=False)
-    tmp.close()
-    return Path(tmp.name)
-
-
-class ImportReturnsStateTests(TestCase):
-    def test_import_moves_marks_and_last_run(self):
-        path = _state_file()
-        self.addCleanup(path.unlink)
-
-        call_command('import_returns_state', '--path', str(path))
-
-        self.assertEqual(ReturnProcessedOrder.objects.get(order_id='377da132-6aff').payload,
-                         MARK)
-        self.assertEqual(ReturnsMonitorState.get().last_run, '2026-09-07 00:00:07')
-
-    def test_import_is_idempotent(self):
-        path = _state_file()
-        self.addCleanup(path.unlink)
-
-        call_command('import_returns_state', '--path', str(path))
-        call_command('import_returns_state', '--path', str(path))
-
-        self.assertEqual(ReturnProcessedOrder.objects.count(), 1)
-
-    def test_last_run_never_moves_backwards(self):
-        """Откат назад заставил бы монитор перебирать уже разобранные заказы."""
-        marks = ReturnsMonitorState.get()
-        marks.last_run = '2026-09-07 09:00:00'
-        marks.save()
-        path = _state_file()
-        self.addCleanup(path.unlink)
-
-        call_command('import_returns_state', '--path', str(path))
-
-        self.assertEqual(ReturnsMonitorState.get().last_run, '2026-09-07 09:00:00')
-
-    def test_dry_run_writes_nothing(self):
-        path = _state_file()
-        self.addCleanup(path.unlink)
-
-        call_command('import_returns_state', '--path', str(path), '--dry-run')
-
-        self.assertEqual(ReturnProcessedOrder.objects.count(), 0)
-
-    def test_empty_state_is_refused(self):
-        path = _state_file({'last_run': '2026-01-01', 'processed_orders': {}})
-        self.addCleanup(path.unlink)
-
-        with self.assertRaisesRegex(CommandError, 'ни одной отметки'):
-            call_command('import_returns_state', '--path', str(path))
 
 
 class ReturnsDbStoreTests(TestCase):

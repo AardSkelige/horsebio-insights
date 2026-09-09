@@ -1,19 +1,14 @@
 """
-Переезд копии заказов сайта из файла в базу.
+Копия заказов сайта в базе.
 
 Осторожность здесь не лишняя: подтверждённое окно сайт больше не отдаёт,
 и эта копия — единственная. Файл на томе держался на том, что том не забыли
 смонтировать.
 """
-import json
 import os
 import sys
-import tempfile
 from datetime import datetime
-from pathlib import Path
 
-from django.core.management import call_command
-from django.core.management.base import CommandError
 from django.test import TestCase
 
 from api.models import SiteOrderSnapshot, SiteOrdersReconcileState
@@ -33,63 +28,6 @@ ORDER = {'order_id': '594131116', 'number': '2066', 'date': '2026-08-19',
 STORE = {'orders': {'594131116': ORDER},
          'last_fetch': '2026-09-06T09:00:00',
          'last_acknowledge': '2026-09-06T09:00:01'}
-
-
-def _store_file(data=None):
-    tmp = tempfile.NamedTemporaryFile('w', suffix='.json', delete=False, encoding='utf-8')
-    json.dump(STORE if data is None else data, tmp, ensure_ascii=False)
-    tmp.close()
-    return Path(tmp.name)
-
-
-class ImportSiteOrdersTests(TestCase):
-    def test_import_moves_orders_and_marks(self):
-        path = _store_file()
-        self.addCleanup(path.unlink)
-
-        call_command('import_site_orders', '--path', str(path))
-
-        row = SiteOrderSnapshot.objects.get(order_id='594131116')
-        self.assertEqual(row.payload['number'], '2066')
-        self.assertEqual(row.date, '2026-08-19', 'дата вынесена колонкой — по ней чистят старое')
-        marks = SiteOrdersReconcileState.get()
-        self.assertEqual(marks.last_fetch, '2026-09-06T09:00:00')
-        self.assertEqual(marks.last_acknowledge, '2026-09-06T09:00:01')
-
-    def test_import_is_idempotent(self):
-        path = _store_file()
-        self.addCleanup(path.unlink)
-
-        call_command('import_site_orders', '--path', str(path))
-        call_command('import_site_orders', '--path', str(path))
-
-        self.assertEqual(SiteOrderSnapshot.objects.count(), 1)
-        self.assertEqual(SiteOrdersReconcileState.objects.count(), 1)
-
-    def test_dry_run_writes_nothing(self):
-        path = _store_file()
-        self.addCleanup(path.unlink)
-
-        call_command('import_site_orders', '--path', str(path), '--dry-run')
-
-        self.assertEqual(SiteOrderSnapshot.objects.count(), 0)
-
-    def test_broken_file_is_refused_loudly(self):
-        """Молча начать с пустого нельзя: второй копии заказов нет."""
-        tmp = tempfile.NamedTemporaryFile('w', suffix='.json', delete=False)
-        tmp.write('{"orders": {не json')
-        tmp.close()
-        self.addCleanup(lambda: Path(tmp.name).unlink())
-
-        with self.assertRaisesRegex(CommandError, 'повреждено'):
-            call_command('import_site_orders', '--path', tmp.name)
-
-    def test_empty_store_is_refused(self):
-        path = _store_file({'orders': {}, 'last_fetch': None, 'last_acknowledge': None})
-        self.addCleanup(path.unlink)
-
-        with self.assertRaisesRegex(CommandError, 'нет ни одного заказа'):
-            call_command('import_site_orders', '--path', str(path))
 
 
 class DbStoreTests(TestCase):
@@ -157,33 +95,7 @@ class DbStoreTests(TestCase):
         self.assertEqual(export.acknowledged, 0)
 
 
-class MarksTests(TestCase):
-    def test_import_does_not_move_marks_backwards(self):
-        """Команду можно запустить и после того, как сверка уже отработала:
-        откат отметки назад означал бы находку «сайт молчит» на живом сайте."""
-        marks = SiteOrdersReconcileState.get()
-        marks.last_fetch = '2026-09-07T09:40:00'
-        marks.save()
-        path = _store_file()
-        self.addCleanup(path.unlink)
-
-        call_command('import_site_orders', '--path', str(path))
-
-        self.assertEqual(SiteOrdersReconcileState.get().last_fetch, '2026-09-07T09:40:00')
-
-
 class DateColumnTests(TestCase):
-    def test_odd_date_does_not_break_the_import(self):
-        """Перенос — единственная копия заказов, и он идёт одной транзакцией:
-        дата длиннее колонки откатила бы его целиком."""
-        path = _store_file({'orders': {'x': dict(ORDER, date='2026-08-19T10:00:00+03:00')},
-                            'last_fetch': None, 'last_acknowledge': None})
-        self.addCleanup(path.unlink)
-
-        call_command('import_site_orders', '--path', str(path))
-
-        self.assertEqual(SiteOrderSnapshot.objects.get(order_id='x').date, '2026-08-19')
-
     def test_odd_date_does_not_break_the_save(self):
         """Дата приходит из выгрузки сайта и ничем не проверена. Значение длиннее
         колонки уронило бы запись — и роняло бы каждый прогон, пока заказ в окне."""

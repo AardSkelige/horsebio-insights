@@ -53,7 +53,6 @@ import re
 import sys
 import time
 from datetime import datetime
-from pathlib import Path
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', '..', '..', '_shared'))
 from api_client import ProductionHelper, MOYSKLAD_TOKEN, BASE_URL
@@ -63,10 +62,6 @@ from waybill_rules import (
     MARKER_PREFIX, REASON_MARKER_PREFIX, TRACK_LINE_PREFIX,
     delivery_text, is_managed_line, resolve_delivery,
 )
-
-# Старое место состояния. Нужен только команде импорта
-# (`manage.py import_cdek_waybills`), сам робот сюда больше не пишет.
-STATE_FILE = Path(__file__).parent.parent / "data" / ".cdek_waybill_state.json"
 
 # ─── Параметры МойСклад (подтверждены на живом аккаунте) ────────────────────
 SITE_SALES_CHANNEL_ID = "af781aeb-711c-11f0-0a80-1a56002f3340"   # «Прочее | Сайт Horse-Bio»

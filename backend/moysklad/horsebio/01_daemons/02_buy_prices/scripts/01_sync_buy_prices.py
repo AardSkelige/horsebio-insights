@@ -20,7 +20,6 @@ import time
 import json
 import argparse
 from datetime import datetime, timedelta
-from pathlib import Path
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', '..', '..', '_shared'))
 from api_client import MOYSKLAD_TOKEN, BASE_URL
@@ -34,7 +33,6 @@ HEADERS = {
     "Accept-Encoding": "gzip"
 }
 
-DATA_DIR = Path(__file__).parent.parent / "data"
 STORE = DbStore()
 DELAY = 0.2  # секунд между запросами обновления
 HISTORY_KEEP = 90  # сколько запусков хранить в истории

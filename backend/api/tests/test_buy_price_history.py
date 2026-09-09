@@ -1,17 +1,12 @@
 """
-Переезд истории прогонов робота закупочных цен из файла в базу.
+История прогонов робота закупочных цен в базе.
 
 История показывает, что и когда робот поменял в ценах. Восстановить её неоткуда:
 файл на томе был единственной копией.
 """
-import json
 import os
 import sys
-import tempfile
-from pathlib import Path
 
-from django.core.management import call_command
-from django.core.management.base import CommandError
 from django.test import TestCase
 
 from api.models import BuyPriceSyncRun
@@ -28,55 +23,6 @@ RUNS = [
      'changes': [], 'errors': []},
 ]
 STATE = {'last_run': '2026-09-07 00:50', 'last_stats': RUNS[1]['stats'], 'history': RUNS}
-
-
-def _state_file(data=None):
-    tmp = tempfile.NamedTemporaryFile('w', suffix='.json', delete=False, encoding='utf-8')
-    json.dump(STATE if data is None else data, tmp, ensure_ascii=False)
-    tmp.close()
-    return Path(tmp.name)
-
-
-class ImportBuyPriceHistoryTests(TestCase):
-    def test_import_moves_every_run(self):
-        path = _state_file()
-        self.addCleanup(path.unlink)
-
-        call_command('import_buy_price_history', '--path', str(path))
-
-        self.assertEqual(BuyPriceSyncRun.objects.count(), 2)
-        row = BuyPriceSyncRun.objects.get(date='2026-09-06 00:50')
-        self.assertEqual(row.changes[0]['name'], 'Коллаген')
-
-    def test_import_is_idempotent(self):
-        """Команду запускают повторно — чтобы подобрать прогоны, которые робот
-        успел дописать в файл между выкатом и переносом."""
-        path = _state_file()
-        self.addCleanup(path.unlink)
-
-        call_command('import_buy_price_history', '--path', str(path))
-        call_command('import_buy_price_history', '--path', str(path))
-
-        self.assertEqual(BuyPriceSyncRun.objects.count(), 2)
-
-    def test_dry_run_writes_nothing(self):
-        path = _state_file()
-        self.addCleanup(path.unlink)
-
-        call_command('import_buy_price_history', '--path', str(path), '--dry-run')
-
-        self.assertEqual(BuyPriceSyncRun.objects.count(), 0)
-
-    def test_empty_history_is_refused(self):
-        path = _state_file({'last_run': None, 'last_stats': {}, 'history': []})
-        self.addCleanup(path.unlink)
-
-        with self.assertRaisesRegex(CommandError, 'ни одного прогона'):
-            call_command('import_buy_price_history', '--path', str(path))
-
-    def test_missing_file_is_refused(self):
-        with self.assertRaises(CommandError):
-            call_command('import_buy_price_history', '--path', '/nope/state.json')
 
 
 class BuyPricesDbStoreTests(TestCase):

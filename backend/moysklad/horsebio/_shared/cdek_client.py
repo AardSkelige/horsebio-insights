@@ -15,8 +15,9 @@ uuid сущности, а реальный результат (номер СДЭ
 Ключи берутся из backend/.env: CDEK_CLIENT_ID, CDEK_CLIENT_SECRET, CDEK_ENV
 (test → api.edu.cdek.ru, prod → api.cdek.ru).
 
-Документация-источник: openapi_api_v2_integration.json (в корне репозитория на
-время интеграции).
+Документация-источник: docs/cdek-openapi.json — выгрузка спецификации СДЭК
+на время интеграции. Каталог docs/ в репозиторий не входит (как и остальные
+справочники), спека берётся у СДЭК.
 """
 
 import os
