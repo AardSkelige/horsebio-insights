@@ -263,6 +263,12 @@ class Shipment(models.Model):
 class ShipmentItem(models.Model):
     shipment = models.ForeignKey(Shipment, on_delete=models.CASCADE, related_name='items', verbose_name='Отгрузка')
     product = models.ForeignKey(Product, on_delete=models.CASCADE, verbose_name='Продукт')
+    # Идентификатор строки документа в МойСкладе. Раньше позицию искали по паре
+    # «документ + товар», и один товар двумя строками (приняли двумя партиями,
+    # отгрузили с разной ценой) схлопывался в одну: вторая строка перезаписывала
+    # первую, а не добавлялась. У приёмок это стоило 659 тыс. ₽ на 140 документах.
+    external_id = models.CharField(max_length=36, null=True, blank=True, db_index=True,
+                                   verbose_name='ID строки в МойСклад')
     quantity = models.DecimalField(max_digits=10, decimal_places=2, verbose_name='Количество')
     price = models.DecimalField(max_digits=10, decimal_places=2, default=0, verbose_name='Цена')
 
@@ -406,7 +412,7 @@ class PurchaseOrderItem(models.Model):
     )
     price = models.DecimalField(
         max_digits=15,
-        decimal_places=2,
+        decimal_places=6,          # дробные копейки — см. SupplyItem.price
         verbose_name='Цена'
     )
     total = models.DecimalField(
@@ -446,8 +452,15 @@ class PurchaseOrderItem(models.Model):
 class SupplyItem(models.Model):
     supply = models.ForeignKey(Supply, on_delete=models.CASCADE, related_name='items', verbose_name='Приемка')
     raw_material = models.ForeignKey(RawMaterial, on_delete=models.CASCADE, verbose_name='Материал')
+    # Идентификатор строки документа в МойСкладе — см. ShipmentItem.external_id
+    external_id = models.CharField(max_length=36, null=True, blank=True, db_index=True,
+                                   verbose_name='ID строки в МойСклад')
     quantity = models.DecimalField(max_digits=10, decimal_places=3, verbose_name='Количество')
-    price = models.DecimalField(max_digits=15, decimal_places=2, verbose_name='Цена')
+    # Шесть знаков, а не два: МойСклад отдаёт цену в копейках дробью
+    # (0.488 копейки за грамм карбоната кальция), и в двух знаках такая цена
+    # становится нулём — вместе с суммой строки, которую из неё считают.
+    # Замер 10.09.2026: дробная копейка у 291 позиции из 1094.
+    price = models.DecimalField(max_digits=15, decimal_places=6, verbose_name='Цена')
     total = models.DecimalField(max_digits=15, decimal_places=2, verbose_name='Сумма')
 
     def __str__(self):

@@ -127,23 +127,34 @@ class ShipmentStorage:
                 )
 
                 quantity = Decimal(str(position.get('quantity', 0))).quantize(Decimal('0.01'))
-                price = Decimal(str(position.get('price', 0))).quantize(Decimal('0.01')) / Decimal('100')
+                # Делим, потом округляем — иначе половина копейки теряется
+                # ещё до перевода в рубли. У отгрузок цены целые в копейках
+                # (проверено 10.09.2026), но порядок действий держим единым.
+                price = (Decimal(str(position.get('price', 0))) / Decimal('100')).quantize(Decimal('0.01'))
 
+                # Позиция различается по идентификатору строки документа, а не
+                # по товару: один товар в отгрузке может стоять двумя строками —
+                # с разной ценой или из разных партий. Прежний поиск по паре
+                # «отгрузка + товар» вторую строку не добавлял, а перезаписывал
+                # первой; у приёмок такая же ошибка стоила 659 тыс. ₽.
+                position_id = position.get('id')
                 existing_item = ShipmentItem.all_objects.filter(
                     shipment=shipment,
-                    product=product
-                ).first()
+                    external_id=position_id
+                ).first() if position_id else None
 
                 if existing_item:
                     existing_quantity = Decimal(str(existing_item.quantity)).quantize(Decimal('0.01'))
                     existing_price = Decimal(str(existing_item.price)).quantize(Decimal('0.01'))
 
                     if (
+                        existing_item.product_id == product.id and
                         abs(existing_quantity - quantity) <= Decimal('0.01') and
                         abs(existing_price - price) <= Decimal('0.01')
                     ):
                         return existing_item
                     else:
+                        existing_item.product = product
                         existing_item.quantity = quantity
                         existing_item.price = price
                         existing_item.save()
@@ -155,7 +166,8 @@ class ShipmentStorage:
                         shipment=shipment,
                         product=product,
                         quantity=quantity,
-                        price=price
+                        price=price,
+                        external_id=position_id
                     )
 
                 materials = self.material_registry.get_materials_for_product(product.external_id)
@@ -178,14 +190,20 @@ class ShipmentStorage:
             return None
 
     @sync_to_async
-    def cleanup_orphaned_items(self, shipment: Shipment, valid_product_ids: list) -> int:
-        """Удаление позиций отгрузки, которые больше не присутствуют в данных из МойСклад."""
+    def cleanup_orphaned_items(self, shipment: Shipment, valid_position_ids: list) -> int:
+        """Удаление позиций, которых больше нет в документе МойСклада.
+
+        Считаем по строкам документа, а не по товарам: строка могла исчезнуть,
+        а товар остаться в другой строке. Заодно уходят позиции, записанные
+        до 10.09.2026 — у них нет идентификатора строки, и без уборки они
+        остались бы рядом с новыми, задвоив количество в аналитике.
+        """
         try:
             with transaction.atomic():
                 orphaned_items = ShipmentItem.all_objects.filter(
                     shipment=shipment
                 ).exclude(
-                    product__external_id__in=valid_product_ids
+                    external_id__in=valid_position_ids
                 )
 
                 count = orphaned_items.count()
@@ -423,6 +441,19 @@ class ShipmentProcessor:
 
                             if positions_saved > 0:
                                 structured_logger.success(f"Отгрузка №{shipment_number}: сохранено {positions_saved}/{len(positions)} позиций", indent=3)
+
+                            # Строки, которых в документе больше нет, — вместе
+                            # с наследием без идентификатора строки.
+                            #
+                            # Только если сохранились все позиции: когда карточку
+                            # товара удалили в МойСкладе, save_shipment_item
+                            # возвращает None, и уборка по неполному списку
+                            # снесла бы живую строку вместе с расходом сырья.
+                            if positions and positions_saved == len(positions):
+                                await self.storage.cleanup_orphaned_items(
+                                    shipment,
+                                    [p.get('id') for p in positions if p.get('id')]
+                                )
 
                             return positions_saved
 

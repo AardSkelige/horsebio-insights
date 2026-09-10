@@ -135,7 +135,7 @@ class PurchaseOrderStorage:
                 )
 
                 quantity = Decimal(str(position.get('quantity', 0))).quantize(Decimal('0.001'))
-                price = Decimal(str(position.get('price', 0))).quantize(Decimal('0.01')) / Decimal('100')
+                price = (Decimal(str(position.get('price', 0))) / Decimal('100')).quantize(Decimal('0.000001'))
                 total = quantity * price
                 shipped = Decimal(str(position.get('shipped', 0))).quantize(Decimal('0.001'))
                 waiting = Decimal(str(position.get('inTransit', 0))).quantize(Decimal('0.001'))

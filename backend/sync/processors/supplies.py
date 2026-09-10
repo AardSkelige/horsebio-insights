@@ -123,38 +123,37 @@ class SupplyStorage:
                     }
                 )
 
-                quantity = Decimal(str(position.get('quantity', 0))).quantize(Decimal('0.01'))
-                price = Decimal(str(position.get('price', 0))).quantize(Decimal('0.01')) / Decimal('100')
-                total = quantity * price
+                # Цену не округляем до копейки: в МойСкладе она дробная
+                # (0.488 копейки за грамм), и округление обнуляло бы и цену,
+                # и сумму строки. Количество — с тремя знаками, как в поле.
+                quantity = Decimal(str(position.get('quantity', 0))).quantize(Decimal('0.001'))
+                price = (Decimal(str(position.get('price', 0))) / Decimal('100')).quantize(Decimal('0.000001'))
+                total = (quantity * price).quantize(Decimal('0.01'))
 
-                existing_item = SupplyItem.objects.filter(
-                    supply=supply,
-                    raw_material=raw_material
-                ).first()
+                # Позиция различается по идентификатору строки документа, а не
+                # по материалу: один материал в документе может стоять дважды —
+                # партию принимают двумя строками с разной ценой. Прежний поиск
+                # по паре «приёмка + материал» вторую строку не добавлял, а
+                # перезаписывал первой: 140 документов недосчитались 659 тыс. ₽.
+                position_id = position.get('id')
+                fields = {
+                    'supply': supply,
+                    'raw_material': raw_material,
+                    'quantity': quantity,
+                    'price': price,
+                    'total': total,
+                    'external_id': position_id,
+                }
+                if not position_id:
+                    # Без идентификатора искать нечего: поиск по external_id IS NULL
+                    # схлопнул бы все такие строки в одну — ровно та ошибка,
+                    # от которой уходим.
+                    return SupplyItem.objects.create(**fields)
 
-                if existing_item:
-                    existing_quantity = Decimal(str(existing_item.quantity)).quantize(Decimal('0.01'))
-                    existing_price = Decimal(str(existing_item.price)).quantize(Decimal('0.01'))
-
-                    if (
-                        abs(existing_quantity - quantity) <= Decimal('0.01') and
-                        abs(existing_price - price) <= Decimal('0.01')
-                    ):
-                        return existing_item
-                    else:
-                        existing_item.quantity = quantity
-                        existing_item.price = price
-                        existing_item.total = total
-                        existing_item.save()
-                        return existing_item
-                else:
-                    return SupplyItem.objects.create(
-                        supply=supply,
-                        raw_material=raw_material,
-                        quantity=quantity,
-                        price=price,
-                        total=total
-                    )
+                return SupplyItem.objects.update_or_create(
+                    supply=supply, external_id=position_id,
+                    defaults={k: v for k, v in fields.items() if k not in ('supply', 'external_id')},
+                )[0]
 
         except Exception as e:
             logger.error(f"Error saving supply item: {str(e)}")

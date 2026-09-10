@@ -43,7 +43,26 @@ class ShipmentsMixin(PaginationMixin):
         """
         url = f"{self.BASE_URL}/entity/demand/{shipment_id}"
         params = {"expand": "agent,positions.assortment,salesChannel"}
-        return self.single_request(url, params)
+        details = self.single_request(url, params)
+
+        # Вложенная коллекция по expand отдаёт до 1000 строк (проверено
+        # 10.09.2026 на инвентаризации 00187: 172 позиции пришли целиком,
+        # meta.limit = 1000). Ограничение в 100 из документации — про размер
+        # выборки списка, а не про вложенные строки.
+        #
+        # Сторож всё равно нужен: документ длиннее тысячи приехал бы обрезанным
+        # молча, а уборка ниже сочла бы недостающие строки исчезнувшими
+        # из документа и удалила вместе с расходом сырья. Самая длинная
+        # отгрузка сейчас — 15 позиций, так что цена сторожа — один if.
+        positions = (details or {}).get('positions') or {}
+        rows = positions.get('rows') or []
+        declared = (positions.get('meta') or {}).get('size', len(rows))
+        if declared > len(rows):
+            positions['rows'] = self.paginated_request(
+                f"{self.BASE_URL}/entity/demand/{shipment_id}/positions",
+                {"expand": "assortment"},
+            )
+        return details
 
     def get_shipment_sales_channels(self, start_date, end_date):
         """
