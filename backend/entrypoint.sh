@@ -34,9 +34,6 @@ python manage.py migrate
 # Собираем статику
 python manage.py collectstatic --noinput
 
-# Создаем директорию для кэша
-mkdir -p /app/cache
-
 # Если переданы аргументы командной строки, выполняем их.
 # Иначе поднимаем сервер на внутреннем порту 8000.
 if [ $# -gt 0 ]; then

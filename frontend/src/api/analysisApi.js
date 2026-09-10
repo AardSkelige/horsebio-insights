@@ -17,8 +17,10 @@ export const analysisApi = {
     },
 
     fbo: {
-        get: (signal) =>
-            api.get('/analysis/fbo/', { signal }),
+        // refresh=1 — пересобрать снимок из МойСклад; без него страница читает
+        // готовый снимок из базы (его собирает задача по расписанию)
+        get: ({ refresh = false, signal } = {}) =>
+            api.get('/analysis/fbo/', { params: refresh ? { refresh: 1 } : undefined, signal }),
 
         export: () =>
             api.get('/analysis/fbo/export/', { responseType: 'blob' }),

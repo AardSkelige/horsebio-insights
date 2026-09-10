@@ -15,8 +15,9 @@ services:
       - ./backend/.env.prod
     volumes:
       - backend_static:/app/staticfiles
-      - django_cache:/app/cache
       - scripts_logs:/app/scripts_logs
+      # Тома кеша здесь больше нет: 10.09.2026 кеш переехал в базу. Файловый
+      # переживал деплой ровно тем, что каталог не забыли смонтировать.
       # Состояния демонов здесь больше нет: 06–07.09.2026 все восемь томов
       # разошлись (MIGRATION-PLAN.md, этап 6). Семь состояний переехали
       # в Postgres — там они бэкапятся вместе с базой и не зависят от того,
@@ -72,7 +73,6 @@ services:
 volumes:
   backend_static:
   postgres_data:
-  django_cache:
   scripts_logs:
 
 networks:

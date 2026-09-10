@@ -447,6 +447,50 @@ class OrderEmailState(models.Model):
         return cls.objects.get_or_create(pk=1)[0]
 
 
+class SectionSnapshot(models.Model):
+    """Готовый ответ раздела, собранный заранее.
+
+    Разделы «Уценка», «Остатки для FBO» и «FBO Заказы» собирались прямо
+    в запросе пользователя: от трёх до одиннадцати обращений к МойСкладу
+    и до трёх секунд на открытие. При отказе по лимиту (429) раздел показывал
+    не старые данные, а ничего. Уценку вдобавок дёргали уведомления — на каждый
+    опрос колокольчика, то есть у всех раз в пять минут.
+
+    Теперь снимок собирают команды по расписанию, а запрос пользователя ходит
+    только сюда. Недоступность МойСклада делает данные несвежими, а не пустыми;
+    возраст виден на странице.
+
+    Строка на раздел: прошлые снимки никому не нужны — разделы показывают
+    сегодняшнее состояние склада, а не историю. Ключ совпадает с ключом
+    страницы из api/access.py, чтобы не заводить второго словаря разделов.
+
+    Сроки оплаты живут в своей таблице (PaymentDeadlineSnapshot): их снимок
+    появился раньше, пишет его робот, и переносить работающее ради единообразия
+    незачем.
+    """
+    key = models.CharField(max_length=64, unique=True, verbose_name='Раздел')
+    payload = models.JSONField(default=dict, verbose_name='Снимок')
+    updated_at = models.DateTimeField(auto_now=True, verbose_name='Собран')
+
+    class Meta:
+        verbose_name = 'Снимок раздела'
+        verbose_name_plural = 'Снимки разделов'
+
+    def __str__(self):
+        return f"{self.key}: снимок от {(self.payload or {}).get('generated_at') or '—'}"
+
+    @classmethod
+    def stored(cls, key):
+        """Снимок раздела или None, если его ещё ни разу не собирали."""
+        row = cls.objects.filter(key=key).first()
+        return row if row and row.payload else None
+
+    @classmethod
+    def store(cls, key, payload: dict):
+        row, _ = cls.objects.update_or_create(key=key, defaults={'payload': payload})
+        return row
+
+
 class PaymentDeadlineSnapshot(models.Model):
     """Снимок последней проверки сроков оплаты — то, что показывает страница.
 

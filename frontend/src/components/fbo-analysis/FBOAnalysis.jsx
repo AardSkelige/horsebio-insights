@@ -5,6 +5,7 @@ import FBOStatistics from './FBOStatistics';
 import FBOOrderDetails from './FBOOrderDetails';
 import { Button, ErrorState, Page, PageHeader, SectionLabel } from '../ui';
 import { analysisApi } from '../../api/analysisApi';
+import { timeOnly } from '../../utils/formatters';
 
 const STAGES = [
     [0,  20, 'Получение заказов...'],
@@ -23,7 +24,7 @@ const FBOAnalysis = () => {
 
     useEffect(() => { fetchFBOData(); }, []);
 
-    const fetchFBOData = async () => {
+    const fetchFBOData = async (refresh = false) => {
         setIsLoading(true);
         setError(null);
         setProgress(0);
@@ -38,7 +39,7 @@ const FBOAnalysis = () => {
         try {
             const controller = new AbortController();
             const timeoutId = setTimeout(() => controller.abort(), 300000);
-            const result = await analysisApi.fbo.get(controller.signal);
+            const result = await analysisApi.fbo.get({ refresh, signal: controller.signal });
             clearTimeout(timeoutId);
             setData({ statistics: result.statistics, products: result.products, orders: result.orders });
         } catch (err) {
@@ -76,7 +77,8 @@ const FBOAnalysis = () => {
         <PageHeader
             title="FBO Заказы"
             subtitle="Неотгруженные FBO заказы с плановой датой отгрузки"
-            onRefresh={showActions ? fetchFBOData : undefined}
+            updatedAt={data?.statistics?.last_update ? timeOnly(data.statistics.last_update) : undefined}
+            onRefresh={showActions ? () => fetchFBOData(true) : undefined}
             actions={showActions && (
                 <Button variant="soft" icon={Download} loading={isExporting} onClick={handleExport}>
                     {isExporting ? 'Экспорт...' : 'Экспорт'}

@@ -5,7 +5,7 @@
 # одно ядро), и переезд на manage.py — не повод их пересматривать.
 #
 # Устанавливается вручную: crontab -l > /tmp/c && cat horsebio.cron >> /tmp/c && crontab /tmp/c
-# Проверить: crontab -l | grep -c '^[^#].*horsebio-check'   → должно быть 22
+# Проверить: crontab -l | grep -c '^[^#].*horsebio-check'   → должно быть 25
 # (счёт только по рабочим строкам: этот комментарий тоже попадёт в crontab)
 
 # ─── Себестоимость ───────────────────────────────────────────────────────────
@@ -50,6 +50,12 @@
 45 9 * * * /root/horsebio/deploy/cron/horsebio-check.sh horsebio_ozon_points
 
 # ─── Обновление данных ───────────────────────────────────────────────────────
+# Снимок уценки: страница и колокольчик читают его из базы вместо МойСклада.
+# Смещён на 240 секунд, чтобы не совпадать с пятиминутными задачами Ozon —
+# лимит МойСклада общий.
+*/30 * * * * sleep 240 && /root/horsebio/deploy/cron/horsebio-check.sh horsebio_discounted_snapshot
+*/30 * * * * sleep 270 && /root/horsebio/deploy/cron/horsebio-check.sh horsebio_fbo_stock_snapshot
+*/30 * * * * sleep 330 && /root/horsebio/deploy/cron/horsebio-check.sh horsebio_fbo_snapshot
 25 9 * * * /root/horsebio/deploy/cron/horsebio-check.sh horsebio_inventory_check
 0 11 * * * /root/horsebio/deploy/cron/horsebio-check.sh horsebio_data_sync
 

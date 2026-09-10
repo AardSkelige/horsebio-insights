@@ -34,6 +34,8 @@ from rest_framework.response import Response
 from rest_framework import status
 
 from api.exceptions import ExternalServiceError
+from api.models import SectionSnapshot
+from api.services import section_snapshots
 from api.services import ozon_stock, site_csv, site_exchange, site_feed
 from msapi import http as ms_http
 from sync.moysklad import MoySkladAPIClient
@@ -41,6 +43,10 @@ from sync.moysklad import MoySkladAPIClient
 logger = logging.getLogger(__name__)
 
 BASE_URL = MoySkladAPIClient.BASE_URL
+
+# Ключ снимка — он же ключ страницы в api/access.py: второй словарь разделов
+# завёлся бы ровно до первого переименования.
+SECTION_KEY = "discounted"
 
 # Группа ищется по имени: id разные в проде и в тестовом аккаунте, а имена
 # стабильны и видны пользователю (тот же приём, что в fbo_stock).
@@ -91,9 +97,6 @@ DAYS_TO_DELIST = MONTHS_TO_DELIST * 30
 # кода, со складом, и распаковать его в две переменные нельзя
 REFS_CACHE_KEY = "discounted_folder_refs"
 REFS_CACHE_TTL = 24 * 60 * 60
-
-DATA_CACHE_KEY = "discounted_report"
-DATA_CACHE_TTL = 5 * 60
 
 # Позиции без отчётов, которые нужны только самой странице (аналитика за период,
 # дни на складе). Их спрашивают уведомления — а их спрашивают из любого раздела,
@@ -430,11 +433,15 @@ def _build_analytics(product_ids, days):
 def _invalidate_cache():
     """Сбросить всё, что посчитано по уценённым карточкам.
 
-    Кешей три: страница, облегчённые позиции для уведомлений и сами уведомления.
-    Разъехавшись, они показывают в колокольчике то, что человек уже исправил,
-    поэтому сбрасываются только вместе.
+    Три места: снимок раздела в базе, облегчённые позиции для уведомлений
+    и сами уведомления. Разъехавшись, они показывают в колокольчике то, что
+    человек уже исправил, поэтому сбрасываются только вместе.
+
+    Снимок именно удаляем, а не пересобираем на месте: пересборка — это одиннадцать
+    запросов в МойСклад, и вешать их на нажатие «Снять с продажи» значит платить
+    три секунды за каждый клик. Следующий читатель соберёт заново.
     """
-    cache.delete(DATA_CACHE_KEY)
+    section_snapshots.drop(SECTION_KEY)
     cache.delete(POSITIONS_CACHE_KEY)
     # Локальный импорт: пакет уведомлений сам импортирует этот модуль ради
     # провайдера, и на уровне модуля вышел бы круг
@@ -545,14 +552,17 @@ def _build_positions(refresh=False, with_days_on_stock=True, with_ozon=True):
 def positions_snapshot(refresh=False):
     """Позиции для тех, кому нужен только их состав — прежде всего уведомлений.
 
-    Если страница уже собрана, берём готовое: это те же самые позиции. Иначе
-    считаем облегчённо и кладём в свой кеш с более длинным сроком — уведомления
-    опрашиваются чаще, чем открывается раздел.
+    Берём из снимка в базе: колокольчик опрашивают из любого раздела и раз
+    в пять минут у каждого, и ходить за этим в МойСклад означало бы держать
+    чужой API в самом частом запросе приложения.
+
+    Снимка нет только до первой сборки — тогда считаем облегчённо (без дней
+    на складе и без Ozon) и держим в кеше, чтобы не повторять на каждый опрос.
     """
     if not refresh:
-        data = cache.get(DATA_CACHE_KEY)
-        if data:
-            return data["positions"]
+        stored = SectionSnapshot.stored(SECTION_KEY)
+        if stored:
+            return stored.payload.get("positions", [])
         cached = cache.get(POSITIONS_CACHE_KEY)
         if cached is not None:
             return cached
@@ -560,6 +570,14 @@ def positions_snapshot(refresh=False):
     positions = _build_positions(refresh=refresh, with_days_on_stock=False, with_ozon=False)
     cache.set(POSITIONS_CACHE_KEY, positions, POSITIONS_CACHE_TTL)
     return positions
+
+
+def build_snapshot(period_days=DEFAULT_PERIOD_DAYS):
+    """Пересобрать раздел из МойСклад и сохранить снимок. Точка входа команды."""
+    _invalidate_cache()
+    payload = _build_data(period_days=period_days, refresh=True)
+    SectionSnapshot.store(SECTION_KEY, payload)
+    return payload
 
 
 def _build_data(period_days=DEFAULT_PERIOD_DAYS, refresh=False):
@@ -589,16 +607,16 @@ def _build_data(period_days=DEFAULT_PERIOD_DAYS, refresh=False):
 
 @api_view(["GET"])
 def discounted_list(request):
-    """Уценённые позиции с расчётом, что пора снимать с продажи."""
-    refresh = request.GET.get("refresh") == "1"
-    if refresh:
-        _invalidate_cache()
+    """Уценённые позиции с расчётом, что пора снимать с продажи.
 
-    data = cache.get(DATA_CACHE_KEY)
-    if data is None:
-        data = _build_data(refresh=refresh)
-        cache.set(DATA_CACHE_KEY, data, DATA_CACHE_TTL)
-    return Response(data)
+    Читает снимок из базы: открытие страницы в МойСклад не ходит. Пересборку
+    заказывают явно — кнопкой «Обновить» (`?refresh=1`) или расписанием через
+    `manage.py build_discounted_snapshot`. Первый заход после выката собирает
+    снимок сам: пустая страница до ближайшего прогона хуже трёх секунд ожидания.
+    """
+    if request.GET.get("refresh") == "1":
+        return Response(section_snapshots.rebuild(SECTION_KEY, build_snapshot))
+    return Response(section_snapshots.read(SECTION_KEY, build_snapshot))
 
 
 @api_view(["POST"])

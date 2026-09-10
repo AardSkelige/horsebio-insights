@@ -28,6 +28,8 @@ from rest_framework.decorators import api_view
 from rest_framework.response import Response
 
 from api.exceptions import ExternalServiceError
+from api.models import SectionSnapshot
+from api.services import section_snapshots
 from api.utils.excel_export import ExcelReportBuilder
 from msapi import http as ms_http
 from sync.moysklad import MoySkladAPIClient
@@ -46,8 +48,8 @@ REFS_CACHE_KEY = "fbo_stock_refs"
 REFS_CACHE_TTL = 24 * 60 * 60
 
 # Сам отчёт весит 5 единиц лимита МойСклад — не дёргаем его на каждый F5.
-DATA_CACHE_KEY = "fbo_stock_report"
-DATA_CACHE_TTL = 5 * 60
+# Ключ снимка — он же ключ страницы в api/access.py
+SECTION_KEY = "fbo-stock"
 
 PAGE_LIMIT = 1000
 
@@ -171,11 +173,8 @@ def _build_data():
     }
 
 
-def _get_data(force_refresh=False):
-    if not force_refresh:
-        cached = cache.get(DATA_CACHE_KEY)
-        if cached:
-            return cached
+def build_snapshot():
+    """Пересобрать раздел из МойСклад и сохранить снимок. Точка входа команды."""
     try:
         data = _build_data()
     except ExternalServiceError:
@@ -183,8 +182,16 @@ def _get_data(force_refresh=False):
     except Exception as exc:
         logger.error("Остатки для FBO: не удалось получить данные из МойСклад: %s", exc)
         raise ExternalServiceError("Не удалось получить остатки из МойСклад")
-    cache.set(DATA_CACHE_KEY, data, DATA_CACHE_TTL)
+    SectionSnapshot.store(SECTION_KEY, data)
     return data
+
+
+def _get_data(force_refresh=False):
+    """Снимок из базы. МойСклад дёргаем только по явной просьбе — кнопкой
+    «Обновить» — и до первой сборки, чтобы страница не была пустой."""
+    if force_refresh:
+        return section_snapshots.rebuild(SECTION_KEY, build_snapshot)
+    return section_snapshots.read(SECTION_KEY, build_snapshot)
 
 
 @api_view(['GET'])

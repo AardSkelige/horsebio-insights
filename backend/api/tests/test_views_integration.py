@@ -7,6 +7,7 @@ from decimal import Decimal
 from datetime import date, timedelta
 from unittest.mock import patch, MagicMock
 
+from django.core.cache import cache
 from django.test import TestCase, Client
 from django.contrib.auth.models import User
 from django.utils import timezone
@@ -30,6 +31,11 @@ class BaseViewTestCase(TestCase):
 
     def setUp(self):
         """Set up test client and authenticate."""
+        # Кеш общий на весь прогон, и оставленное одним тестом видит следующий:
+        # так замок пересборки снимков (api/services/section_snapshots.py),
+        # намеренно доживающий свой срок после неудачи, ронял соседний тест.
+        cache.clear()
+        self.addCleanup(cache.clear)
         self.client = Client()
         self.user = User.objects.create_user(
             username='testuser',

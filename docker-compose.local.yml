@@ -37,7 +37,6 @@ services:
     volumes:
       - ./backend:/app
       - backend_static:/app/staticfiles
-      - django_cache:/app/cache
       - scripts_logs:/app/scripts_logs
     depends_on:
       db:
@@ -71,7 +70,6 @@ services:
 volumes:
   postgres_data:        # База данных PostgreSQL
   backend_static:       # Статические файлы Django (CSS, JS, images)
-  django_cache:         # Кэш Django
   frontend_node_modules: # NPM пакеты фронтенда
   scripts_logs:         # Логи автоматизированных скриптов
 

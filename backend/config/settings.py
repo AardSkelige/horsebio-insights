@@ -1,4 +1,5 @@
 import os
+import sys
 from pathlib import Path
 from dotenv import load_dotenv
 
@@ -218,10 +219,24 @@ CACHE_TIMEOUTS = {
     'sync_status': 60,      # 1 minute for sync status
 }
 
+# Кеш в базе, а не в файлах. Файловый переживал деплой случайно — тем, что
+# каталог не забыли смонтировать томом, тот же класс проблемы, что состояние
+# роботов до переезда 06–07.09.2026.
+#
+# Память (LocMemCache) не годится, хотя кеш и не жалко: он у нас межпроцессный.
+# Предел частоты у корзины сайта считался бы отдельно в каждом воркере, отметки
+# свежести данных пишет процесс синхронизации, а читает веб, сброс уведомлений
+# приходит из команд — всё это разъехалось бы молча.
+# В тестах — память: часть проверок намеренно обходится без базы
+# (SimpleTestCase), а кеш в базе делает `cache.clear()` запросом и роняет их.
+# Тесты не должны получать базу в довесок к кешу.
+_RUNNING_TESTS = 'test' in sys.argv
+
 CACHES = {
     'default': {
-        'BACKEND': 'django.core.cache.backends.filebased.FileBasedCache',
-        'LOCATION': BASE_DIR / 'cache',
+        'BACKEND': ('django.core.cache.backends.locmem.LocMemCache' if _RUNNING_TESTS
+                    else 'django.core.cache.backends.db.DatabaseCache'),
+        'LOCATION': 'django_cache',
         'TIMEOUT': 600,  # Default: 10 minutes
         'OPTIONS': {
             'MAX_ENTRIES': 1000,

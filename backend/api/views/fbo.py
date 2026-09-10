@@ -13,6 +13,8 @@ from django.db.models import Sum, Value, FloatField
 from django.db.models.functions import Coalesce
 from openpyxl import Workbook
 from openpyxl.styles import Font, Alignment, PatternFill
+from api.models import SectionSnapshot
+from api.services import section_snapshots
 from api.exceptions import ExternalServiceError, DataProcessingError
 
 logger = logging.getLogger(__name__)
@@ -243,18 +245,37 @@ def _build_fbo_analysis_data():
        raise DataProcessingError("Ошибка анализа FBO заказов")
 
 
+SECTION_KEY = 'fbo'  # ключ страницы из api/access.py
+
+
+def build_snapshot():
+    """Пересобрать раздел из МойСклад и сохранить снимок. Точка входа команды."""
+    data = _build_fbo_analysis_data()
+    SectionSnapshot.store(SECTION_KEY, data)
+    return data
+
+
+def _get_data(force_refresh=False):
+    """Снимок из базы. В МойСклад идём по явной просьбе — кнопкой «Обновить» —
+    и до первой сборки, чтобы страница не была пустой."""
+    if force_refresh:
+        return section_snapshots.rebuild(SECTION_KEY, build_snapshot)
+    return section_snapshots.read(SECTION_KEY, build_snapshot)
+
+
 @api_view(['GET'])
 def get_fbo_analysis(request):
-    """API endpoint для анализа FBO заказов"""
-    return JsonResponse(_build_fbo_analysis_data())
+    """Анализ FBO-заказов из снимка. ?refresh=1 — пересобрать из МойСклад."""
+    force = request.GET.get('refresh') in ('1', 'true')
+    return JsonResponse(_get_data(force_refresh=force))
 
 
 @api_view(['GET'])
 def export_fbo_excel(request):
     """API endpoint для экспорта FBO анализа в Excel"""
     try:
-        data = _build_fbo_analysis_data()
-        
+        data = _get_data()
+
         wb = Workbook()
         wb.remove(wb.active)
         
