@@ -457,7 +457,22 @@ class ErrorHandlingViewTests(BaseViewTestCase):
         # Should handle invalid params gracefully (converts to default)
         self.assertIn(response.status_code, [200, 400])
 
-    def test_404_for_nonexistent_endpoint(self):
-        """Test that nonexistent endpoints return 404."""
+    def test_unknown_endpoint_is_closed_for_a_regular_user(self):
+        """Незнакомый путь закрыт, а не «не найден».
+
+        С 10.09.2026 умолчание доступа перевёрнуто: путь, не отнесённый
+        ни к странице, ни к общим, недоступен обычному пользователю — и новая
+        ручка, о правах которой забыли, не открывается сама.
+        """
+        response = self.client.get('/api/nonexistent/')
+        self.assertEqual(response.status_code, 403)
+
+    def test_unknown_endpoint_is_404_for_a_superuser(self):
+        """У суперпользователя правами ничего не закрыто, поэтому он видит
+        настоящий ответ — «такой ручки нет»."""
+        from django.contrib.auth.models import User
+        self.client.force_login(
+            User.objects.create_superuser('root', 'root@example.com', 'password'))
+
         response = self.client.get('/api/nonexistent/')
         self.assertEqual(response.status_code, 404)

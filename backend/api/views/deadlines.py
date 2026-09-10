@@ -1,7 +1,7 @@
 from django.http import JsonResponse
 from django.views.decorators.http import require_http_methods
 
-from .scripts_monitor import scripts_auth_basic
+from api.auth import login_required_api
 
 
 def _read_deadlines() -> dict | None:
@@ -27,7 +27,7 @@ def _snapshot_age_hours() -> float | None:
     return (timezone.now() - row.updated_at).total_seconds() / 3600
 
 
-@scripts_auth_basic
+@login_required_api
 @require_http_methods(['GET'])
 def get_deadlines(request):
     data = _read_deadlines()

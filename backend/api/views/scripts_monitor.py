@@ -1,10 +1,17 @@
 # api/views/scripts_monitor.py
 """
-Мониторинг автоматизированных скриптов: список, история, логи, остановка.
+Чтение того, что оставили после себя прогоны проверок: история, коды выхода,
+логи — и авторизация страницы «Проверки».
+
+Своих ручек здесь больше нет. Их было шесть (/api/scripts/…), они дублировали
+/api/checks/scripts/… и к 10.09.2026 не звал их никто: страница ходит в checks,
+cron — в `manage.py run_check`. Дублирующая поверхность вдобавок отставала:
+чтение в ней осталось открытым любому вошедшему, когда «Проверки» уже стали
+суперюзерскими. Удалена; вьюхи живут в api/views/checks.py, они и зовут
+здешних помощников и декораторы.
 
 Сам запуск живёт в api/services/script_runner.py и идёт отдельным процессом
-(`manage.py run_check`) — веб только порождает его и читает то, что он оставил
-в файлах. Реестр задач — в api/services/scripts_registry.py.
+(`manage.py run_check`). Реестр задач — в api/services/scripts_registry.py.
 """
 import os
 import re
@@ -15,12 +22,8 @@ from functools import wraps
 
 from django.http import JsonResponse
 from django.views.decorators.csrf import csrf_exempt, csrf_protect
-from django.views.decorators.http import require_http_methods
 
 from api.services import script_runner
-from api.services.scripts_registry import (
-    SCRIPTS_CONFIG, SCRIPTS_BY_ID, HEALTH_CHECK_SCRIPT_ID,
-)
 
 import logging
 logger = logging.getLogger(__name__)
@@ -34,6 +37,12 @@ logger = logging.getLogger(__name__)
 # run_check` запуск идёт мимо HTTP, и авторизация теперь — это доступ
 # к серверу. Забытый секрет — это лишний вход в систему, который никто
 # не сторожит.
+#
+# Чтение 10.09.2026 приравнено к записи: было «любой вошедший», стало
+# «суперпользователь». Открытым оно осталось с тех времён, когда «Проверки»
+# видели все; страница давно суперюзерская, а в логах прогонов лежат номера
+# документов, цены и контрагенты. Заодно снято исключение в PUBLIC_PATHS —
+# теперь до этих путей доходят и постраничные права (страница `checks`).
 
 def scripts_auth(view_func):
     """Только суперпользователь."""
@@ -61,16 +70,6 @@ def scripts_mutation_auth(view_func):
     # прогоняется через csrf_protect. Без этого запрос без токена получал бы
     # от middleware страницу CSRF вместо внятного «Нет доступа».
     return csrf_exempt(wrapper)
-
-
-def scripts_auth_basic(view_func):
-    """Чтение: любой вошедший пользователь."""
-    @wraps(view_func)
-    def wrapper(request, *args, **kwargs):
-        if request.user.is_authenticated:
-            return view_func(request, *args, **kwargs)
-        return JsonResponse({'status': 'error', 'message': 'Требуется авторизация'}, status=401)
-    return wrapper
 
 
 # ─── Вспомогательные функции ──────────────────────────────────────────────────
@@ -226,137 +225,3 @@ def _process_terminal_output(text):
         result.pop()
 
     return '\n'.join(result)
-
-
-# ─── Views ────────────────────────────────────────────────────────────────────
-
-@scripts_auth_basic
-def scripts_list(request):
-    """GET /api/scripts/ — список скриптов со статусом последнего запуска."""
-    result = []
-    for script in SCRIPTS_CONFIG:
-        sid = script['id']
-        latest = _get_latest_run(sid)
-        running = script_runner.is_running(sid)
-        result.append({
-            **{k: script[k] for k in ('id', 'name', 'account', 'schedule', 'description')},
-            'topic': script.get('topic', ''),
-            'is_running': running,
-            'last_run': latest,
-            'script_exists': os.path.exists(script['script']),
-        })
-    return JsonResponse({'scripts': result})
-
-
-@scripts_auth_basic
-def script_runs(request, script_id):
-    """GET /api/scripts/{id}/runs/ — последние 20 запусков."""
-    if script_id not in SCRIPTS_BY_ID:
-        return JsonResponse({'status': 'error', 'message': 'Скрипт не найден'}, status=404)
-    runs = _get_runs(script_id)
-    return JsonResponse({'runs': runs, 'is_running': script_runner.is_running(script_id)})
-
-
-@scripts_auth_basic
-def script_log(request, script_id, run_id):
-    """GET /api/scripts/{id}/runs/{run_id}/log/ — содержимое лога.
-
-    Поддерживает ?offset=N для инкрементального polling во время выполнения.
-    """
-    if script_id not in SCRIPTS_BY_ID:
-        return JsonResponse({'status': 'error', 'message': 'Скрипт не найден'}, status=404)
-
-    log_file = script_runner.log_filename(script_id, run_id)
-    if not os.path.exists(log_file):
-        return JsonResponse({'content': '', 'offset': 0, 'is_running': False, 'exit_code': None})
-
-    offset = int(request.GET.get('offset', 0))
-
-    try:
-        # newline='' — отключаем universal newlines, чтобы \r не превращался в \n
-        with open(log_file, 'r', encoding='utf-8', errors='replace', newline='') as f:
-            raw = f.read()
-        content = _process_terminal_output(raw)
-        new_offset = len(content)
-    except Exception as e:
-        return JsonResponse({'status': 'error', 'message': str(e)}, status=500)
-
-    # Считаем этот запуск "текущим" только если он последний
-    latest = _get_latest_run(script_id)
-    is_current_run = latest and latest['run_id'] == run_id
-    running = is_current_run and script_runner.is_running(script_id)
-
-    return JsonResponse({
-        'content': content,
-        'offset': new_offset,
-        'is_running': running,
-        'exit_code': _get_exit_code(log_file),
-    })
-
-
-@scripts_mutation_auth
-@require_http_methods(['POST'])
-def script_stop(request, script_id):
-    """POST /api/scripts/{id}/stop/ — остановить запущенный скрипт."""
-    if script_id not in SCRIPTS_BY_ID:
-        return JsonResponse({'status': 'error', 'message': 'Скрипт не найден'}, status=404)
-
-    try:
-        outcome = script_runner.stop(script_id)
-    except Exception as e:
-        return JsonResponse({'status': 'error', 'message': str(e)}, status=500)
-    return JsonResponse({'status': 'ok', 'message': script_runner.STOP_MESSAGES[outcome]})
-
-
-@scripts_mutation_auth
-@require_http_methods(['POST'])
-def script_run_delete(request, script_id, run_id):
-    """POST /api/scripts/{id}/runs/{run_id}/delete/ — удалить лог запуска."""
-    if script_id not in SCRIPTS_BY_ID:
-        return JsonResponse({'status': 'error', 'message': 'Скрипт не найден'}, status=404)
-
-    # Нельзя удалять лог текущего запуска
-    if script_runner.is_running(script_id):
-        latest = _get_latest_run(script_id)
-        if latest and latest['run_id'] == run_id:
-            return JsonResponse({'status': 'error', 'message': 'Нельзя удалить лог запущенного скрипта'}, status=409)
-
-    log_file = script_runner.log_filename(script_id, run_id)
-    if not os.path.exists(log_file):
-        return JsonResponse({'status': 'error', 'message': 'Лог не найден'}, status=404)
-
-    try:
-        os.unlink(log_file)
-        for ext in (script_runner.exit_file(log_file), log_file + '.hash'):
-            if os.path.exists(ext):
-                os.unlink(ext)
-    except Exception as e:
-        return JsonResponse({'status': 'error', 'message': str(e)}, status=500)
-
-    return JsonResponse({'status': 'ok'})
-
-
-@scripts_mutation_auth
-@require_http_methods(['POST'])
-def script_run_now(request, script_id):
-    """POST /api/scripts/{id}/run/ — запустить скрипт немедленно."""
-    script = SCRIPTS_BY_ID.get(script_id)
-    if not script:
-        return JsonResponse({'status': 'error', 'message': 'Скрипт не найден'}, status=404)
-
-    if script_runner.is_running(script_id):
-        return JsonResponse({'status': 'error', 'message': 'Скрипт уже запущен'}, status=409)
-
-    if not os.path.exists(script['script']):
-        return JsonResponse({
-            'status': 'error',
-            'message': f'Файл скрипта не найден: {script["script"]}'
-        }, status=400)
-
-    run_id = script_runner.launch(script_id)
-
-    return JsonResponse({
-        'status': 'ok',
-        'run_id': run_id,
-        'message': f'Скрипт {script["name"]} запущен',
-    })

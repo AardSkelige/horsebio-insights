@@ -4,7 +4,7 @@ from .views import products, fbo, production  # импорт через views
 from .views import fbo_stock as fbo_stock_views
 from .views.abc_analysis import abc_analysis, abc_product_details, export_abc_analysis  # прямой импорт
 from .views.cash_flow import cash_flow_report, cash_flow_export  # импорт модуля отчета ДДС
-from .views import scripts_monitor, checks
+from .views import checks
 from .views.inventory_tracking import inventory_current, inventory_refresh, inventory_history, inventory_upload_cells, inventory_cells_log
 from .views.deadlines import get_deadlines
 from .views.site_orders import site_orders_list, site_order_delete, site_order_ozon_cancel
@@ -88,12 +88,6 @@ urlpatterns = [
     path('analysis/cash-flow/export/', cash_flow_export, name='cash_flow_export'),
 
     # Мониторинг скриптов
-    path('scripts/', scripts_monitor.scripts_list, name='scripts_list'),
-    path('scripts/<str:script_id>/runs/', scripts_monitor.script_runs, name='script_runs'),
-    path('scripts/<str:script_id>/runs/<str:run_id>/log/', scripts_monitor.script_log, name='script_log'),
-    path('scripts/<str:script_id>/run/', scripts_monitor.script_run_now, name='script_run_now'),
-    path('scripts/<str:script_id>/stop/', scripts_monitor.script_stop, name='script_stop'),
-    path('scripts/<str:script_id>/runs/<str:run_id>/delete/', scripts_monitor.script_run_delete, name='script_run_delete'),
 
     # Дашборд проверок /checks
     path('checks/scripts/', checks.checks_overview, name='checks_overview'),

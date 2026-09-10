@@ -193,12 +193,13 @@ export const LoadingProvider = ({ children }) => {
         };
     }, [isLoading, handleLoadingComplete]);
 
-    // Проверяем фоновую задачу только для подтверждённой пользовательской
-    // сессии. LoadingProvider также оборачивает публичную страницу входа, где
-    // запрос к защищённому /parser/task-status/ создавал лишний 401 в console.
+    // Проверяем фоновую задачу только у суперпользователя: /parser/ с 10.09.2026
+    // закрыт правами, и у обычного пользователя опрос давал бы 403 в консоль.
+    // Раньше здесь стояла проверка на авторизацию — по той же причине:
+    // LoadingProvider оборачивает и публичную страницу входа.
     useEffect(() => {
         let isMounted = true;
-        let wasAuthenticated = getFreshAuthStatus().isAuthenticated === true;
+        let wasSuperuser = getFreshAuthStatus().isSuperuser === true;
 
         const checkTaskStatus = async () => {
             try {
@@ -214,12 +215,12 @@ export const LoadingProvider = ({ children }) => {
             }
         };
 
-        if (wasAuthenticated) checkTaskStatus();
+        if (wasSuperuser) checkTaskStatus();
 
         const unsubscribe = subscribeAuth((status) => {
-            const isAuthenticated = status.isAuthenticated === true;
-            if (isAuthenticated && !wasAuthenticated) checkTaskStatus();
-            wasAuthenticated = isAuthenticated;
+            const isSuperuser = status.isSuperuser === true;
+            if (isSuperuser && !wasSuperuser) checkTaskStatus();
+            wasSuperuser = isSuperuser;
         });
 
         return () => {

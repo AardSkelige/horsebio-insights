@@ -292,7 +292,8 @@ class TaskStatusTests(TestCase):
         from django.test import Client
 
         client = Client()
-        client.force_login(User.objects.create_user('user', password='password'))
+        client.force_login(
+            User.objects.create_superuser('admin', 'admin@example.com', 'password'))
 
         payload = client.get('/parser/task-status/').json()
 

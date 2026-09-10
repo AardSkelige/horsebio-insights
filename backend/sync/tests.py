@@ -224,7 +224,9 @@ class TaskStatusFromDatabaseTests(TestCase):
 
     def setUp(self):
         from django.contrib.auth.models import User
-        self.user = User.objects.create_user('user', password='password')
+        # `/parser/` с 10.09.2026 закрыт суперюзером: синхронизация трогает всю
+        # базу и ходит в МойСклад (api/access.py, SUPERUSER_PREFIXES).
+        self.user = User.objects.create_superuser('admin', 'admin@example.com', 'password')
         self.client.force_login(self.user)
 
     def test_no_runs_yet(self):
@@ -256,7 +258,9 @@ class TaskStatusFromDatabaseTests(TestCase):
         )
         self.assertEqual(state['entities'][1]['error'], 'МойСклад недоступен')
 
-    def test_running_sync_is_visible_to_everyone(self):
+    def test_running_sync_is_visible_to_anyone_who_asks(self):
+        """Прогон по расписанию виден и тому, кто его не запускал: состояние
+        живёт в базе, а не в памяти процесса."""
         SyncRun.objects.create(message='Обработка отгрузок', processed=60,
                                triggered_by='расписание')
 
@@ -394,7 +398,8 @@ class StopRequestTests(TestCase):
 
     def setUp(self):
         from django.contrib.auth.models import User
-        self.client.force_login(User.objects.create_user('user', password='password'))
+        self.client.force_login(
+            User.objects.create_superuser('admin', 'admin@example.com', 'password'))
 
     def test_stop_marks_the_running_row(self):
         run = SyncRun.objects.create(triggered_by='расписание')
@@ -620,7 +625,8 @@ class LoadDataViewTests(TestCase):
         self._settings = override_settings(SCRIPTS_LOGS_DIR=self._logs.name)
         self._settings.enable()
         self.addCleanup(self._settings.disable)
-        self.client.force_login(User.objects.create_user('user', password='password'))
+        self.client.force_login(
+            User.objects.create_superuser('admin', 'admin@example.com', 'password'))
 
     def test_button_gets_a_refusal_while_a_sync_is_running(self):
         SyncRun.objects.create(triggered_by='расписание')

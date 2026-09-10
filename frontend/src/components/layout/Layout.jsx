@@ -10,6 +10,7 @@ import { NotificationsProvider } from '../../contexts/NotificationsContext';
 import { NotificationsBarButton, NotificationsPanel } from '../notifications';
 import Sidebar from './Sidebar';
 import { usePageTracking } from '../../hooks/usePageTracking';
+import { useSuperuser } from '../../hooks/useAuthStatus';
 
 const MOBILE_BP = 768;
 
@@ -18,6 +19,7 @@ const Layout = ({ children }) => {
     const { open, close } = useDataPanel();
     const panelRef = useRef(null);
     const dataPanelTriggerRef = useRef(null);
+    const isSuperuser = useSuperuser();
 
     usePageTracking();
 
@@ -214,7 +216,9 @@ const Layout = ({ children }) => {
                 transition: 'opacity 200ms ease',
             }} />
 
-            {/* Data panel */}
+            {/* Панель синхронизации — только суперпользователю: /parser/ закрыт
+                правами с 10.09.2026, открывать её больше некому и незачем. */}
+            {isSuperuser && (
             <m.div
                 ref={panelRef}
                 initial={false}
@@ -252,6 +256,7 @@ const Layout = ({ children }) => {
                     <DataManagementCard />
                 </div>
             </m.div>
+            )}
 
             <FloatingLoadingCard />
             <NotificationsPanel />

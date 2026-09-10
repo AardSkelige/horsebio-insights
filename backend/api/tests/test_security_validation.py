@@ -14,60 +14,63 @@ from core.models import (
 SCRIPT_ID = 'horsebio_buy_prices'
 
 
-class ScriptsMutationAuthorizationTests(TestCase):
+class ChecksMutationAuthorizationTests(TestCase):
+    """Дублирующая поверхность /api/scripts/… удалена 10.09.2026 — проверяем
+    ту, которой пользуется страница."""
+
     def setUp(self):
         self.user = User.objects.create_user('user', password='password')
         self.admin = User.objects.create_superuser(
             'admin', email='admin@example.com', password='password'
         )
 
-    def _post_mutating_endpoints(self, client, **headers):
+    def _mutating_endpoints(self, client, **headers):
+        """Запуск, остановка и удаление прогона — три мутации страницы «Проверки»."""
         requests = [
-            (f'/api/scripts/{SCRIPT_ID}/run/', {
+            ('post', f'/api/checks/scripts/{SCRIPT_ID}/run/', {
                 'api.services.script_runner.is_running': False,
-                'api.views.scripts_monitor.os.path.exists': True,
+                'api.views.checks.os.path.exists': True,
                 'api.services.script_runner.launch': 'run-1',
             }),
-            (f'/api/scripts/{SCRIPT_ID}/stop/', {}),
-            (f'/api/scripts/{SCRIPT_ID}/runs/run-1/delete/', {
+            ('post', f'/api/checks/scripts/{SCRIPT_ID}/stop/', {}),
+            ('delete', f'/api/checks/scripts/{SCRIPT_ID}/runs/run-1/', {
                 'api.services.script_runner.is_running': False,
-                'api.views.scripts_monitor.os.path.exists': True,
-                'api.views.scripts_monitor.os.unlink': None,
+                'api.views.checks.os.path.exists': True,
+                'api.views.checks.os.unlink': None,
             }),
         ]
         responses = []
-        for path, mocks in requests:
+        for method, path, mocks in requests:
             with ExitStack() as stack:
                 for target, return_value in mocks.items():
                     stack.enter_context(patch(target, return_value=return_value))
-                responses.append(client.post(path, **headers))
+                responses.append(getattr(client, method)(path, **headers))
         return responses
 
     def test_regular_user_cannot_run_stop_or_delete(self):
         client = Client(enforce_csrf_checks=True)
         client.force_login(self.user)
 
-        responses = self._post_mutating_endpoints(client)
+        responses = self._mutating_endpoints(client)
 
         self.assertEqual([response.status_code for response in responses], [403, 403, 403])
 
-    def test_regular_user_keeps_read_only_access(self):
+    def test_regular_user_cannot_read_the_checks(self):
+        """Раньше чтение проверок было открыто любому вошедшему. С 10.09.2026
+        закрыто: страница «Проверки» суперюзерская, а в логах прогонов —
+        номера документов, цены и контрагенты."""
         client = Client(enforce_csrf_checks=True)
         client.force_login(self.user)
-        with (
-            patch('api.views.scripts_monitor._get_latest_run', return_value=None),
-            patch('api.services.script_runner.is_running', return_value=False),
-            patch('api.views.scripts_monitor.os.path.exists', return_value=True),
-        ):
-            response = client.get('/api/scripts/')
 
-        self.assertEqual(response.status_code, 200)
+        response = client.get('/api/checks/scripts/')
+
+        self.assertEqual(response.status_code, 403)
 
     def test_admin_session_requires_csrf_for_all_mutations(self):
         client = Client(enforce_csrf_checks=True)
         client.force_login(self.admin)
 
-        responses = self._post_mutating_endpoints(client)
+        responses = self._mutating_endpoints(client)
 
         self.assertEqual([response.status_code for response in responses], [403, 403, 403])
 
@@ -77,7 +80,7 @@ class ScriptsMutationAuthorizationTests(TestCase):
         csrf_token = 'a' * 32
         client.cookies['csrftoken'] = csrf_token
 
-        responses = self._post_mutating_endpoints(
+        responses = self._mutating_endpoints(
             client, HTTP_X_CSRFTOKEN=csrf_token
         )
 
@@ -89,7 +92,7 @@ class ScriptsMutationAuthorizationTests(TestCase):
         в систему, который никто не сторожил."""
         client = Client(enforce_csrf_checks=True)
 
-        responses = self._post_mutating_endpoints(
+        responses = self._mutating_endpoints(
             client, HTTP_X_CRON_SECRET='test-cron-secret'
         )
 

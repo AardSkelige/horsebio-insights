@@ -276,13 +276,18 @@ export const Sidebar = ({ expanded, onToggle, isMobile, mobileOpen, onMobileClos
             {/* Bottom utilities */}
             <div style={{ borderTop: '1px solid var(--on-dark-wash)', padding: '8px 0', flexShrink: 0 }}>
                 <NotificationsBell expanded={showExpanded} />
-                <UtilBtn
-                    icon={RefreshCw}
-                    label="Обновить данные"
-                    expanded={showExpanded}
-                    onClick={toggleDataPanel}
-                    btnRef={dataPanelTriggerRef}
-                />
+                {/* Синхронизация трогает всю базу и ходит в МойСклад, поэтому
+                    с 10.09.2026 /parser/ закрыт суперюзером. Кнопка, которая
+                    упирается в 403, хуже отсутствующей. */}
+                {isSuperuser && (
+                    <UtilBtn
+                        icon={RefreshCw}
+                        label="Обновить данные"
+                        expanded={showExpanded}
+                        onClick={toggleDataPanel}
+                        btnRef={dataPanelTriggerRef}
+                    />
+                )}
                 <UserMenu
                     expanded={showExpanded}
                     theme={theme}
