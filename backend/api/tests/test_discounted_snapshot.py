@@ -36,7 +36,7 @@ class PageReadsTheSnapshotTests(TestCase):
     def test_open_page_does_not_touch_moysklad(self):
         SectionSnapshot.store('discounted', SNAPSHOT)
 
-        with patch('api.views.discounted._build_data') as build:
+        with patch('api.services.discounted_report._build_data') as build:
             payload = self.client.get('/api/discounted/').json()
 
         build.assert_not_called()
@@ -45,7 +45,7 @@ class PageReadsTheSnapshotTests(TestCase):
 
     def test_first_open_before_any_run_builds_once_and_stores(self):
         """Пустая страница до ближайшего прогона хуже трёх секунд ожидания."""
-        with patch('api.views.discounted._build_data', return_value=SNAPSHOT) as build:
+        with patch('api.services.discounted_report._build_data', return_value=SNAPSHOT) as build:
             payload = self.client.get('/api/discounted/').json()
 
         build.assert_called_once()
@@ -56,7 +56,7 @@ class PageReadsTheSnapshotTests(TestCase):
     def test_refresh_rebuilds_and_replaces_the_snapshot(self):
         SectionSnapshot.store('discounted', {'positions': [], 'summary': {}, 'generated_at': 'старое'})
 
-        with patch('api.views.discounted._build_data', return_value=SNAPSHOT) as build:
+        with patch('api.services.discounted_report._build_data', return_value=SNAPSHOT) as build:
             payload = self.client.get('/api/discounted/?refresh=1').json()
 
         build.assert_called_once()
@@ -71,11 +71,11 @@ class NotificationsReadTheSnapshotTests(TestCase):
 
     def test_bell_takes_positions_from_the_database(self):
         """Колокольчик опрашивают из любого раздела и у каждого раз в пять минут."""
-        from api.views.discounted import positions_snapshot
+        from api.services.discounted_report import positions_snapshot
 
         SectionSnapshot.store('discounted', SNAPSHOT)
 
-        with patch('api.views.discounted._build_positions') as build:
+        with patch('api.services.discounted_report._build_positions') as build:
             positions = positions_snapshot()
 
         build.assert_not_called()
@@ -83,9 +83,9 @@ class NotificationsReadTheSnapshotTests(TestCase):
 
     def test_without_a_snapshot_falls_back_to_a_light_build(self):
         """До первой сборки считаем облегчённо — но один раз, дальше из кеша."""
-        from api.views.discounted import positions_snapshot
+        from api.services.discounted_report import positions_snapshot
 
-        with patch('api.views.discounted._build_positions', return_value=[]) as build:
+        with patch('api.services.discounted_report._build_positions', return_value=[]) as build:
             positions_snapshot()
             positions_snapshot()
 
@@ -102,11 +102,11 @@ class ActionsInvalidateTheSnapshotTests(TestCase):
     def test_invalidation_forgets_the_snapshot(self):
         """Иначе колокольчик до получаса зовёт сделать уже сделанное: снимок
         пересобирает расписание, а действие человека его не трогало."""
-        from api.views.discounted import _invalidate_cache
+        from api.services.discounted_report import invalidate_cache
 
         SectionSnapshot.store('discounted', SNAPSHOT)
 
-        _invalidate_cache()
+        invalidate_cache()
 
         self.assertIsNone(SectionSnapshot.stored('discounted'))
 
@@ -130,7 +130,7 @@ class BuildIsGuardedTests(TestCase):
     def test_failed_build_does_not_retry_on_every_request(self):
         """Первая попытка сходила и упала, вторая даже не пошла — замок
         дотлевает свой срок и работает паузой."""
-        with patch('api.views.discounted._build_data', side_effect=RuntimeError('429')) as build:
+        with patch('api.services.discounted_report._build_data', side_effect=RuntimeError('429')) as build:
             first = self.client.get('/api/discounted/')
             second = self.client.get('/api/discounted/')
 
@@ -155,15 +155,15 @@ class CommandTests(TestCase):
         self.addCleanup(cache.clear)
 
     def test_command_stores_the_snapshot(self):
-        with patch('api.views.discounted._build_data', return_value=SNAPSHOT):
+        with patch('api.services.discounted_report._build_data', return_value=SNAPSHOT):
             call_command('build_discounted_snapshot')
 
         self.assertEqual(SectionSnapshot.stored('discounted').payload['summary']['units'], 3)
 
     def test_second_run_replaces_the_first(self):
-        with patch('api.views.discounted._build_data', return_value=SNAPSHOT):
+        with patch('api.services.discounted_report._build_data', return_value=SNAPSHOT):
             call_command('build_discounted_snapshot')
-        with patch('api.views.discounted._build_data',
+        with patch('api.services.discounted_report._build_data',
                    return_value=dict(SNAPSHOT, generated_at='2026-09-10T09:30:00')):
             call_command('build_discounted_snapshot')
 

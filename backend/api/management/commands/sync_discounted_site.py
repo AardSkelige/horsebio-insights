@@ -15,7 +15,7 @@
 from django.core.management.base import BaseCommand
 
 from api.services import site_exchange
-from api.views.discounted import (
+from api.services.discounted_report import (
     STATE_DELIST, STATE_EXPIRED, _build_data,
 )
 

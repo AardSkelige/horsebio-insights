@@ -20,7 +20,7 @@ from django.test import Client, TestCase
 from api import notifications
 from api.models import NotificationState, UserPageAccess
 from api.notifications import core
-from api.views.discounted import STATE_DELIST, STATE_EXPIRED, STATE_NO_DATE, STATE_OK
+from api.services.discounted_report import STATE_DELIST, STATE_EXPIRED, STATE_NO_DATE, STATE_OK
 
 
 def _position(**kwargs):

@@ -25,7 +25,7 @@
 (дату ставит Лера в МойСклад), и файл тут ничем не поможет.
 """
 
-from api.views.discounted import (
+from api.services.discounted_report import (
     STATE_DELIST, STATE_EXPIRED, STATE_NO_DATE, STATE_OK, positions_snapshot,
 )
 

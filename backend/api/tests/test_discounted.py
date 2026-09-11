@@ -14,7 +14,7 @@ from django.test import Client, SimpleTestCase, TestCase
 
 from api.access import page_keys_for_path
 from api.models import UserPageAccess
-from api.views.discounted import (
+from api.services.discounted_report import (
     STATE_DELIST, STATE_EXPIRED, STATE_NO_DATE, STATE_OK, _build_data, _state_of,
 )
 
@@ -111,12 +111,12 @@ class BuildDataTest(SimpleTestCase):
     def _run(self, products, stock_rows, days_on_stock=None):
         # Аналитика за период проверяется отдельно (AnalyticsTest) и ходит в свои
         # отчёты — здесь она только мешала бы считать вызовы
-        with patch('api.views.discounted._resolve_refs', return_value=(FOLDER_HREF, ATTR_ID)), \
-             patch('api.views.discounted._get_all_pages', side_effect=[products, stock_rows]), \
-             patch('api.views.discounted._build_analytics', return_value={}), \
-             patch('api.views.discounted.site_feed.offers', return_value={}), \
-             patch('api.views.discounted.ozon_stock.offers', return_value={}), \
-             patch('api.views.discounted._days_on_stock', return_value=days_on_stock):
+        with patch('api.services.discounted_report._resolve_refs', return_value=(FOLDER_HREF, ATTR_ID)), \
+             patch('api.services.discounted_report.ms_get_all_pages', side_effect=[products, stock_rows]), \
+             patch('api.services.discounted_report._build_analytics', return_value={}), \
+             patch('api.services.discounted_report.site_feed.offers', return_value={}), \
+             patch('api.services.discounted_report.ozon_stock.offers', return_value={}), \
+             patch('api.services.discounted_report._days_on_stock', return_value=days_on_stock):
             return _build_data()
 
     def test_counts_only_positions_with_stock(self):
@@ -170,15 +170,15 @@ class BuildDataTest(SimpleTestCase):
     def test_days_on_stock_only_for_positions_with_stock(self):
         """Отчёт по документам стоит запроса на товар — для пустых карточек не дёргаем."""
         soon = (self.today + timedelta(days=100)).isoformat()
-        with patch('api.views.discounted._resolve_refs', return_value=(FOLDER_HREF, ATTR_ID)), \
-             patch('api.views.discounted.site_feed.offers', return_value={}), \
-             patch('api.views.discounted.ozon_stock.offers', return_value={}), \
-             patch('api.views.discounted._get_all_pages', side_effect=[
+        with patch('api.services.discounted_report._resolve_refs', return_value=(FOLDER_HREF, ATTR_ID)), \
+             patch('api.services.discounted_report.site_feed.offers', return_value={}), \
+             patch('api.services.discounted_report.ozon_stock.offers', return_value={}), \
+             patch('api.services.discounted_report.ms_get_all_pages', side_effect=[
                  [_product('p1', 'A-UC', 'С остатком', soon), _product('p2', 'B-UC', 'Пустая', soon)],
                  [_stock('p1', 3.0, 10000)],
              ]), \
-             patch('api.views.discounted._build_analytics', return_value={}), \
-             patch('api.views.discounted._days_on_stock', return_value=42) as days:
+             patch('api.services.discounted_report._build_analytics', return_value={}), \
+             patch('api.services.discounted_report._days_on_stock', return_value=42) as days:
             data = _build_data()
 
         self.assertEqual(days.call_count, 1)
@@ -210,7 +210,7 @@ class AccessTest(TestCase):
         UserPageAccess.objects.create(user=user, page_key='discounted')
         self.client.login(username='lera', password='secret')
 
-        with patch('api.views.discounted._build_data', return_value={'positions': [], 'summary': {}}):
+        with patch('api.services.discounted_report._build_data', return_value={'positions': [], 'summary': {}}):
             response = self.client.get('/api/discounted/')
 
         self.assertEqual(response.status_code, 200)
@@ -231,7 +231,7 @@ class DelistTest(TestCase):
         cache.clear()
 
     def test_sends_exchange_with_fresh_product_data(self):
-        with patch('api.views.discounted._get',
+        with patch('api.views.discounted.ms_get',
                    return_value={'article': 'A-UC', 'name': 'Уценка Хондро'}), \
              patch('api.views.discounted.site_exchange.set_visibility') as send:
             response = self.client.post('/api/discounted/p1/delist/')
@@ -245,7 +245,7 @@ class DelistTest(TestCase):
         """Молчаливый провал опаснее ошибки: человек решит, что товар снят."""
         from api.services.site_exchange import SiteExchangeError
 
-        with patch('api.views.discounted._get',
+        with patch('api.views.discounted.ms_get',
                    return_value={'article': 'A-UC', 'name': 'Уценка Хондро'}), \
              patch('api.views.discounted.site_exchange.set_visibility',
                    side_effect=SiteExchangeError('сайт не ответил')):
@@ -276,11 +276,11 @@ class RequestShapeTest(SimpleTestCase):
             calls.append((path, dict(params or {})))
             return []
 
-        with patch('api.views.discounted._resolve_refs', return_value=(FOLDER_HREF, ATTR_ID)), \
-             patch('api.views.discounted._build_analytics', return_value={}), \
-             patch('api.views.discounted.site_feed.offers', return_value={}), \
-             patch('api.views.discounted.ozon_stock.offers', return_value={}), \
-             patch('api.views.discounted._get_all_pages', side_effect=remember):
+        with patch('api.services.discounted_report._resolve_refs', return_value=(FOLDER_HREF, ATTR_ID)), \
+             patch('api.services.discounted_report._build_analytics', return_value={}), \
+             patch('api.services.discounted_report.site_feed.offers', return_value={}), \
+             patch('api.services.discounted_report.ozon_stock.offers', return_value={}), \
+             patch('api.services.discounted_report.ms_get_all_pages', side_effect=remember):
             _build_data()
 
         product_call = next(c for c in calls if c[0] == '/entity/product')
@@ -295,11 +295,11 @@ class RequestShapeTest(SimpleTestCase):
             calls.append((path, dict(params or {})))
             return []
 
-        with patch('api.views.discounted._resolve_refs', return_value=(FOLDER_HREF, ATTR_ID)), \
-             patch('api.views.discounted._build_analytics', return_value={}), \
-             patch('api.views.discounted.site_feed.offers', return_value={}), \
-             patch('api.views.discounted.ozon_stock.offers', return_value={}), \
-             patch('api.views.discounted._get_all_pages', side_effect=remember):
+        with patch('api.services.discounted_report._resolve_refs', return_value=(FOLDER_HREF, ATTR_ID)), \
+             patch('api.services.discounted_report._build_analytics', return_value={}), \
+             patch('api.services.discounted_report.site_feed.offers', return_value={}), \
+             patch('api.services.discounted_report.ozon_stock.offers', return_value={}), \
+             patch('api.services.discounted_report.ms_get_all_pages', side_effect=remember):
             _build_data()
 
         stock_call = next(c for c in calls if c[0] == '/report/stock/all')
@@ -332,15 +332,15 @@ class AnalyticsTest(SimpleTestCase):
         Документы отдаём по тому же фильтру, что и МойСклад: только те, чьи id
         спрошены, — иначе продажа и возврат достались бы обоим запросам сразу.
         """
-        from api.views.discounted import _build_analytics
+        from api.services.discounted_report import _build_analytics
         by_id = {d['id']: d for d in documents}
 
         def fetch(path, params=None):
             asked = [f.split('=', 1)[1] for f in (params or {}).get('filter', '').split(';') if f]
             return {'rows': [by_id[i] for i in asked if i in by_id]}
 
-        with patch('api.views.discounted._get_all_pages', return_value=list(operations)), \
-             patch('api.views.discounted._get', side_effect=fetch):
+        with patch('api.services.discounted_report.ms_get_all_pages', return_value=list(operations)), \
+             patch('api.services.discounted_report.ms_get', side_effect=fetch):
             return _build_analytics(['p1'], 365)
 
     def test_marked_is_income_of_the_processing(self):
@@ -422,12 +422,12 @@ class SiteStateTest(SimpleTestCase):
         cache.clear()
 
     def _run(self, products, stock_rows, on_site):
-        with patch('api.views.discounted._resolve_refs', return_value=(FOLDER_HREF, ATTR_ID)), \
-             patch('api.views.discounted._get_all_pages', side_effect=[products, stock_rows]), \
-             patch('api.views.discounted._build_analytics', return_value={}), \
-             patch('api.views.discounted.site_feed.offers', **on_site), \
-             patch('api.views.discounted.ozon_stock.offers', return_value={}), \
-             patch('api.views.discounted._days_on_stock', return_value=None):
+        with patch('api.services.discounted_report._resolve_refs', return_value=(FOLDER_HREF, ATTR_ID)), \
+             patch('api.services.discounted_report.ms_get_all_pages', side_effect=[products, stock_rows]), \
+             patch('api.services.discounted_report._build_analytics', return_value={}), \
+             patch('api.services.discounted_report.site_feed.offers', **on_site), \
+             patch('api.services.discounted_report.ozon_stock.offers', return_value={}), \
+             patch('api.services.discounted_report._days_on_stock', return_value=None):
             return _build_data()
 
     def _position(self, on_site):
@@ -465,7 +465,7 @@ class SlugTest(SimpleTestCase):
     """ЧПУ считается из названия — тем же правилом, что ставится в карточке сайта."""
 
     def test_transliterates_and_drops_separators(self):
-        from api.views.discounted import site_slug
+        from api.services.discounted_report import site_slug
         self.assertEqual(
             site_slug('Уценка // Пробиотик GastroPro для лошадей, 1600г'),
             'ucenka-probiotik-gastropro-dlya-loshadej-1600g',
@@ -486,11 +486,11 @@ class PublishTest(TestCase):
         cache.clear()
 
     def _post(self, product, pictures=('https://horse-bio.ru/d/a.png',), stock=7.0, on_site=None):
-        with patch('api.views.discounted._get', return_value=product), \
-             patch('api.views.discounted._resolve_refs', return_value=(FOLDER_HREF, ATTR_ID)), \
-             patch('api.views.discounted._get_all_pages', return_value=[{'stock': stock}]), \
+        with patch('api.views.discounted.ms_get', return_value=product), \
+             patch('api.services.discounted_report._resolve_refs', return_value=(FOLDER_HREF, ATTR_ID)), \
+             patch('api.views.discounted.ms_get_all_pages', return_value=[{'stock': stock}]), \
              patch('api.views.discounted.site_feed.offers', return_value=on_site or {}), \
-             patch('api.views.discounted.ozon_stock.offers', return_value={}), \
+             patch('api.services.discounted_report.ozon_stock.offers', return_value={}), \
              patch('api.views.discounted.site_feed.pictures_for', return_value=list(pictures)) as pics, \
              patch('api.views.discounted.site_exchange.publish', return_value=len(pictures)) as publish:
             response = self.client.post('/api/discounted/p1/publish/')
@@ -519,7 +519,7 @@ class PublishTest(TestCase):
     def test_refuses_card_without_price(self):
         """Карточка без цены уехала бы на сайт с нулём — это хуже, чем ошибка."""
         product = {'article': '01-01AP0500-UC', 'name': 'Уценка // Хондро', 'salePrices': []}
-        with patch('api.views.discounted._get', return_value=product), \
+        with patch('api.views.discounted.ms_get', return_value=product), \
              patch('api.views.discounted.site_exchange.publish') as publish:
             response = self.client.post('/api/discounted/p1/publish/')
 
@@ -667,6 +667,34 @@ class CsvExportTest(TestCase):
         self.assertNotIn('cf_sostav', header)
 
 
+class CsvColumnsTest(TestCase):
+    """Ключи строки файла обязаны совпадать с колонками site_csv.
+
+    11.09.2026 при переносе расчёта в сервис замена по тексту переименовала
+    `_keywords` и заодно съела подчёркивание в ключе `seo_keywords`. Колонка
+    осталась в site_csv.COLUMNS, строка стала приходить с другим ключом —
+    и `build` молча отдавал бы пустые ключевые слова в каждой строке импорта.
+    """
+
+    def test_every_row_key_is_a_known_column(self):
+        from api.services import site_csv
+        from api.views.discounted import _csv_row
+
+        position = {
+            'article': 'A-UC', 'name': 'Гель ЮНИФЛЕКС', 'quantity': 3,
+            'price': 700, 'price_full': 1000, 'expires': '2026-12-01',
+            'state': 'ok', 'published': True,
+        }
+
+        row = _csv_row(position, pictures=[], description='', fields=None)
+
+        known = {field for field, _ in site_csv.COLUMNS}
+        unknown = {key for key in row if key not in known and not key.startswith('cf_')}
+
+        self.assertEqual(unknown, set(), 'ключи строки разошлись с колонками файла')
+        self.assertTrue(row['seo_keywords'], 'пустые ключевые слова обмен не применит')
+
+
 class RefreshTest(TestCase):
     """«Обновить» должно перечитывать и витрину сайта, а не только МойСклад."""
 
@@ -681,11 +709,11 @@ class RefreshTest(TestCase):
         cache.clear()
 
     def test_refresh_rereads_the_feed(self):
-        with patch('api.views.discounted._resolve_refs', return_value=(FOLDER_HREF, ATTR_ID)), \
-             patch('api.views.discounted._get_all_pages', side_effect=[[], []]), \
-             patch('api.views.discounted._build_analytics', return_value={}), \
-             patch('api.views.discounted.ozon_stock.offers', return_value={}), \
-             patch('api.views.discounted.site_feed.offers', return_value={}) as feed:
+        with patch('api.services.discounted_report._resolve_refs', return_value=(FOLDER_HREF, ATTR_ID)), \
+             patch('api.services.discounted_report.ms_get_all_pages', side_effect=[[], []]), \
+             patch('api.services.discounted_report._build_analytics', return_value={}), \
+             patch('api.services.discounted_report.ozon_stock.offers', return_value={}), \
+             patch('api.services.discounted_report.site_feed.offers', return_value={}) as feed:
             self.client.get('/api/discounted/?refresh=1')
 
         self.assertTrue(feed.call_args.kwargs['refresh'])

@@ -7,9 +7,7 @@
 пользователя: страница и уведомления читают снимок из базы, а сюда сходить
 и подождать одиннадцать запросов может фоновая задача.
 
-Расчёт живёт в api/views/discounted.py — там же, где ручки раздела. Разложить
-его по слоям стоит, но это отдельная работа: на сборку завязаны и экспорт,
-и снятие с продажи, и тесты.
+Расчёт — в api/services/discounted_report.py; во вьюхе остались только ручки.
 """
 from django.core.management.base import BaseCommand
 
@@ -20,7 +18,7 @@ class Command(BaseCommand):
     help = 'Пересобрать снимок раздела «Уценка» из МойСклад'
 
     def handle(self, *args, **options):
-        from api.views.discounted import SECTION_KEY, build_snapshot
+        from api.services.discounted_report import SECTION_KEY, build_snapshot
 
         payload = build_snapshot()
 

@@ -20,7 +20,7 @@ Ozon продаёт уценку с нашего склада (FBS), а оста
 from django.core.management.base import BaseCommand
 
 from api.services import ozon_stock
-from api.views.discounted import STATE_DELIST, STATE_EXPIRED, positions_snapshot
+from api.services.discounted_report import STATE_DELIST, STATE_EXPIRED, positions_snapshot
 
 
 class Command(BaseCommand):

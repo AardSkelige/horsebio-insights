@@ -23,7 +23,7 @@ from django.conf import settings
 from django.core.management.base import BaseCommand, CommandError
 
 from api.services import site_exchange as se
-from api.views.discounted import _get_all_pages, FOLDER_PARENT, FOLDER_NAME
+from api.services.discounted_report import ms_get_all_pages, FOLDER_PARENT, FOLDER_NAME
 
 PRICE_TYPE_ID = "22222222-0000-4000-8000-000000000001"
 PRICE_TYPE_NAME = "Розница"
@@ -219,7 +219,7 @@ class Command(BaseCommand):
 
     def handle(self, *args, **options):
         article = options["article"]
-        products = _get_all_pages("/entity/product", {"filter": f"pathName={FOLDER_PARENT}/{FOLDER_NAME}"})
+        products = ms_get_all_pages("/entity/product", {"filter": f"pathName={FOLDER_PARENT}/{FOLDER_NAME}"})
         product = next((p for p in products if p.get("article") == article), None)
         if not product:
             raise CommandError(f"В группе «{FOLDER_PARENT}/{FOLDER_NAME}» нет товара {article}")

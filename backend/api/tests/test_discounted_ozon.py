@@ -13,7 +13,7 @@ from django.core.management import call_command
 from django.test import SimpleTestCase
 
 from api.services import ozon_stock
-from api.views.discounted import STATE_DELIST, STATE_EXPIRED, STATE_OK
+from api.services.discounted_report import STATE_DELIST, STATE_EXPIRED, STATE_OK
 
 WAREHOUSE = 23996939891000
 
@@ -146,7 +146,7 @@ class OzonStateTest(SimpleTestCase):
     """
 
     def test_fills_url_price_and_quantity(self):
-        from api.views.discounted import _ozon_state
+        from api.services.discounted_report import _ozon_state
 
         state = _ozon_state("A-UC", {"A-UC": {
             "url": "https://www.ozon.ru/product/1/", "price": 2300.0, "quantity": 38}})
@@ -156,14 +156,14 @@ class OzonStateTest(SimpleTestCase):
         self.assertEqual(state["ozon_quantity"], 38)
 
     def test_card_absent_on_ozon_gives_empty_state(self):
-        from api.views.discounted import _ozon_state
+        from api.services.discounted_report import _ozon_state
 
         self.assertEqual(_ozon_state("B-UC", {"A-UC": {"url": "u"}}),
                          {"ozon_url": None, "ozon_price": None, "ozon_quantity": None})
 
     def test_ozon_unavailable_is_the_same_as_absent(self):
         """Площадка не ответила — строки тоже нет: врать про остаток нельзя."""
-        from api.views.discounted import _ozon_state
+        from api.services.discounted_report import _ozon_state
 
         self.assertEqual(_ozon_state("A-UC", None),
                          {"ozon_url": None, "ozon_price": None, "ozon_quantity": None})
