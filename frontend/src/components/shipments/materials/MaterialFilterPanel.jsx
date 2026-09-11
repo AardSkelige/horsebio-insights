@@ -11,7 +11,7 @@ const MaterialFilterPanel = ({ filters, onChange }) => {
     const [counterparties, setCounterparties] = useState([]);
 
     useEffect(() => {
-        materialsApi.getAll()
+        materialsApi.getFilters()
             .then((data) => {
                 if (data.status !== 'success') return;
                 setGroups(data.data.available_groups.filter(Boolean));

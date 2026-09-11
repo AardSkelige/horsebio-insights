@@ -34,6 +34,20 @@ import requests
 
 logger = logging.getLogger(__name__)
 
+# Настоящая функция запроса, запомненная до любых подмен: по ней отличаем
+# живой вызов от замоканного (см. `request`).
+_REAL_REQUEST = requests.request
+
+
+class RealRequestInTests(BaseException):
+    """Тест пошёл в МойСклад по-настоящему.
+
+    Наследуемся от BaseException намеренно. Обработчики вокруг синхронизации
+    и роботов ловят широкий `except Exception` и возвращают «данных нет» —
+    обычное исключение там было бы съедено, тест позеленел бы на пустом
+    результате, и замок оказался бы бесполезен ровно там, где нужнее всего.
+    """
+
 # Окно лимита, мс. Значение дублируется сервером в X-Lognex-Retry-TimeInterval.
 WINDOW_MS = 3000
 
@@ -195,8 +209,37 @@ def _retry_after_s(response, attempt: int) -> float:
     return wait + random.uniform(0, 0.25 * (attempt + 1))
 
 
+def _tests_running() -> bool:
+    """Идёт ли прогон тестов.
+
+    Django здесь не обязателен: слой живёт и в cron-скриптах, которые о нём не
+    знают. Поэтому настройки спрашиваем осторожно — вне Django ответ «нет».
+    """
+    try:
+        from django.conf import settings
+    except ImportError:
+        return False
+    try:
+        return bool(getattr(settings, "TESTING", False))
+    except Exception:
+        return False
+
+
 def request(method: str, url: str, **kwargs) -> requests.Response:
     """Запрос к МойСклад с ожиданием лимита и повторами. Статус не проверяется."""
+    if _tests_running() and requests.request is _REAL_REQUEST:
+        # Тесты в МойСклад не ходят. Причина не в чистоте: прогон упирался
+        # в лимит живого аккаунта, ловил 429 подряд десятками и будил
+        # предохранитель — а лишившись API на час, аккаунт лишает его и
+        # продакшн заодно.
+        #
+        # Запрещён именно настоящий вызов. Тесты самого слоя подменяют
+        # `requests.request`, и тогда сети за ним нет — такие проходят.
+        raise RealRequestInTests(
+            f"Тест обратился к МойСклад по-настоящему: {method} {url}. "
+            "Подмените `msapi.http.get`/`post`/`put`/`delete` или `requests.request`."
+        )
+
     kwargs.setdefault("timeout", DEFAULT_TIMEOUT)
 
     last_error = None

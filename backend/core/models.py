@@ -40,6 +40,23 @@ class Counterparty(models.Model):
             return [self.id] + legacy_ids
         return [self.id]
 
+    @classmethod
+    def related_ids_for(cls, main_ids):
+        """Идентификаторы контрагентов вместе с их старыми карточками.
+
+        Множественная версия `all_related_ids`. Свойство отвечает за одного и
+        ради старых карточек ходит в базу, поэтому обход списка стоил запроса
+        на контрагента — а спискам нужны просто идентификаторы, чтобы отобрать
+        отгрузки. Здесь тот же ответ одним запросом.
+        """
+        main_ids = list(main_ids)
+        related = set(main_ids)
+        related.update(
+            cls.objects.filter(main_counterparty_id__in=main_ids)
+            .values_list('id', flat=True)
+        )
+        return related
+
     def __str__(self):
         return f"{self.name}{' (старый)' if self.is_legacy else ''}"
 

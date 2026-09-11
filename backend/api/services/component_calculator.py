@@ -135,14 +135,29 @@ class ComponentCalculator:
             result['error'] = f"Товар с артикулом '{article}' не найден"
             return result
 
-        # Ищем товар с техкартой среди дубликатов
+        # Ищем товар с техкартой среди дубликатов. Техкарты берём одним
+        # запросом: артикул-дубликат встречается редко, но запрос на каждого
+        # кандидата платился всегда.
+        #
+        # `order_by('pk')` + `setdefault` оставляют первую техкарту товара.
+        # Порядок тут важен: товар законно входит в несколько техкарт
+        # (unique_together — пара «техкарта + товар»), а от выбранной зависят
+        # и выход продукта, и состав. Прежний `.first()` без сортировки брал
+        # какую придётся, но менять этот выбор молча не стоит.
+        plans = {}
+        for plan_product in (
+            ProcessingPlanProduct.objects
+            .filter(product__in=products)
+            .select_related('processing_plan')
+            .order_by('pk')
+        ):
+            plans.setdefault(plan_product.product_id, plan_product)
         product = None
         plan_product = None
         for p in products:
-            pp = ProcessingPlanProduct.objects.filter(product=p).first()
-            if pp:
+            if p.id in plans:
                 product = p
-                plan_product = pp
+                plan_product = plans[p.id]
                 break
 
         # Если ни у одного нет техкарты, берём первый

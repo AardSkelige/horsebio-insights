@@ -1,10 +1,10 @@
 from .abc_analysis import abc_analysis, abc_product_details
 from .seasonal_analysis import seasonal_analysis, seasonal_product_details
 from .shipments import shipment_data, get_latest_data, get_stats
-from .materials import material_data, material_details
+from .materials import material_data, material_details, material_filters
 from .supplies import (
     supply_analytics, supply_materials,
-    supply_materials_list, supply_material_details,
+    supply_materials_list, supply_materials_filters, supply_material_details,
     supply_suppliers_list, supply_supplier_details
 )
 from .cash_flow import cash_flow_report, cash_flow_export
@@ -12,7 +12,7 @@ from .counterparties import (
     counterparty_data, counterparty_details,
     counterparty_groups_analysis, counterparty_group_details
 )
-from .products import product_data, product_details
+from .products import product_data, product_details, product_filters
 from .purchase import (
     purchase_analysis_overview, material_purchase_analysis,
     related_materials_analysis, optimize_purchase_points,
@@ -28,10 +28,12 @@ __all__ = [
     'get_latest_data',
     'get_stats',
     'material_data',
+    'material_filters',
     'material_details',
     'supply_analytics',
     'supply_materials',
     'supply_materials_list',
+    'supply_materials_filters',
     'supply_material_details',
     'supply_suppliers_list',
     'supply_supplier_details',
@@ -40,6 +42,7 @@ __all__ = [
     'counterparty_groups_analysis',
     'counterparty_group_details',
     'product_data',
+    'product_filters',
     'product_details',
     'purchase_analysis_overview',
     'material_purchase_analysis',

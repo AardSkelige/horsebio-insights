@@ -8,7 +8,7 @@
 from unittest.mock import MagicMock, patch
 
 import requests
-from django.test import SimpleTestCase
+from django.test import SimpleTestCase, override_settings
 
 from msapi import http as ms_http
 
@@ -198,3 +198,50 @@ class MsHttpTests(SimpleTestCase):
                            (ms_http.put, "PUT"), (ms_http.delete, "DELETE")):
             func("https://api.moysklad.ru/api/remap/1.2/entity/product")
             self.assertEqual(mock_request.call_args.args[0], verb)
+
+
+class RealRequestIsBlockedInTestsTests(SimpleTestCase):
+    """Замок на живые запросы: прогон не должен тратить лимит рабочего аккаунта.
+
+    До него тесты действительно ходили в МойСклад, ловили 429 десятками подряд
+    и будили предохранитель. Аккаунт, лишившийся API на час, лишает его и
+    продакшн, так что цена ошибки тут не в чистоте тестов.
+    """
+
+    @override_settings(TESTING=True)
+    def test_unmocked_call_raises_instead_of_going_out(self):
+        """Флаг выставляем явно: сам он выведен из `sys.argv`.
+
+        Под `manage.py test` он и так истинный, но под другим раннером
+        (pytest, запуск из IDE) — ложный, и тест вместо проверки замка ушёл бы
+        живым запросом в МойСклад, а упал бы с невнятным «не бросило».
+        """
+        with self.assertRaises(ms_http.RealRequestInTests) as caught:
+            ms_http.get("https://api.moysklad.ru/api/remap/1.2/entity/product")
+        self.assertIn("по-настоящему", str(caught.exception))
+
+    @override_settings(TESTING=True)
+    def test_guard_survives_a_broad_except(self):
+        """Обработчик с `except Exception` замок не съедает.
+
+        Вокруг синхронизации и роботов такие обработчики стоят везде и
+        возвращают «данных нет»: съеденный замок означал бы зелёный тест
+        на пустом результате.
+        """
+        try:
+            ms_http.get("https://api.moysklad.ru/api/remap/1.2/entity/product")
+        except Exception:  # noqa: BLE001 — именно это и проверяем
+            self.fail("замок пойман широким except и не дошёл до раннера")
+        except ms_http.RealRequestInTests:
+            pass
+        else:
+            self.fail("замок не сработал")
+
+    @patch("msapi.http.requests.request")
+    def test_mocked_call_goes_through(self, mock_request):
+        """Подменённый запрос сети не касается — такие тесты работать должны."""
+        mock_request.return_value = _response()
+
+        ms_http.get("https://api.moysklad.ru/api/remap/1.2/entity/product")
+
+        self.assertTrue(mock_request.called)

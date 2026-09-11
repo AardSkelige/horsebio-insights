@@ -47,12 +47,14 @@ urlpatterns = [
     
     # Материалы
     path('materials/', views.material_data, name='materials'),
+    path('materials/filters/', views.material_filters, name='material_filters'),
     path('materials/<int:material_id>/', views.material_details, name='material_details'),
     
     # Поставки
     path('supplies/', views.supply_analytics, name='supplies'),
     path('supplies/materials/', views.supply_materials, name='supply_materials'),
     path('supplies/materials/list/', views.supply_materials_list, name='supply_materials_list'),
+    path('supplies/materials/filters/', views.supply_materials_filters, name='supply_materials_filters'),
     path('supplies/materials/<int:material_id>/details/', views.supply_material_details, name='supply_material_details'),
     path('supplies/suppliers/', views.supply_suppliers_list, name='supply_suppliers_list'),
     path('supplies/suppliers/<int:supplier_id>/details/', views.supply_supplier_details, name='supply_supplier_details'),
@@ -65,6 +67,7 @@ urlpatterns = [
     
     # Товары
     path('products/', views.product_data, name='product_data'),
+    path('products/filters/', views.product_filters, name='product_filters'),
     path('products/<int:product_id>/', views.product_details, name='product_details'),
     path('products/export/', products.export_products_excel, name='export_products_excel'),  # используем products.
 

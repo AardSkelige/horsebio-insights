@@ -62,17 +62,30 @@ def counterparty_data(request):
         # Получаем ID контрагентов с отгрузками за период
         counterparty_ids = shipments_query.values_list('counterparty_id', flat=True).distinct()
 
+        # Условия отбора отгрузок — прямо в агрегаты. Раньше здесь стоял
+        # `filter=Q(shipment__in=shipments_query)`: подзапрос по всей таблице
+        # отгрузок, и по разу на каждый из четырёх агрегатов.
+        #
+        # Отсев помеченных отгрузок выписан руками: он приезжал внутри того
+        # подзапроса вместе с менеджером `Shipment.objects`, а обход связи
+        # (`shipment__`) идёт по таблицам напрямую и менеджера не спрашивает.
+        shipment_filter = Q(shipment__deleted_at__isnull=True)
+        if start_date:
+            shipment_filter &= Q(shipment__date__gte=start_date)
+        if end_date:
+            shipment_filter &= Q(shipment__date__lte=end_date)
+
         # Базовый QuerySet для контрагентов
         counterparties_query = Counterparty.objects.filter(id__in=counterparty_ids).annotate(
             shipments_count=Count(
                 'shipment',
-                filter=Q(shipment__in=shipments_query),
+                filter=shipment_filter,
                 distinct=True
             ),
             total_sales=Coalesce(
                 Sum(
                     F('shipment__items__quantity') * F('shipment__items__price'),
-                    filter=Q(shipment__in=shipments_query),
+                    filter=shipment_filter,
                     output_field=DecimalField()
                 ),
                 0,
@@ -80,10 +93,10 @@ def counterparty_data(request):
             ),
             total_products=Count(
                 'shipment__items__product',
-                filter=Q(shipment__in=shipments_query),
+                filter=shipment_filter,
                 distinct=True
             ),
-            last_shipment=Max('shipment__date', filter=Q(shipment__in=shipments_query))
+            last_shipment=Max('shipment__date', filter=shipment_filter)
         )
 
         # Улучшенный поиск по нескольким словам
@@ -97,7 +110,9 @@ def counterparty_data(request):
 
         # Получаем отфильтрованные отгрузки для найденных контрагентов
         filtered_shipments = shipments_query.filter(
-            counterparty__in=counterparties_query
+            # `values('pk')` — чтобы в подзапрос не уехали четыре агрегата:
+            # для отбора нужны только идентификаторы.
+            counterparty__in=counterparties_query.values('pk')
         )
 
         # Получаем отфильтрованные товары
@@ -419,35 +434,35 @@ def counterparty_group_details(request, category):
         counterparties_data = []
         monthly_dynamics = {}
         
+        # Помесячная динамика — одним запросом на всю группу. Прежде он шёл
+        # на каждого контрагента, а суммы всё равно складывались в общий
+        # помесячный итог: группировка по месяцу сразу по всем даёт то же
+        # самое, но не растёт вместе с размером группы.
+        monthly_rows = ShipmentItem.objects.filter(
+            shipment__counterparty_id__in=[c['id'] for c in group_counterparties],
+            shipment__date__range=(start_date, end_date)
+        ).values(
+            'shipment__date__year',
+            'shipment__date__month'
+        ).annotate(
+            monthly_sum=Sum(F('price') * F('quantity'))
+        ).order_by('shipment__date__year', 'shipment__date__month')
+
+        for row in monthly_rows:
+            month_key = f"{row['shipment__date__year']}-{row['shipment__date__month']:02d}"
+            monthly_dynamics[month_key] = (
+                monthly_dynamics.get(month_key, 0) + float(row['monthly_sum'])
+            )
+
         for c in group_counterparties:
-            # Получаем помесячные данные для контрагента
-            shipments = ShipmentItem.objects.filter(
-                shipment__counterparty_id=c['id'],
-                shipment__date__range=(start_date, end_date)
-            ).values(
-                'shipment__date__year',
-                'shipment__date__month'
-            ).annotate(
-                monthly_sum=Sum(F('price') * F('quantity'))
-            ).order_by('shipment__date__year', 'shipment__date__month')
-            
-            # Собираем статистику по месяцам
-            for shipment in shipments:
-                month_key = f"{shipment['shipment__date__year']}-{shipment['shipment__date__month']:02d}"
-                if month_key not in monthly_dynamics:
-                    monthly_dynamics[month_key] = 0
-                monthly_dynamics[month_key] += float(shipment['monthly_sum'])
-            
-            # Собираем данные по контрагенту
-            counterparty_data = {
+            counterparties_data.append({
                 'id': c['id'],
                 'name': c['name'],
                 'avg_monthly': float(c['avg_monthly']),
                 'frequency': float(c['frequency']),
-                'total_months': int(c.get('total_months', 0)),  # Добавляем это поле
-                'total_sum': float(c.get('total_sum', 0))      # Добавляем это поле
-            }
-            counterparties_data.append(counterparty_data)
+                'total_months': int(c.get('total_months', 0)),
+                'total_sum': float(c.get('total_sum', 0))
+            })
         
         # Формируем помесячную динамику
         monthly_series = [

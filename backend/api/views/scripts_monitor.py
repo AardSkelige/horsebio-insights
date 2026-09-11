@@ -118,12 +118,16 @@ def _content_hash(log_file):
         return None
 
 
-def _get_runs(script_id):
+def _get_runs(script_id, limit=20):
     """Возвращает список запусков (сортировка: новые первыми).
     Каждый запуск содержит флаг has_changes — отличается ли содержимое от предыдущего.
+
+    `limit` ограничивает число разбираемых логов. Каждый из них читается
+    целиком ради хэша, поэтому запрашивать двадцать, когда нужен один,
+    заметно дороже, чем кажется.
     """
     pattern = os.path.join(script_runner.logs_dir(), f'{script_id}_{script_runner.RUN_ID_GLOB}.log')
-    files = sorted(glob.glob(pattern), reverse=True)[:20]
+    files = sorted(glob.glob(pattern), reverse=True)[:limit]
     running_now = script_runner.is_running(script_id)
     runs = []
     hashes = []
@@ -166,7 +170,9 @@ def _get_exit_code(log_file):
 
 
 def _get_latest_run(script_id):
-    runs = _get_runs(script_id)
+    # Двух логов достаточно: свежий и предыдущий — второй нужен только затем,
+    # чтобы сказать, отличается ли содержимое.
+    runs = _get_runs(script_id, limit=2)
     return runs[0] if runs else None
 
 

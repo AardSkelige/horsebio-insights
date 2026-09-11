@@ -170,16 +170,19 @@ class ShipmentStorage:
                         external_id=position_id
                     )
 
+                # Расход сырья пишем пачкой, а не строкой за строкой: у позиции
+                # столько записей, сколько материалов в техкарте, а позиций
+                # в полной синхронизации десятки тысяч. Так их и накопилось
+                # полмиллиона — по вставке на запись.
                 materials = self.material_registry.get_materials_for_product(product.external_id)
-                for material_data in materials:
-                    material = material_data['material']
-                    material_quantity = Decimal(str(material_data['quantity'])) * quantity
-
-                    RawMaterialUsage.objects.create(
+                RawMaterialUsage.objects.bulk_create([
+                    RawMaterialUsage(
                         shipment_item=shipment_item,
-                        raw_material=material,
-                        quantity=material_quantity
+                        raw_material=material_data['material'],
+                        quantity=Decimal(str(material_data['quantity'])) * quantity
                     )
+                    for material_data in materials
+                ])
 
                 return shipment_item
 

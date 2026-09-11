@@ -5,7 +5,7 @@ Consolidates duplicated date handling code from multiple views.
 from datetime import datetime
 from typing import Optional
 
-from django.db.models import QuerySet
+from django.db.models import Q, QuerySet
 from django.utils import timezone
 
 
@@ -77,6 +77,35 @@ def apply_date_filter(
         queryset = queryset.filter(**{f'{date_field}__lte': end})
 
     return queryset
+
+
+def date_filter_q(
+    start_date: Optional[str],
+    end_date: Optional[str],
+    date_field: str = 'date',
+    date_format: str = '%Y-%m-%d'
+) -> Q:
+    """Те же границы периода, но как условие, а не как фильтр выборки.
+
+    Нужно там, где период задаёт не саму выборку, а слагаемые внутри
+    агрегата (`Sum(..., filter=...)`). Иначе период приходится оформлять
+    отдельной выборкой и подставлять её подзапросом `__in=`, а такой
+    подзапрос считается по разу на каждый агрегат.
+
+    Example:
+        >>> RawMaterial.objects.annotate(
+        ...     total=Sum('supplyitem__quantity',
+        ...               filter=date_filter_q(start, end, 'supplyitem__supply__date')))
+    """
+    start = parse_date_param(start_date, end_of_day=False, date_format=date_format)
+    end = parse_date_param(end_date, end_of_day=True, date_format=date_format)
+
+    condition = Q()
+    if start:
+        condition &= Q(**{f'{date_field}__gte': start})
+    if end:
+        condition &= Q(**{f'{date_field}__lte': end})
+    return condition
 
 
 def get_period_dates(

@@ -7,6 +7,7 @@ from rest_framework.decorators import api_view
 from api.exceptions import NotFoundError, DataProcessingError
 from api.serializers import ListQuerySerializer
 from api.services.supply_service import (
+    VALID_GROUPS,
     get_supply_analytics,
     get_supply_materials,
     get_materials_list,
@@ -82,6 +83,20 @@ def supply_materials_list(request):
     except Exception as e:
         logger.error(f"Error in supply_materials_list: {str(e)}", exc_info=True)
         raise DataProcessingError("Ошибка получения списка материалов")
+
+
+@api_view(['GET'])
+def supply_materials_filters(request):
+    """Справочник для панели фильтров раздела: группы материалов.
+
+    Панели нужен один список из трёх строк, а `list/` ради него пересчитывал
+    поставки по всему справочнику — раздел открывался двумя тяжёлыми
+    запросами вместо одного.
+    """
+    return JsonResponse({
+        'status': 'success',
+        'data': {'available_groups': VALID_GROUPS},
+    })
 
 
 @api_view(['GET'])

@@ -29,10 +29,9 @@ class GroupPredictor:
                 return pd.DataFrame()
             
             # Получаем все ID включая связанные
-            counterparty_ids = []
-            for c in group_counterparties:
-                counterparty = Counterparty.objects.get(id=c['id'])
-                counterparty_ids.extend(counterparty.all_related_ids)
+            counterparty_ids = Counterparty.related_ids_for(
+                c['id'] for c in group_counterparties
+            )
             
             # Получаем агрегированные данные по месяцам
             shipments = ShipmentItem.objects.filter(

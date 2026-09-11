@@ -1,5 +1,6 @@
 """Тесты постраничного контроля доступа (api.access + middleware + admin API)."""
 import json
+from unittest.mock import MagicMock, patch
 
 from django.test import TestCase, Client
 from django.contrib.auth.models import User
@@ -30,13 +31,21 @@ class PageAccessMiddlewareTests(TestCase):
         self.assertEqual(resp.status_code, 200)
 
     def test_allowed_after_grant(self):
-        """С выданной страницей middleware пропускает (не 403)."""
+        """С выданной страницей middleware пропускает (не 403).
+
+        МойСклад подменён: проверяем middleware, а не отчёт, и ходить за
+        настоящими деньгами ради кода ответа незачем — раньше этот тест
+        делал шесть живых запросов и упирался в лимит аккаунта.
+        """
         UserPageAccess.objects.create(user=self.user, page_key='cash-flow')
-        resp = self.client.post(
-            '/api/analysis/cash-flow/',
-            data=json.dumps({'date_from': '2026-06-01T00:00:00', 'date_to': '2026-06-30T23:59:59'}),
-            content_type='application/json',
-        )
+        empty = MagicMock()
+        empty.json.return_value = {'rows': []}
+        with patch('api.services.cash_flow.ms_http.get', return_value=empty):
+            resp = self.client.post(
+                '/api/analysis/cash-flow/',
+                data=json.dumps({'date_from': '2026-06-01T00:00:00', 'date_to': '2026-06-30T23:59:59'}),
+                content_type='application/json',
+            )
         self.assertNotEqual(resp.status_code, 403)
 
     def test_superuser_class_page_denied_for_regular(self):

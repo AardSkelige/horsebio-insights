@@ -1,4 +1,6 @@
 # forecasting/services/categorization/categorizer.py
+from collections import defaultdict
+from decimal import Decimal
 from typing import Dict, List
 import pandas as pd
 import numpy as np
@@ -24,85 +26,109 @@ class CounterpartyCategorizator:
         self.end_date = end_date
     
     def calculate_statistics(self) -> pd.DataFrame:
-        try:
-            all_stats = []
-            counterparties = Counterparty.objects.filter(is_legacy=False)
-            
-            for counterparty in counterparties:
-                related_ids = counterparty.all_related_ids
-                
-                # Базовый запрос с учетом периода
-                shipments_query = ShipmentItem.objects.filter(
-                    shipment__counterparty_id__in=related_ids
-                )
-                
-                # Добавляем фильтры по датам
-                if self.start_date:
-                    shipments_query = shipments_query.filter(
-                        shipment__date__gte=self.start_date
-                    )
-                if self.end_date:
-                    shipments_query = shipments_query.filter(
-                        shipment__date__lte=self.end_date
-                    )
+        """Помесячная статистика по каждому контрагенту.
 
-                # Получаем суммарные значения за период
-                total_data = shipments_query.aggregate(
-                    total_sum=Sum(F('price') * F('quantity'), output_field=models.DecimalField())
-                )
-                
-                # Получаем помесячную статистику с учетом периода
-                monthly_stats = shipments_query.annotate(
-                    year=ExtractYear('shipment__date'),
-                    month=ExtractMonth('shipment__date')
-                ).values(
-                    'year', 
-                    'month'
-                ).annotate(
-                    monthly_sum=Sum(F('price') * F('quantity'))
-                ).order_by('year', 'month')
-                
-                if monthly_stats:
-                    monthly_values = [float(s['monthly_sum'] or 0) for s in monthly_stats]
-                    total_months = len(monthly_stats)
-                    active_months = len([v for v in monthly_values if v > 0])
-                    total_sum = float(total_data['total_sum'] or 0)
-                    
-                    stats = {
-                        'counterparty_id': counterparty.id,
-                        'name': counterparty.name,
-                        'total_months': total_months,
-                        'active_months': active_months,
-                        'total_sum': total_sum,
-                        'frequency': active_months / total_months if total_months > 0 else 0,
-                        'avg_monthly': total_sum / active_months if active_months > 0 else 0
-                    }
-                    all_stats.append(stats)
-            
-            # Создаем DataFrame со всеми нужными колонками
-            columns = ['counterparty_id', 'name', 'total_months', 'active_months', 
-                      'total_sum', 'frequency', 'avg_monthly']
-            self.stats_df = pd.DataFrame(all_stats, columns=columns)
-            
-            # Рассчитываем границы для категорий
-            if not self.stats_df.empty:
-                monthly_values = self.stats_df['avg_monthly']
-                self.thresholds = {
-                    'monthly_volume': {
-                        'small': monthly_values.quantile(0.25),
-                        'medium': monthly_values.quantile(0.75),
-                        'large': monthly_values.quantile(0.95)
-                    },
-                    'frequency': {
-                        'rare': 0.25,
-                        'regular': 0.75
-                    }
+        Ошибки наружу не глушим. Пустой DataFrame — законный ответ (никто
+        ничего не отгружал), и подменять им поломку значит показывать
+        пустой отчёт вместо сообщения о сбое: страница выглядит рабочей,
+        а расчёта нет. Вызывающий и так заворачивает исключение в ошибку
+        раздела и пишет трассировку в лог.
+        """
+        # Раньше здесь шёл обход контрагентов, и на каждого приходилось три
+        # запроса: список его старых карточек, общая сумма и помесячная
+        # разбивка. На проде это больше двух тысяч контрагентов, то есть
+        # свыше шести тысяч запросов на один расчёт.
+        #
+        # Теперь всё то же считается одной группировкой по контрагенту и
+        # месяцу, а склейка старых карточек с основными делается по карте,
+        # вычитанной одним запросом.
+        names = dict(
+            Counterparty.objects.filter(is_legacy=False).values_list('id', 'name')
+        )
+
+        # Старая карточка отдаёт свои отгрузки основной — так же, как это
+        # делал `all_related_ids`.
+        owner = {counterparty_id: counterparty_id for counterparty_id in names}
+        legacy_pairs = Counterparty.objects.filter(
+            is_legacy=True, main_counterparty_id__isnull=False
+        ).values_list('id', 'main_counterparty_id')
+        for legacy_id, main_id in legacy_pairs:
+            if main_id in names:
+                owner[legacy_id] = main_id
+
+        shipments_query = ShipmentItem.objects.filter(
+            shipment__counterparty_id__in=owner.keys()
+        )
+        if self.start_date:
+            shipments_query = shipments_query.filter(
+                shipment__date__gte=self.start_date
+            )
+        if self.end_date:
+            shipments_query = shipments_query.filter(
+                shipment__date__lte=self.end_date
+            )
+
+        monthly_rows = shipments_query.annotate(
+            year=ExtractYear('shipment__date'),
+            month=ExtractMonth('shipment__date')
+        ).values(
+            'shipment__counterparty_id', 'year', 'month'
+        ).annotate(
+            monthly_sum=Sum(F('price') * F('quantity'),
+                            output_field=models.DecimalField())
+        ).order_by()
+
+        # Контрагент → {(год, месяц): сумма}. Месяц, в котором отгружались
+        # и основная карточка, и старая, остаётся одним месяцем — как и
+        # при прежней группировке по объединённому списку идентификаторов.
+        by_counterparty = defaultdict(dict)
+        for row in monthly_rows:
+            main_id = owner[row['shipment__counterparty_id']]
+            month_key = (row['year'], row['month'])
+            months = by_counterparty[main_id]
+            months[month_key] = months.get(month_key, Decimal('0')) + (
+                row['monthly_sum'] or Decimal('0')
+            )
+
+        all_stats = []
+        for counterparty_id, months in by_counterparty.items():
+            monthly_values = [float(value) for value in months.values()]
+            total_months = len(monthly_values)
+            active_months = len([value for value in monthly_values if value > 0])
+            total_sum = float(sum(months.values()))
+
+            all_stats.append({
+                'counterparty_id': counterparty_id,
+                'name': names[counterparty_id],
+                'total_months': total_months,
+                'active_months': active_months,
+                'total_sum': total_sum,
+                'frequency': active_months / total_months if total_months > 0 else 0,
+                'avg_monthly': total_sum / active_months if active_months > 0 else 0
+            })
+
+        # Создаем DataFrame со всеми нужными колонками
+        columns = ['counterparty_id', 'name', 'total_months', 'active_months', 
+                  'total_sum', 'frequency', 'avg_monthly']
+        self.stats_df = pd.DataFrame(all_stats, columns=columns)
+        
+        # Рассчитываем границы для категорий
+        if not self.stats_df.empty:
+            monthly_values = self.stats_df['avg_monthly']
+            self.thresholds = {
+                'monthly_volume': {
+                    'small': monthly_values.quantile(0.25),
+                    'medium': monthly_values.quantile(0.75),
+                    'large': monthly_values.quantile(0.95)
+                },
+                'frequency': {
+                    'rare': 0.25,
+                    'regular': 0.75
                 }
-                
-            return self.stats_df
+            }
             
-        except Exception as e:
-            return pd.DataFrame()
+        return self.stats_df
+        
 
     def categorize(self) -> Dict[str, List]:
         if not hasattr(self, 'stats_df') or self.stats_df.empty:

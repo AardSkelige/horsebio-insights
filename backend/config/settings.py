@@ -232,6 +232,10 @@ CACHE_TIMEOUTS = {
 # Тесты не должны получать базу в довесок к кешу.
 _RUNNING_TESTS = 'test' in sys.argv
 
+# Флаг видят слои, которым Django не обязателен, — например `msapi.http`:
+# он по нему запрещает себе настоящие запросы к МойСклад во время прогона.
+TESTING = _RUNNING_TESTS
+
 CACHES = {
     'default': {
         'BACKEND': ('django.core.cache.backends.locmem.LocMemCache' if _RUNNING_TESTS

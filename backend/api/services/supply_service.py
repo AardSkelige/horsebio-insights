@@ -11,7 +11,7 @@ from django.core.paginator import Paginator
 
 from core.models import Supply, SupplyItem, RawMaterial, Counterparty
 from api.exceptions import NotFoundError
-from api.utils import apply_date_filter
+from api.utils import apply_date_filter, date_filter_q
 
 VALID_GROUPS = [
     'Тара',
@@ -186,30 +186,38 @@ def get_materials_list(
     if group:
         materials_query = materials_query.filter(group=group)
 
+    # Выборка позиций нужна сводке внизу: там три самостоятельных счёта по
+    # поставкам, а не показатели материала.
     supplies_query = SupplyItem.objects.filter(raw_material__in=materials_query)
     supplies_query = apply_date_filter(supplies_query, start_date, end_date, 'supply__date')
 
+    # Период — прямо в агрегаты. Раньше он оформлялся отдельной выборкой
+    # позиций и подставлялся подзапросом `supplyitem__in=...` — по разу на
+    # каждый из пяти агрегатов. Отбор по материалу в том подзапросе был и
+    # вовсе лишним: позиции и так берутся от своего материала.
+    item_filter = date_filter_q(start_date, end_date, 'supplyitem__supply__date')
+
     materials_data = materials_query.annotate(
         total_quantity=Coalesce(
-            Sum('supplyitem__quantity', filter=Q(supplyitem__in=supplies_query)),
+            Sum('supplyitem__quantity', filter=item_filter),
             0, output_field=DecimalField(),
         ),
         average_price=Coalesce(
-            Avg('supplyitem__price', filter=Q(supplyitem__in=supplies_query)),
+            Avg('supplyitem__price', filter=item_filter),
             0, output_field=DecimalField(),
         ),
         total_sum=Coalesce(
             Sum(
                 F('supplyitem__quantity') * F('supplyitem__price'),
-                filter=Q(supplyitem__in=supplies_query),
+                filter=item_filter,
             ),
             0, output_field=DecimalField(),
         ),
         supplies_count=Count(
-            'supplyitem__supply', filter=Q(supplyitem__in=supplies_query), distinct=True,
+            'supplyitem__supply', filter=item_filter, distinct=True,
         ),
         suppliers_count=Count(
-            'supplyitem__supply__counterparty', filter=Q(supplyitem__in=supplies_query), distinct=True,
+            'supplyitem__supply__counterparty', filter=item_filter, distinct=True,
         ),
     )
 
@@ -218,8 +226,14 @@ def get_materials_list(
             Q(total_quantity__gt=0) | Q(total_sum__gt=0) | Q(supplies_count__gt=0)
         )
 
+    # Счёт материалов и оба топа — одним проходом по выборке. Прежде это были
+    # три отдельных запроса с той же агрегацией ради шести строк.
+    summary = list(materials_data.values(
+        'name', 'total_quantity', 'total_sum', 'average_price', 'supplies_count'
+    ))
+
     stats = {
-        'total_materials': materials_data.count(),
+        'total_materials': len(summary),
         'total_supplies': supplies_query.values('supply').distinct().count(),
         'total_suppliers': supplies_query.values('supply__counterparty').distinct().count(),
         'total_sum': float(
@@ -228,12 +242,14 @@ def get_materials_list(
     }
 
     top_by_quantity = [
-        {'name': m.name, 'quantity': float(m.total_quantity), 'supplies_count': m.supplies_count}
-        for m in materials_data.order_by('-total_quantity')[:3]
+        {'name': m['name'], 'quantity': float(m['total_quantity']),
+         'supplies_count': m['supplies_count']}
+        for m in sorted(summary, key=lambda m: m['total_quantity'], reverse=True)[:3]
     ]
     top_by_sum = [
-        {'name': m.name, 'sum': float(m.total_sum), 'average_price': float(m.average_price)}
-        for m in materials_data.order_by('-total_sum')[:3]
+        {'name': m['name'], 'sum': float(m['total_sum']),
+         'average_price': float(m['average_price'])}
+        for m in sorted(summary, key=lambda m: m['total_sum'], reverse=True)[:3]
     ]
 
     sort_mapping = {
@@ -244,7 +260,9 @@ def get_materials_list(
     }
     if sort_field in sort_mapping:
         prefix = '-' if sort_order == 'desc' else ''
-        materials_data = materials_data.order_by(f'{prefix}{sort_mapping[sort_field]}')
+        # Идентификатор последним ключом: без него материалы с одинаковыми
+        # значениями переставляются между страницами при листании.
+        materials_data = materials_data.order_by(f'{prefix}{sort_mapping[sort_field]}', 'pk')
 
     paginator = Paginator(materials_data, page_size)
     page_data = paginator.get_page(page)

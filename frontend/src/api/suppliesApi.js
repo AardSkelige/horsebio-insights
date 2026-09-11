@@ -2,15 +2,14 @@
 import api from '../utils/api';
 
 export const suppliesApi = {
-    getAll: (signal) =>
-        api.get('/supplies/', { signal }),
-
     materials: {
         getList: (params, signal) =>
             api.get('/supplies/materials/list/', { params, signal }),
 
-        getAll: (signal) =>
-            api.get('/supplies/materials/list/', { signal }),
+        // Справочник для панели фильтров: список групп не стоит пересчёта
+        // поставок по всему справочнику материалов.
+        getFilters: (signal) =>
+            api.get('/supplies/materials/filters/', { signal }),
 
         getDetails: (id, qs, signal) =>
             api.get(`/supplies/materials/${id}/details/`, { params: qs || undefined, signal }),

@@ -10,6 +10,7 @@ import re
 import json
 from collections import defaultdict
 
+from django.db.models import OuterRef, Subquery
 from django.http import JsonResponse
 from django.views.decorators.http import require_http_methods
 from django.utils import timezone as dj_timezone
@@ -86,12 +87,18 @@ def _serialize_exception(e):
 @scripts_auth
 def checks_overview(request):
     """GET /api/checks/scripts/ — обзор всех скриптов со сводкой."""
-    latest_results = {}
-    for s in SCRIPTS_CONFIG:
-        if s.get('structured'):
-            crr = CheckRunResult.objects.filter(script_id=s['id']).order_by('-finished_at').first()
-            if crr:
-                latest_results[s['id']] = crr
+    # Последний прогон каждой структурированной проверки — одним запросом.
+    # Прежде здесь был запрос на проверку, а это самый частый адрес в системе.
+    structured_ids = [s['id'] for s in SCRIPTS_CONFIG if s.get('structured')]
+    newest_for_script = CheckRunResult.objects.filter(
+        script_id=OuterRef('script_id')
+    ).order_by('-finished_at').values('pk')[:1]
+    latest_results = {
+        run.script_id: run
+        for run in CheckRunResult.objects.filter(
+            script_id__in=structured_ids, pk__in=Subquery(newest_for_script)
+        )
+    }
     result = []
     for script in SCRIPTS_CONFIG:
         sid = script['id']

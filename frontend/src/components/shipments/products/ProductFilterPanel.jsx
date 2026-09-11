@@ -11,7 +11,7 @@ const ProductFilterPanel = ({ filters, onChange }) => {
     const [salesChannels, setSalesChannels] = useState([]);
 
     useEffect(() => {
-        productsApi.getAll()
+        productsApi.getFilters()
             .then((data) => {
                 if (data.status !== 'success') return;
                 setSubgroups(data.data.available_subgroups.filter(Boolean));

@@ -9,7 +9,7 @@ const MaterialSupplyFilterPanel = ({ filters, onChange }) => {
     const [groups, setGroups] = useState([]);
 
     useEffect(() => {
-        suppliesApi.materials.getAll()
+        suppliesApi.materials.getFilters()
             .then((data) => {
                 if (data.status !== 'success') return;
                 setGroups(data.data.available_groups.filter(Boolean));
