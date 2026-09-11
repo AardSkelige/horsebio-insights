@@ -1,11 +1,11 @@
 import { useState, useEffect } from 'react';
-import { Package, Download } from 'lucide-react';
+import { Package, Download, TruckIcon } from 'lucide-react';
 import FBOTable from './FBOTable';
 import FBOStatistics from './FBOStatistics';
 import FBOOrderDetails from './FBOOrderDetails';
-import { Button, ErrorState, Page, PageHeader, SectionLabel } from '../ui';
+import { Button, EmptyState, ErrorState, Page, PageHeader, SectionLabel } from '../ui';
 import { analysisApi } from '../../api/analysisApi';
-import { timeOnly } from '../../utils/formatters';
+import { money, num, timeOnly } from '../../utils/formatters';
 
 const STAGES = [
     [0,  20, 'Получение заказов...'],
@@ -138,6 +138,19 @@ const FBOAnalysis = () => {
                     <SectionLabel>Детали заказов</SectionLabel>
                     <FBOOrderDetails orders={data.orders} />
                 </section>
+            )}
+
+            {/* Пустая таблица без пояснения читалась как «всё отгружено».
+                Говорим прямо, что предстоящих нет, и не молчим о просроченных:
+                их в разделе не показываем, но знать о них надо. */}
+            {data.statistics && data.orders.length === 0 && (
+                <EmptyState
+                    icon={TruckIcon}
+                    title="Предстоящих отгрузок FBO нет"
+                    hint={data.statistics.overdue_orders > 0
+                        ? `Просрочено ${num(data.statistics.overdue_orders)} на ${money(data.statistics.overdue_sum)} — плановая дата прошла, отгрузки нет`
+                        : 'Все FBO-заказы отгружены'}
+                />
             )}
         </Page>
     );

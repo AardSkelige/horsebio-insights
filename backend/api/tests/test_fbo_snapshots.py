@@ -23,7 +23,8 @@ STOCK_SNAPSHOT = {
 }
 
 FBO_SNAPSHOT = {
-    'statistics': {'total_orders': 120, 'fbo_orders': 2, 'no_shipment_orders': 2,
+    'statistics': {'fbo_orders': 2,
+                   'overdue_orders': 9, 'overdue_sum': 2472240.0, 'overdue_oldest_days': 595,
                    'start_date': '2026-08-11T00:00:00', 'end_date': '2026-09-10T00:00:00',
                    'last_update': '2026-09-10T09:00:00'},
     'products': [{'name': 'Гель', 'quantity': 3}],
@@ -112,7 +113,7 @@ class FboOrdersPageTests(_SectionTestCase):
         with patch('api.views.fbo._build_fbo_analysis_data', return_value=FBO_SNAPSHOT):
             call_command('build_fbo_snapshot')
 
-        self.assertEqual(SectionSnapshot.stored('fbo').payload['statistics']['total_orders'], 120)
+        self.assertEqual(SectionSnapshot.stored('fbo').payload['statistics']['overdue_orders'], 9)
 
 
 class SnapshotsShareOneTableTests(TestCase):

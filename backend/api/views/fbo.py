@@ -76,6 +76,59 @@ def get_fbo_state_href(client):
             return state['meta']['href']
     return None
 
+def _overdue_fbo_orders(client, url, state_href, today_start):
+    """Неотгруженные FBO-заказы, у которых плановая дата уже прошла.
+
+    Раздел показывает предстоящие отгрузки, и просроченным в таблице не место.
+    Но без их числа пустая таблица врёт: 11.09.2026 «предстоящих» не было ни
+    одного, а неотгруженными висели девять заказов на 2,4 млн — в том числе
+    один с плановой датой января 2025 года.
+
+    Считаем в обход `shippedSum`: по нему МойСклад фильтровать не умеет
+    (см. атрибуты заказа покупателя), поэтому просроченные приходится
+    вычитывать и отсеивать здесь. Идём без `expand` — нужны только суммы
+    и дата, а это страницами по сотне и дёшево.
+    """
+    overdue_filter = (
+        f"state={state_href};"
+        f"deliveryPlannedMoment<{today_start.strftime('%Y-%m-%d %H:%M:%S')}"
+    )
+
+    rows = []
+    offset = 0
+    limit = 100
+    while True:
+        response = ms_http.get(
+            url, headers=client.headers, timeout=30,
+            params={"filter": overdue_filter, "limit": limit, "offset": offset},
+        )
+        response.raise_for_status()
+        batch = response.json().get('rows', [])
+        rows.extend(batch)
+        if len(batch) < limit:
+            break
+        offset += limit
+
+    unshipped = [
+        order for order in rows
+        if float(order.get('shippedSum', 0)) == 0 and order.get('deliveryPlannedMoment')
+    ]
+
+    oldest_days = 0
+    for order in unshipped:
+        planned = timezone.make_aware(
+            datetime.fromisoformat(order['deliveryPlannedMoment'].replace('Z', ''))
+        )
+        oldest_days = max(oldest_days, (today_start - planned).days)
+
+    return {
+        'count': len(unshipped),
+        # Суммы в МойСкладе хранятся в копейках.
+        'sum': round(sum(float(order.get('sum', 0)) for order in unshipped) / 100, 2),
+        'oldest_days': oldest_days,
+    }
+
+
 def _build_fbo_analysis_data():
    """Собрать данные FBO для API и Excel-экспорта."""
    try:
@@ -86,26 +139,19 @@ def _build_fbo_analysis_data():
        today_start = timezone.now().replace(hour=0, minute=0, second=0, microsecond=0)
 
        url = f"{client.BASE_URL}/entity/customerorder"
-       moment_filter = (
-           f"moment>={start_date.strftime('%Y-%m-%d %H:%M:%S')};"
-           f"moment<={end_date.strftime('%Y-%m-%d %H:%M:%S')}"
-       )
-
-       # Общее число заказов за период — лёгкий запрос без expand, только meta.size
-       response = ms_http.get(url, headers=client.headers,
-                               params={"filter": moment_filter, "limit": 1},
-                               timeout=30)
-       response.raise_for_status()
-       total_orders = response.json().get('meta', {}).get('size', 0)
 
        # FBO-заказы фильтруем на стороне МойСклад (state + deliveryPlannedMoment):
-       # вместо всех ~1000 заказов с expand приходит только пара десятков
+       # вместо всех ~1000 заказов с expand приходит только пара десятков.
        state_href = get_fbo_state_href(client)
        if not state_href:
            raise DataProcessingError("Статус «FBO» не найден в МойСклад")
 
+       # Окна по дате создания здесь больше нет. Оно отсекало заказы старше
+       # тридцати дней, хотя неотгруженный заказ не перестаёт ждать отгрузки
+       # оттого, что его давно завели: проверка 11.09.2026 нашла такой от
+       # января 2025 года. Тридцать дней остаются только окном продаж ниже.
        fbo_filter = (
-           f"{moment_filter};state={state_href};"
+           f"state={state_href};"
            f"deliveryPlannedMoment>={today_start.strftime('%Y-%m-%d %H:%M:%S')}"
        )
 
@@ -138,6 +184,8 @@ def _build_fbo_analysis_data():
            order for order in candidates
            if float(order.get('shippedSum', 0)) == 0 and order.get('deliveryPlannedMoment')
        ]
+
+       overdue = _overdue_fbo_orders(client, url, state_href, today_start)
 
        products_data = []
        product_hrefs = set()
@@ -224,9 +272,13 @@ def _build_fbo_analysis_data():
 
        response_data = {
            'statistics': {
-               'total_orders': total_orders,
                'fbo_orders': len(fbo_orders),
-               'no_shipment_orders': len(fbo_orders),
+               # Просроченные на экран не выводятся — раздел про предстоящие.
+               # Но молчать о них нельзя: пустая таблица без этих чисел
+               # читается как «всё отгружено», хотя это ровно наоборот.
+               'overdue_orders': overdue['count'],
+               'overdue_sum': overdue['sum'],
+               'overdue_oldest_days': overdue['oldest_days'],
                'start_date': start_date.isoformat(),
                'end_date': end_date.isoformat(),
                'last_update': timezone.now().isoformat()
