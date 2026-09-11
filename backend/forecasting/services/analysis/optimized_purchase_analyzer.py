@@ -193,8 +193,29 @@ class OptimizedPurchaseAnalyzer:
             # Словарь для агрегации данных по материалам
             material_aggregates = {}
             
+            # Заказы и их позиции — двумя запросами на весь разбор. Прежде на
+            # каждый заказ приходилось три: сам заказ, его поставщик (обращение
+            # к связи без select_related) и список позиций.
+            orders_by_id = {
+                order.id: order
+                for order in PurchaseOrder.objects
+                .filter(id__in=set(base_order_ids))
+                .select_related('counterparty')
+            }
+
+            items_by_order = {}
+            for item in (
+                PurchaseOrderItem.objects
+                .filter(purchase_order_id__in=orders_by_id.keys())
+                .exclude(raw_material_id=material_id)
+                .select_related('raw_material')
+            ):
+                items_by_order.setdefault(item.purchase_order_id, []).append(item)
+
             for order_id in base_order_ids:
-                order = PurchaseOrder.objects.get(id=order_id)
+                order = orders_by_id.get(order_id)
+                if order is None:
+                    continue
                 supplier = order.counterparty
                 
                 if supplier.name not in supplier_materials:
@@ -204,14 +225,13 @@ class OptimizedPurchaseAnalyzer:
                         'total_orders': 0
                     }
 
-                related_items = PurchaseOrderItem.objects.filter(
-                    purchase_order_id=order_id
-                ).exclude(
-                    raw_material_id=material_id
-                ).select_related('raw_material')
-
-                for item in related_items:
-                    material_key = f"{supplier.name}_{item.raw_material.id}"
+                for item in items_by_order.get(order_id, []):
+                    # Ключ — пара, а не склейка через подчёркивание: имя
+                    # поставщика может само его содержать («ООО Ромашка_2»),
+                    # и разбор обратно отдавал бы обрезанное имя. Дальше по
+                    # этому имени ищется запись поставщика — промах означал
+                    # KeyError и отказ всего разбора.
+                    material_key = (supplier.name, item.raw_material.id)
                     
                     if material_key not in material_aggregates:
                         joint_orders = PurchaseOrderItem.objects.filter(
@@ -224,11 +244,14 @@ class OptimizedPurchaseAnalyzer:
                                 purchase_order__date__range=(self.start_date, self.end_date)
                             )
                         
-                        joint_orders_count = joint_orders.count()
+                        # Счёт и сумма одним проходом: раньше выборка читалась
+                        # дважды — сперва `count()`, потом обход ради суммы.
+                        totals = joint_orders.aggregate(
+                            count=Count('id'), quantity=Sum('quantity')
+                        )
+                        joint_orders_count = totals['count']
                         frequency = (joint_orders_count / total_orders) * 100
-
-                        # Вычисляем среднее количество
-                        total_quantity = sum(float(jo.quantity) for jo in joint_orders)
+                        total_quantity = float(totals['quantity'] or 0)
                         avg_quantity = total_quantity / joint_orders_count if joint_orders_count > 0 else 0
 
                         material_aggregates[material_key] = {
@@ -243,8 +266,7 @@ class OptimizedPurchaseAnalyzer:
                 supplier_materials[supplier.name]['total_orders'] += 1
 
             # Распределяем агрегированные данные по поставщикам
-            for material_key, material_info in material_aggregates.items():
-                supplier_name = material_key.split('_')[0]
+            for (supplier_name, _material_id), material_info in material_aggregates.items():
                 if material_info['frequency'] >= 5:
                     if material_info not in supplier_materials[supplier_name]['related']:
                         supplier_materials[supplier_name]['related'].append(material_info)

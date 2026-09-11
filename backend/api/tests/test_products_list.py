@@ -9,6 +9,7 @@
 
 import json
 from datetime import timedelta
+from io import BytesIO
 from decimal import Decimal
 
 from django.contrib.auth.models import User
@@ -16,6 +17,7 @@ from django.db import connection
 from django.test import Client, TestCase
 from django.test.utils import CaptureQueriesContext
 from django.utils import timezone
+from openpyxl import load_workbook
 
 from core.models import (
     Counterparty, Product, SalesChannel, Shipment, ShipmentItem,
@@ -118,6 +120,48 @@ class ProductAggregateTests(ProductListTestCase):
         self.assertEqual(rows['Новинка']['quantity'], 0)
         self.assertEqual(rows['Новинка']['total_sum'], 0)
         self.assertEqual(rows['Новинка']['shipments_count'], 0)
+
+
+class ExportMatchesScreenTests(ProductListTestCase):
+    """Выгрузка в Excel обязана показывать то же, что экран раздела.
+
+    Расчёт у них общий (`aggregated_products`), и это не украшение: пока
+    у выгрузки была своя копия агрегатов, любое новое условие отбора
+    приходилось дописывать дважды, а разъехавшись, они дали бы разные числа
+    за один и тот же период.
+    """
+
+    def setUp(self):
+        super().setUp()
+        self.recent = Product.objects.create(
+            name='Свежий', external_id='p-1', group='Товары', subgroup='Биопрепараты',
+        )
+        self.old = Product.objects.create(
+            name='Давний', external_id='p-2', group='Товары', subgroup='Биопрепараты',
+        )
+        self.ship(self.recent, '10', '100', days_ago=1)
+        self.ship(self.old, '5', '200', days_ago=90)
+
+    def exported_names(self, query=''):
+        response = self.client.get(f'/api/products/export/{query}')
+        self.assertEqual(response.status_code, 200)
+        workbook = load_workbook(BytesIO(response.content))
+        sheet = workbook.active
+        names = []
+        for row in sheet.iter_rows(min_row=2, max_col=1, values_only=True):
+            if row[0]:
+                names.append(row[0])
+        return sorted(names)
+
+    def test_export_without_filters_matches_the_screen(self):
+        screen = sorted(row['name'] for row in self.data()['products'])
+        self.assertEqual(self.exported_names(), screen)
+
+    def test_export_with_a_period_matches_the_screen(self):
+        recent = (self.now - timedelta(days=30)).date().isoformat()
+        screen = sorted(row['name'] for row in self.data(f'?startDate={recent}')['products'])
+        self.assertEqual(screen, ['Свежий'])
+        self.assertEqual(self.exported_names(f'?startDate={recent}'), screen)
 
 
 class ProductPagingTests(ProductListTestCase):

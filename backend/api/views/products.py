@@ -1,25 +1,20 @@
 from django.http import JsonResponse
-from django.core.paginator import Paginator
-from django.db.models import Q, F, Sum, Count, Avg, Min, Max
-from django.db.models.fields import DecimalField
+from django.db.models import Sum, Count, Min, Max
 from rest_framework.decorators import api_view
-from django.db.models.functions import (
-    Coalesce
-)
 from datetime import datetime
+from django.utils.dateparse import parse_date
 from django.utils import timezone
 
-from core.models import (
-    Product,
-    SalesChannel,
-    ShipmentItem,
-    RawMaterialUsage
-)
+from core.models import Product, ShipmentItem, RawMaterialUsage
 from api.exceptions import NotFoundError, DataProcessingError
 from api.serializers import ListQuerySerializer
+from api.services.product_service import (
+    aggregated_products, get_product_filters, get_products_list, period_bounds,
+)
 
 import logging
 logger = logging.getLogger(__name__)
+
 
 @api_view(['GET'])
 def product_data(request):
@@ -33,215 +28,23 @@ def product_data(request):
         },
     )
     try:
-        page = params['page']
-        page_size = params['page_size']
-        search = params['search'].strip()
-        subgroup = params['subgroup'].strip()
-        sales_channel = params['sales_channel'].strip()
-        start_date = params.get('start_date')
-        end_date = params.get('end_date')
-        sort_field = params['sort_field']
-        sort_order = params['sort_order']
-
-        # Базовый QuerySet для товаров с исключением пустых подгрупп
-        products_query = Product.objects.filter(
-            group='Товары'
-        ).exclude(
-            subgroup__isnull=True
+        data = get_products_list(
+            page=params['page'],
+            page_size=params['page_size'],
+            search=params['search'].strip(),
+            subgroup=params['subgroup'].strip(),
+            sales_channel=params['sales_channel'].strip(),
+            start_date=params.get('start_date'),
+            end_date=params.get('end_date'),
+            sort_field=params['sort_field'],
+            sort_order=params['sort_order'],
         )
-
-        # Улучшенный поиск по нескольким словам
-        if search:
-            search_words = search.split()
-            search_query = Q()
-            for word in search_words:
-                word_query = (
-                    Q(name__icontains=word) |
-                    Q(article__icontains=word)
-                )
-                search_query &= word_query
-            products_query = products_query.filter(search_query)
-
-        if subgroup:
-            products_query = products_query.filter(subgroup=subgroup)
-
-        # Получаем связанные отгрузки с учетом дат
-        shipments_query = ShipmentItem.objects.all()
-
-        if sales_channel:
-            shipments_query = shipments_query.filter(
-                shipment__sales_channel__name=sales_channel
-            )
-
-        if start_date:
-            start_date = timezone.make_aware(
-                datetime.combine(start_date, datetime.min.time()),
-                timezone.get_current_timezone(),
-            )
-            shipments_query = shipments_query.filter(shipment__date__gte=start_date)
-
-        if end_date:
-            end_date = timezone.make_aware(
-                datetime.combine(end_date, datetime.max.time()),
-                timezone.get_current_timezone(),
-            )
-            shipments_query = shipments_query.filter(shipment__date__lte=end_date)
-
-        # Условия отбора отгрузок уходят прямо в агрегаты. Прежде здесь стоял
-        # `filter=Q(shipmentitem__in=shipments_query)` — подзапрос по всей
-        # таблице позиций, и по разу на каждый из четырёх агрегатов. Без
-        # фильтров он читался как «позиция входит в множество всех позиций»:
-        # не отсекал ни строки и только тратил время.
-        #
-        # Отсев помеченных отгрузок приходится выписывать здесь руками: он жил
-        # внутри того подзапроса, потому что `ShipmentItem.objects` прячет их
-        # менеджером. Обход связи (`shipmentitem__`) идёт по таблицам напрямую
-        # и менеджера не спрашивает — без этой строки позиции пропавшего из
-        # МойСклад документа снова попадали бы в отчёт.
-        item_filter = Q(shipmentitem__shipment__deleted_at__isnull=True)
-        if sales_channel:
-            item_filter &= Q(shipmentitem__shipment__sales_channel__name=sales_channel)
-        if start_date:
-            item_filter &= Q(shipmentitem__shipment__date__gte=start_date)
-        if end_date:
-            item_filter &= Q(shipmentitem__shipment__date__lte=end_date)
-
-        # Аггрегируем данные по товарам. Все четыре агрегата идут по одной
-        # связи, поэтому join один и суммы не размножаются.
-        products_data = products_query.annotate(
-            total_quantity=Coalesce(
-                Sum('shipmentitem__quantity', filter=item_filter),
-                0,
-                output_field=DecimalField()
-            ),
-            average_price=Coalesce(
-                Avg('shipmentitem__price', filter=item_filter),
-                0,
-                output_field=DecimalField()
-            ),
-            total_sum=Coalesce(
-                Sum(F('shipmentitem__quantity') * F('shipmentitem__price'),
-                    filter=item_filter),
-                0,
-                output_field=DecimalField()
-            ),
-            shipments_count=Count(
-                'shipmentitem__shipment',
-                filter=item_filter,
-                distinct=True
-            )
-        )
-
-        # Фильтруем товары с нулевыми показателями, если сужена выборка отгрузок
-        if start_date or end_date or sales_channel:
-            products_data = products_data.filter(
-                Q(total_quantity__gt=0) |
-                Q(total_sum__gt=0) |
-                Q(shipments_count__gt=0)
-            )
-
-        # Топы считаем одним проходом по выборке, а не тремя запросами с той же
-        # агрегацией: девять строк не стоят трёх повторов тяжёлого расчёта.
-        summary = list(products_data.values(
-            'name', 'total_quantity', 'total_sum', 'shipments_count'
-        ))
-
-        def top_three(rows, key):
-            return sorted(rows, key=key, reverse=True)[:3]
-
-        top_quantity_data = [{
-            'name': row['name'],
-            'quantity': float(row['total_quantity']),
-            'shipments_count': row['shipments_count']
-        } for row in top_three(summary, lambda row: row['total_quantity'])]
-
-        top_revenue_data = [{
-            'name': row['name'],
-            'revenue': float(row['total_sum']),
-            'price_per_unit': float(
-                row['total_sum'] / row['total_quantity'] if row['total_quantity'] else 0
-            )
-        } for row in top_three(summary, lambda row: row['total_sum'])]
-
-        shipped = [row for row in summary if row['shipments_count'] > 0]
-        top_average_data = [{
-            'name': row['name'],
-            'average_quantity': '%.1f шт. в среднем за отгрузку' % (
-                float(row['total_quantity']) / row['shipments_count']
-            )
-        } for row in top_three(
-            shipped, lambda row: float(row['total_quantity']) / row['shipments_count']
-        )]
-
-        # Статистика
-        stats = {
-            'total_products': len(summary),
-            'total_shipments': shipments_query.values('shipment').distinct().count(),
-            'top_by_quantity': top_quantity_data,
-            'top_by_revenue': top_revenue_data,
-            'top_by_average_quantity': top_average_data
-        }
-
-        # Применяем сортировку. Последним ключом всегда идентификатор: товары
-        # с одинаковой суммой иначе переставляются между страницами, и при
-        # листании один показался бы дважды, а другой пропал.
-        sort_mapping = {
-            'name': 'name',
-            'subgroup': 'subgroup',
-            'quantity': 'total_quantity',
-            'total_quantity': 'total_quantity',
-            'average_price': 'average_price',
-            'total_sum': 'total_sum',
-            'shipments_count': 'shipments_count'
-        }
-        if sort_field in sort_mapping:
-            sort_prefix = '-' if sort_order == 'desc' else ''
-            products_data = products_data.order_by(
-                f'{sort_prefix}{sort_mapping[sort_field]}', 'pk'
-            )
-
-        # Пагинация
-        paginator = Paginator(products_data, page_size)
-        page_data = paginator.get_page(page)
-
-        # Форматируем данные для ответа
-        products_list = []
-        for product in page_data:
-            products_list.append({
-                'id': product.id,
-                'name': product.name,
-                'group': product.group,
-                'subgroup': product.subgroup,
-                'quantity': float(product.total_quantity),
-                'average_price': float(product.average_price),
-                'total_sum': float(product.total_sum),
-                'shipments_count': product.shipments_count
-            })
-
-        return JsonResponse({
-            'status': 'success',
-            'data': {
-                'products': products_list,
-                'total': paginator.count,
-                'stats': stats,
-                'available_subgroups': list(products_query.values_list(
-                    'subgroup', flat=True
-                ).distinct().order_by('subgroup')),
-                # Только каналы, по которым что-то отгружалось: справочник
-                # МойСклада содержит и заведённые впрок, а выбор такого
-                # означал бы заведомо пустую таблицу
-                'available_sales_channels': list(
-                    SalesChannel.objects.filter(shipments__isnull=False,
-                                                shipments__deleted_at__isnull=True)
-                    .values_list('name', flat=True)
-                    .distinct()
-                )
-            }
-        })
+        return JsonResponse({'status': 'success', 'data': data})
 
     except Exception as e:
         logger.error(f"Error in product_data: {str(e)}", exc_info=True)
         raise DataProcessingError("Ошибка получения данных по товарам")
+
 
 @api_view(['GET'])
 def product_details(request, product_id):
@@ -387,106 +190,25 @@ from django.http import HttpResponse
 from openpyxl import Workbook
 from openpyxl.styles import Font, Alignment
 from datetime import datetime
+from django.utils.dateparse import parse_date
 
 @api_view(['GET'])
 def export_products_excel(request):
     """API endpoint для экспорта товаров в Excel"""
     try:
-        # Получаем те же параметры фильтрации, что и в product_data
-        search = request.GET.get('search', '').strip()
-        subgroup = request.GET.get('subgroup', '').strip()
-        sales_channel = request.GET.get('salesChannel', '').strip()
-        start_date = request.GET.get('startDate')
-        end_date = request.GET.get('endDate')
-
-        # Базовый QuerySet для товаров
-        products_query = Product.objects.filter(
-            group='Товары'
-        ).exclude(
-            subgroup__isnull=True
+        # Те же параметры и тот же расчёт, что и на экране раздела:
+        # выгрузка обязана показывать ровно то, что человек видит.
+        since, until = period_bounds(
+            parse_date(request.GET.get('startDate') or ''),
+            parse_date(request.GET.get('endDate') or ''),
         )
-
-        # Применяем те же фильтры, что и в product_data
-        if search:
-            search_words = search.split()
-            search_query = Q()
-            for word in search_words:
-                word_query = (
-                    Q(name__icontains=word) |
-                    Q(article__icontains=word)
-                )
-                search_query &= word_query
-            products_query = products_query.filter(search_query)
-
-        if subgroup:
-            products_query = products_query.filter(subgroup=subgroup)
-
-        # Границы периода. Отдельной выборки отгрузок здесь больше нет: она
-        # существовала ради подзапроса в агрегатах, а отбор теперь задаётся
-        # условием `item_filter` ниже — по этим же датам.
-        if start_date:
-            try:
-                start_date = datetime.strptime(start_date, '%Y-%m-%d')
-                start_date = timezone.make_aware(start_date, timezone.get_current_timezone())
-            except ValueError:
-                # Неразобранная дата отбор не сужает — и не должна уехать
-                # в условие агрегатов строкой.
-                start_date = None
-
-        if end_date:
-            try:
-                end_date = datetime.strptime(end_date, '%Y-%m-%d')
-                # Make end_date inclusive by adding 23:59:59
-                end_date = end_date.replace(hour=23, minute=59, second=59)
-                end_date = timezone.make_aware(end_date, timezone.get_current_timezone())
-            except ValueError:
-                end_date = None
-
-        # Условия — прямо в агрегаты, как и на экране раздела. Отсев
-        # помеченных отгрузок выписан руками: он жил в подзапросе, потому что
-        # `ShipmentItem.objects` прячет их менеджером, а обход связи менеджера
-        # не спрашивает.
-        item_filter = Q(shipmentitem__shipment__deleted_at__isnull=True)
-        if sales_channel:
-            item_filter &= Q(shipmentitem__shipment__sales_channel__name=sales_channel)
-        if start_date:
-            item_filter &= Q(shipmentitem__shipment__date__gte=start_date)
-        if end_date:
-            item_filter &= Q(shipmentitem__shipment__date__lte=end_date)
-
-        # Аггрегируем данные по товарам
-        products_data = products_query.annotate(
-            total_quantity=Coalesce(
-                Sum('shipmentitem__quantity', filter=item_filter),
-                0,
-                output_field=DecimalField()
-            ),
-            average_price=Coalesce(
-                Avg('shipmentitem__price', filter=item_filter),
-                0,
-                output_field=DecimalField()
-            ),
-            total_sum=Coalesce(
-                Sum(F('shipmentitem__quantity') * F('shipmentitem__price'),
-                    filter=item_filter),
-                0,
-                output_field=DecimalField()
-            ),
-            shipments_count=Count(
-                'shipmentitem__shipment',
-                filter=item_filter,
-                distinct=True
-            )
+        _, products_data = aggregated_products(
+            search=request.GET.get('search', '').strip(),
+            subgroup=request.GET.get('subgroup', '').strip(),
+            sales_channel=request.GET.get('salesChannel', '').strip(),
+            since=since,
+            until=until,
         )
-
-        # Тот же отбор, что и на экране: если выборка отгрузок сужена,
-        # товары без продаж в файле не нужны
-        if start_date or end_date or sales_channel:
-            products_data = products_data.filter(
-                Q(total_quantity__gt=0) |
-                Q(total_sum__gt=0) |
-                Q(shipments_count__gt=0)
-            )
 
         # Создаем новый Excel-файл
         wb = Workbook()
@@ -553,34 +275,9 @@ def export_products_excel(request):
 
 @api_view(['GET'])
 def product_filters(request):
-    """Справочники для панели фильтров: подгруппы и каналы продаж.
-
-    Отдельный адрес нужен потому, что панель фильтров живёт рядом с таблицей,
-    но нужны ей два списка строк, а не расчёт. Раньше она брала их из
-    `/products/`, и открытие раздела дважды запускало полную агрегацию по
-    отгрузкам — второй раз ради выпадающих списков.
-    """
+    """Справочники для панели фильтров раздела."""
     try:
-        subgroups = Product.objects.filter(
-            group='Товары'
-        ).exclude(
-            subgroup__isnull=True
-        ).values_list('subgroup', flat=True).distinct().order_by('subgroup')
-
-        # Только каналы, по которым что-то отгружалось: справочник МойСклада
-        # содержит и заведённые впрок, а выбор такого означал бы заведомо
-        # пустую таблицу.
-        channels = SalesChannel.objects.filter(
-            shipments__isnull=False, shipments__deleted_at__isnull=True
-        ).values_list('name', flat=True).distinct()
-
-        return JsonResponse({
-            'status': 'success',
-            'data': {
-                'available_subgroups': list(subgroups),
-                'available_sales_channels': list(channels),
-            }
-        })
+        return JsonResponse({'status': 'success', 'data': get_product_filters()})
     except Exception as e:
         logger.error(f"Error in product_filters: {str(e)}", exc_info=True)
         raise DataProcessingError("Ошибка получения справочников товаров")

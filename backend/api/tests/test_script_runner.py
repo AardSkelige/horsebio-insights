@@ -166,7 +166,13 @@ class LaunchTests(SimpleTestCase):
             self.assertIn('horsebio_backup', argv)
             self.assertEqual(argv[argv.index('--run-id') + 1], run_id)
             self.assertTrue(os.path.exists(os.path.join(tmp, f'horsebio_backup_{run_id}.log')))
-            self.assertEqual(open(os.path.join(tmp, 'horsebio_backup.pid')).read(), '4242')
+            # Сверяем только номер: рядом с ним в замок попадает момент
+            # старта процесса из /proc, и появляется он ровно тогда, когда
+            # процесс с таким номером в системе есть. Сравнение всей строки
+            # делало тест зависимым от того, занят ли номер 4242 в контейнере
+            # в эту минуту.
+            lock = open(os.path.join(tmp, 'horsebio_backup.pid')).read()
+            self.assertEqual(lock.split()[0], '4242')
 
     def test_command_that_died_at_once_leaves_no_lock_and_no_silence(self):
         """Команда может умереть, не успев ничего записать (Django не поднялся,

@@ -7,17 +7,14 @@ from django.db.models import (
     Case, When, DecimalField, Value, OuterRef, Subquery, Prefetch,
 )
 from django.db.models.functions import TruncMonth, Coalesce
-from django.core.paginator import Paginator
 
 from core.models import Supply, SupplyItem, RawMaterial, Counterparty
 from api.exceptions import NotFoundError
+from api.services.listing import paginate, search_q, top_n
+# Группы материалов общие с разделом «Материалы в отгрузках»: два списка
+# разъехались бы при добавлении четвёртой группы.
+from api.services.material_service import VALID_GROUPS
 from api.utils import apply_date_filter, date_filter_q
-
-VALID_GROUPS = [
-    'Тара',
-    'Материалы для производства',
-    'Этикетки',
-]
 
 
 def get_supply_analytics():
@@ -177,11 +174,7 @@ def get_materials_list(
 ):
     materials_query = RawMaterial.objects.filter(group__in=VALID_GROUPS)
 
-    if search:
-        search_query = Q()
-        for word in search.split():
-            search_query &= Q(name__icontains=word) | Q(code__icontains=word)
-        materials_query = materials_query.filter(search_query)
+    materials_query = materials_query.filter(search_q(search, 'name', 'code'))
 
     if group:
         materials_query = materials_query.filter(group=group)
@@ -241,16 +234,22 @@ def get_materials_list(
         ),
     }
 
-    top_by_quantity = [
-        {'name': m['name'], 'quantity': float(m['total_quantity']),
-         'supplies_count': m['supplies_count']}
-        for m in sorted(summary, key=lambda m: m['total_quantity'], reverse=True)[:3]
-    ]
-    top_by_sum = [
-        {'name': m['name'], 'sum': float(m['total_sum']),
-         'average_price': float(m['average_price'])}
-        for m in sorted(summary, key=lambda m: m['total_sum'], reverse=True)[:3]
-    ]
+    top_by_quantity = top_n(
+        summary,
+        key=lambda m: m['total_quantity'],
+        build=lambda m: {
+            'name': m['name'], 'quantity': float(m['total_quantity']),
+            'supplies_count': m['supplies_count'],
+        },
+    )
+    top_by_sum = top_n(
+        summary,
+        key=lambda m: m['total_sum'],
+        build=lambda m: {
+            'name': m['name'], 'sum': float(m['total_sum']),
+            'average_price': float(m['average_price']),
+        },
+    )
 
     sort_mapping = {
         'name': 'name', 'code': 'code', 'group': 'group',
@@ -264,8 +263,7 @@ def get_materials_list(
         # значениями переставляются между страницами при листании.
         materials_data = materials_data.order_by(f'{prefix}{sort_mapping[sort_field]}', 'pk')
 
-    paginator = Paginator(materials_data, page_size)
-    page_data = paginator.get_page(page)
+    page_data, total = paginate(materials_data, page, page_size)
 
     materials_list = [{
         'id': m.id, 'name': m.name, 'code': m.code or '-', 'group': m.group, 'uom': m.uom_name,
@@ -276,7 +274,7 @@ def get_materials_list(
 
     return {
         'materials': materials_list,
-        'total': paginator.count,
+        'total': total,
         'stats': stats,
         'top_by_quantity': top_by_quantity,
         'top_by_sum': top_by_sum,
@@ -385,11 +383,7 @@ def get_suppliers_list(
 ):
     suppliers_query = Counterparty.objects.filter(supply__isnull=False).distinct()
 
-    if search:
-        search_query = Q()
-        for word in search.split():
-            search_query &= Q(name__icontains=word)
-        suppliers_query = suppliers_query.filter(search_query)
+    suppliers_query = suppliers_query.filter(search_q(search, 'name'))
 
     supplies_filter = Q()
     date_filter = Q()
@@ -456,8 +450,7 @@ def get_suppliers_list(
         prefix = '-' if sort_order == 'desc' else ''
         suppliers_data = suppliers_data.order_by(f'{prefix}{sort_mapping[sort_field]}')
 
-    paginator = Paginator(suppliers_data, page_size)
-    page_data = paginator.get_page(page)
+    page_data, total = paginate(suppliers_data, page, page_size)
 
     suppliers_list = [{
         'id': s.id, 'name': s.name,
@@ -471,7 +464,7 @@ def get_suppliers_list(
 
     return {
         'suppliers': suppliers_list,
-        'total': paginator.count,
+        'total': total,
         'stats': stats,
     }
 

@@ -245,12 +245,22 @@ def inventory_history(request):
         .order_by('-month_start')
     )
 
+    # Сами прогоны берём одним запросом по найденным парам «месяц + время»,
+    # а не запросом на месяц: месяцев столько, сколько работает система,
+    # и список растёт сам собой.
+    latest = {(mr['month_start'], mr['latest_run_at']) for mr in month_runs}
+    runs_by_month = {}
+    if latest:
+        for run in InventoryRun.objects.filter(
+            month_start__in={month for month, _ in latest},
+            run_at__in={run_at for _, run_at in latest},
+        ):
+            if (run.month_start, run.run_at) in latest:
+                runs_by_month[run.month_start] = run
+
     result = []
     for mr in month_runs:
-        run = InventoryRun.objects.filter(
-            month_start=mr['month_start'],
-            run_at=mr['latest_run_at'],
-        ).first()
+        run = runs_by_month.get(mr['month_start'])
         if run:
             result.append({
                 'month_start': run.month_start,

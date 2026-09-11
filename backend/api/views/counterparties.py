@@ -1,7 +1,6 @@
 from django.http import JsonResponse
-from django.core.paginator import Paginator
-from django.db.models import Q, F, Sum, Count, Max, DecimalField
-from django.db.models.functions import TruncMonth, Coalesce 
+from django.db.models import F, Sum, DecimalField
+from django.db.models.functions import TruncMonth
 from rest_framework.decorators import api_view
 from decimal import Decimal
 from datetime import datetime
@@ -18,9 +17,11 @@ from datetime import timedelta
 from rest_framework.response import Response
 from api.exceptions import NotFoundError, DataProcessingError, ValidationError
 from api.serializers import ListQuerySerializer
+from api.services.counterparty_service import get_counterparties_list
 
 import logging
 logger = logging.getLogger(__name__)
+
 
 @api_view(['GET'])
 def counterparty_data(request):
@@ -34,136 +35,21 @@ def counterparty_data(request):
         },
     )
     try:
-        page = params['page']
-        page_size = params['page_size']
-        search = params['search'].strip()
-        start_date = params.get('start_date')
-        end_date = params.get('end_date')
-        sort_field = params['sort_field']
-        sort_order = params['sort_order']
-
-        # Базовый QuerySet для отгрузок с фильтрацией по датам
-        shipments_query = Shipment.objects.all()
-        
-        if start_date:
-            start_date = timezone.make_aware(
-                datetime.combine(start_date, datetime.min.time()),
-                timezone.get_current_timezone(),
-            )
-            shipments_query = shipments_query.filter(date__gte=start_date)
-
-        if end_date:
-            end_date = timezone.make_aware(
-                datetime.combine(end_date, datetime.max.time()),
-                timezone.get_current_timezone(),
-            )
-            shipments_query = shipments_query.filter(date__lte=end_date)
-
-        # Получаем ID контрагентов с отгрузками за период
-        counterparty_ids = shipments_query.values_list('counterparty_id', flat=True).distinct()
-
-        # Условия отбора отгрузок — прямо в агрегаты. Раньше здесь стоял
-        # `filter=Q(shipment__in=shipments_query)`: подзапрос по всей таблице
-        # отгрузок, и по разу на каждый из четырёх агрегатов.
-        #
-        # Отсев помеченных отгрузок выписан руками: он приезжал внутри того
-        # подзапроса вместе с менеджером `Shipment.objects`, а обход связи
-        # (`shipment__`) идёт по таблицам напрямую и менеджера не спрашивает.
-        shipment_filter = Q(shipment__deleted_at__isnull=True)
-        if start_date:
-            shipment_filter &= Q(shipment__date__gte=start_date)
-        if end_date:
-            shipment_filter &= Q(shipment__date__lte=end_date)
-
-        # Базовый QuerySet для контрагентов
-        counterparties_query = Counterparty.objects.filter(id__in=counterparty_ids).annotate(
-            shipments_count=Count(
-                'shipment',
-                filter=shipment_filter,
-                distinct=True
-            ),
-            total_sales=Coalesce(
-                Sum(
-                    F('shipment__items__quantity') * F('shipment__items__price'),
-                    filter=shipment_filter,
-                    output_field=DecimalField()
-                ),
-                0,
-                output_field=DecimalField()
-            ),
-            total_products=Count(
-                'shipment__items__product',
-                filter=shipment_filter,
-                distinct=True
-            ),
-            last_shipment=Max('shipment__date', filter=shipment_filter)
+        data = get_counterparties_list(
+            page=params['page'],
+            page_size=params['page_size'],
+            search=params['search'].strip(),
+            start_date=params.get('start_date'),
+            end_date=params.get('end_date'),
+            sort_field=params['sort_field'],
+            sort_order=params['sort_order'],
         )
-
-        # Улучшенный поиск по нескольким словам
-        if search:
-            search_words = search.split()
-            search_query = Q()
-            for word in search_words:
-                word_query = Q(name__icontains=word)
-                search_query &= word_query
-            counterparties_query = counterparties_query.filter(search_query)
-
-        # Получаем отфильтрованные отгрузки для найденных контрагентов
-        filtered_shipments = shipments_query.filter(
-            # `values('pk')` — чтобы в подзапрос не уехали четыре агрегата:
-            # для отбора нужны только идентификаторы.
-            counterparty__in=counterparties_query.values('pk')
-        )
-
-        # Получаем отфильтрованные товары
-        filtered_items = ShipmentItem.objects.filter(
-            shipment__in=filtered_shipments
-        )
-
-        # Обновляем статистику с учетом всех фильтров
-        stats = {
-            'total_counterparties': counterparties_query.count(),
-            'total_shipments': filtered_shipments.count(),
-            'total_products': filtered_items.values('product').distinct().count()
-        }
-
-        # Применяем сортировку
-        if sort_field == 'name':
-            sort_prefix = '-' if sort_order == 'desc' else ''
-            counterparties_query = counterparties_query.order_by(f'{sort_prefix}name')
-        elif sort_field in ['total_sales', 'shipments_count', 'total_products', 'last_shipment']:
-            sort_prefix = '-' if sort_order == 'desc' else ''
-            counterparties_query = counterparties_query.order_by(f'{sort_prefix}{sort_field}')
-
-        # Пагинация
-        paginator = Paginator(counterparties_query, page_size)
-        page_data = paginator.get_page(page)
-
-        # Форматируем данные для ответа
-        counterparties_data = []
-        for c in page_data:
-            counterparty_data = {
-                'id': c.id,
-                'name': c.name,
-                'total_sales': float(c.total_sales),
-                'shipments_count': c.shipments_count,
-                'total_products': c.total_products,
-                'last_shipment': c.last_shipment.isoformat() if c.last_shipment else None
-            }
-            counterparties_data.append(counterparty_data)
-
-        return JsonResponse({
-            'status': 'success',
-            'data': {
-                'counterparties': counterparties_data,
-                'total': paginator.count,
-                'stats': stats
-            }
-        })
+        return JsonResponse({'status': 'success', 'data': data})
 
     except Exception as e:
         logger.error(f"Error in counterparty_data: {str(e)}", exc_info=True)
-        raise DataProcessingError("Ошибка получения данных по контрагентам")  
+        raise DataProcessingError("Ошибка получения данных по контрагентам")
+
 
 @api_view(['GET'])
 def counterparty_details(request, counterparty_id):

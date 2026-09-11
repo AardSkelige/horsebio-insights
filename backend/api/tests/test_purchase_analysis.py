@@ -213,6 +213,47 @@ class PurchaseAnalysisTests(TestCase):
         self.assertIn('suppliers', data)
         self.assertIn('recommendations', data)
 
+    def test_supplier_name_with_underscore_does_not_break_the_analysis(self):
+        """Подчёркивание в названии поставщика не ломает разбор.
+
+        Показатели складывались в словарь под ключом «имя_идентификатор»,
+        а разбирались обратно через `split('_')`. У поставщика с подчёркиванием
+        в названии имя обрезалось, поиск его записи давал KeyError, и весь
+        раздел отвечал ошибкой вместо данных.
+        """
+        supplier = Counterparty.objects.create(name="ООО Ромашка_2", external_id="TS_2")
+        order = PurchaseOrder.objects.create(
+            external_id="PO_UNDERSCORE",
+            number="ORDER-UNDERSCORE",
+            date=timezone.now(),
+            created=timezone.now(),
+            counterparty=supplier,
+            status="completed",
+            sum=Decimal("2000.00"),
+        )
+        related_material = RawMaterial.objects.create(
+            name="Сопутствующий", external_id="RM_U", uom_name="шт",
+            group="Материалы для производства",
+        )
+        for material in (self.material, related_material):
+            PurchaseOrderItem.objects.create(
+                purchase_order=order,
+                raw_material=material,
+                quantity=Decimal("10.00"),
+                price=Decimal("100.00"),
+                total=Decimal("1000.00"),
+                shipped_quantity=Decimal("10.00"),
+            )
+
+        url = reverse('api:related_materials_analysis', args=[self.material.id])
+        response = self.client.get(url)
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        data = response.data['data']
+        self.assertNotIn('error', data)
+        # Имя поставщика доехало целиком, а не обрезанным по подчёркиванию.
+        self.assertIn("ООО Ромашка_2", data['supplier_materials'])
+
     def test_related_materials_analysis(self):
         """Тестирование endpoint'а анализа связанных материалов"""
         # Сначала создадим реальные связанные данные
