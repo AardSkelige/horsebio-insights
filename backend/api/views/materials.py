@@ -2,10 +2,8 @@
 
 from django.http import JsonResponse
 from django.core.paginator import Paginator
-from django.db.models import (
-    Case, Count, DecimalField, F, IntegerField, OuterRef, Q, Subquery, Sum, Value, When,
-)
-from django.db.models.functions import Coalesce, Lower, Trim, TruncMonth
+from django.db.models import Count, F, Q, Sum
+from django.db.models.functions import TruncMonth
 from datetime import datetime
 from django.utils import timezone
 from django.utils.dateparse import parse_date
@@ -27,6 +25,26 @@ VALID_GROUPS = [
     'Материалы для производства',
     'Этикетки'
 ]
+
+
+class _Reversed:
+    """Обратный порядок для одного текстового ключа сортировки.
+
+    Число для убывания достаточно взять со знаком минус, строку — нет.
+    А перевернуть весь список нельзя: направление касается только своей
+    колонки, приоритет группы и точное совпадение остаются сверху.
+    """
+
+    __slots__ = ('value',)
+
+    def __init__(self, value):
+        self.value = value
+
+    def __lt__(self, other):
+        return other.value < self.value
+
+    def __eq__(self, other):
+        return other.value == self.value
 
 
 def material_data(request):
@@ -78,24 +96,40 @@ def material_data(request):
             ).distinct()
             filtered_materials = filtered_materials.filter(id__in=materials_supplied.values_list('id', flat=True))
 
-        # Показатели считаем подзапросами, а не обходом материалов: обход
-        # стоил трёх запросов на каждый материал, то есть больше тысячи на
-        # страницу, и время росло вместе со справочником.
+        # Показатели считаем двумя группировками, по одной на связь.
         #
-        # Одной аннотацией эти показатели не собрать. Расход и поставки —
-        # разные связи, и join по обеим размножил бы строки: сумма расхода
-        # умножилась бы на число поставок и наоборот. Поэтому каждый
-        # показатель отдельным подзапросом, сгруппированным по материалу.
+        # Обойти материалы циклом нельзя — это запрос на строку. Но и вешать
+        # подзапрос на каждый показатель нельзя тоже: подзапрос коррелирован,
+        # то есть выполняется заново для каждого материала и каждый раз
+        # повторяет join к отгрузкам. Замер на проде: одна плоская
+        # группировка по всей таблице расхода — 1 с, те же числа
+        # подзапросами — 96 с.
+        #
+        # Одной аннотацией показатели не собрать: расход и поставки — разные
+        # связи, join по обеим размножил бы строки, и суммы бы перемножились.
+        # Поэтому две группировки, а склейка и сортировка — здесь, в Python:
+        # материалов сотни, это бесплатно.
         parsed_start_date = parse_date(start_date) if start_date else None
         parsed_end_date = parse_date(end_date) if end_date else None
 
-        usage_query = RawMaterialUsage.objects.filter(raw_material=OuterRef('pk'))
+        rows = list(filtered_materials.values('id', 'name', 'code', 'group', 'uom_name'))
+        material_ids = [row['id'] for row in rows]
+
+        usage_query = RawMaterialUsage.objects.filter(raw_material_id__in=material_ids)
         if parsed_start_date:
             usage_query = usage_query.filter(shipment_item__shipment__date__gte=parsed_start_date)
         if parsed_end_date:
             usage_query = usage_query.filter(shipment_item__shipment__date__lte=parsed_end_date)
 
-        supply_items_query = SupplyItem.objects.filter(raw_material=OuterRef('pk'))
+        usage_by_material = {
+            row['raw_material']: row
+            for row in usage_query.values('raw_material').annotate(
+                quantity=Sum('quantity'),
+                shipments=Count('shipment_item__shipment', distinct=True),
+            )
+        }
+
+        supply_items_query = SupplyItem.objects.filter(raw_material_id__in=material_ids)
         if counterparties:
             supply_items_query = supply_items_query.filter(
                 supply__counterparty__id__in=counterparties
@@ -105,117 +139,91 @@ def material_data(request):
         if parsed_end_date:
             supply_items_query = supply_items_query.filter(supply__date__lte=parsed_end_date)
 
-        def per_material(queryset, expression, output_field):
-            """Один показатель по материалу: подзапрос, сгруппированный по нему же."""
-            return Subquery(
-                queryset.values('raw_material').annotate(value=expression).values('value')[:1],
-                output_field=output_field,
+        supplies_by_material = {
+            row['raw_material']: row
+            for row in supply_items_query.values('raw_material').annotate(
+                quantity=Sum('quantity'),
+                suppliers=Count('supply__counterparty', distinct=True),
             )
-
-        materials = filtered_materials.annotate(
-            usage_quantity=per_material(usage_query, Sum('quantity'), DecimalField()),
-            shipments_count=Coalesce(
-                per_material(
-                    usage_query,
-                    Count('shipment_item__shipment', distinct=True),
-                    IntegerField(),
-                ),
-                Value(0),
-            ),
-            supplied_quantity=per_material(supply_items_query, Sum('quantity'), DecimalField()),
-            suppliers_count=Coalesce(
-                per_material(
-                    supply_items_query,
-                    Count('supply__counterparty', distinct=True),
-                    IntegerField(),
-                ),
-                Value(0),
-            ),
-        )
+        }
 
         # Когда выборка сужена поставками, в колонке показываем поставленное,
-        # иначе израсходованное — как было до перехода на подзапросы.
+        # иначе израсходованное.
         narrowed = bool(counterparties or start_date or end_date)
-        materials = materials.annotate(
-            total_usage=Coalesce(
-                F('supplied_quantity') if narrowed else F('usage_quantity'),
-                Value(0),
-                output_field=DecimalField(),
-            ),
-        )
 
-        # Сортировка — в базе, иначе пришлось бы вычитать весь справочник,
-        # чтобы отдать десять строк.
-        #
+        materials_data = []
+        for row in rows:
+            usage = usage_by_material.get(row['id'])
+            supply = supplies_by_material.get(row['id'])
+            supplied_quantity = supply['quantity'] if supply else None
+            used_quantity = usage['quantity'] if usage else None
+            total_quantity = supplied_quantity if narrowed else used_quantity
+
+            materials_data.append({
+                'id': row['id'],
+                'name': row['name'],
+                'code': row['code'] or '-',
+                'group': row['group'],
+                'uom': row['uom_name'],
+                'total_usage': float(total_quantity or 0),
+                'shipments_count': usage['shipments'] if usage else 0,
+                'suppliers_count': supply['suppliers'] if supply else 0,
+            })
+
+        # Сортировка данных
         # Priority for groups: production materials first, then containers, then labels
-        GROUP_PRIORITY = ['Материалы для производства', 'Тара', 'Этикетки']
-        materials = materials.annotate(
-            group_rank=Case(
-                *[When(group=name, then=Value(rank)) for rank, name in enumerate(GROUP_PRIORITY)],
-                default=Value(99),
-                output_field=IntegerField(),
-            ),
-            name_key=Lower(Trim('name')),
-        )
-
-        if search:
-            materials = materials.annotate(
-                exact_rank=Case(
-                    When(name_key=search.lower().strip(), then=Value(0)),
-                    default=Value(1),
-                    output_field=IntegerField(),
-                ),
-            )
-        else:
-            materials = materials.annotate(exact_rank=Value(1, output_field=IntegerField()))
-
+        GROUP_PRIORITY = {
+            'Материалы для производства': 0,
+            'Тара': 1,
+            'Этикетки': 2
+        }
         NUMERIC_SORT = {'total_usage', 'shipments_count', 'suppliers_count'}
-        TEXT_SORT = {'name': 'name_key', 'code': 'code', 'group': 'group', 'uom': 'uom_name'}
+        TEXT_SORT = {'name', 'code', 'group', 'uom'}
+        descending = sort_order == 'desc'
+        needle = search.lower().strip()
 
-        ordering = ['exact_rank', 'group_rank']
-        if sort_field in NUMERIC_SORT:
-            ordering.append(f'-{sort_field}' if sort_order == 'desc' else sort_field)
-        elif sort_field in TEXT_SORT:
-            column = TEXT_SORT[sort_field]
-            ordering.append(f'-{column}' if sort_order == 'desc' else column)
-        # Последний ключ — идентификатор: без него строки с одинаковыми
-        # значениями могут переставляться между страницами, и при листании
-        # один материал показался бы дважды, а другой пропал.
-        ordering.append('pk')
-        materials = materials.order_by(*ordering)
+        def sort_key(item):
+            # Точное совпадение с поиском идёт первым, затем приоритет группы,
+            # затем сама колонка. Идентификатор последним ключом: без него
+            # строки с одинаковыми значениями переставляются между страницами,
+            # и при листании один материал показался бы дважды, а другой
+            # пропал.
+            is_exact = bool(needle) and item['name'].lower().strip() == needle
+            head = (not is_exact, GROUP_PRIORITY.get(item['group'], 99))
+
+            if sort_field in NUMERIC_SORT:
+                value = float(item[sort_field] or 0)
+                return head + (-value if descending else value, item['id'])
+            if sort_field in TEXT_SORT:
+                value = (item[sort_field] or '').lower()
+                return head + (_Reversed(value) if descending else value, item['id'])
+            return head + (item['id'],)
+
+        materials_data.sort(key=sort_key)
 
         # Пагинация результатов
-        paginator = Paginator(materials, page_size)
+        paginator = Paginator(materials_data, page_size)
         page_data = paginator.get_page(page)
 
-        materials_data = [{
-            'id': material.id,
-            'name': material.name,
-            'code': material.code or '-',
-            'group': material.group,
-            'uom': material.uom_name,
-            'total_usage': float(material.total_usage or 0),
-            'shipments_count': material.shipments_count,
-            'suppliers_count': material.suppliers_count,
-        } for material in page_data]
-
         # Статистика с учетом всех фильтров
-        by_group = dict(filtered_materials.values_list('group').annotate(Count('id')))
         stats = {
-            'Материалы для производства': by_group.get('Материалы для производства', 0),
-            'Тара': by_group.get('Тара', 0),
-            'Этикетки': by_group.get('Этикетки', 0),
+            'Материалы для производства': 0,
+            'Тара': 0,
+            'Этикетки': 0,
         }
+        for item in materials_data:
+            if item['group'] in stats:
+                stats[item['group']] += 1
 
         # Получаем список контрагентов только для отфильтрованных материалов
         counterparties_list = Counterparty.objects.filter(
-            supply__items__raw_material__in=filtered_materials
+            supply__items__raw_material_id__in=material_ids
         ).distinct().values('id', 'name').order_by('name')
 
         return JsonResponse({
             'status': 'success',
             'data': {
-                'materials': materials_data,
+                'materials': list(page_data),
                 'total': paginator.count,
                 'stats': stats,
                 'available_groups': VALID_GROUPS,

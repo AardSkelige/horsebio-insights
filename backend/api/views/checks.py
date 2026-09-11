@@ -10,7 +10,7 @@ import re
 import json
 from collections import defaultdict
 
-from django.db.models import OuterRef, Subquery
+from django.db.models import Max
 from django.http import JsonResponse
 from django.views.decorators.http import require_http_methods
 from django.utils import timezone as dj_timezone
@@ -87,17 +87,24 @@ def _serialize_exception(e):
 @scripts_auth
 def checks_overview(request):
     """GET /api/checks/scripts/ — обзор всех скриптов со сводкой."""
-    # Последний прогон каждой структурированной проверки — одним запросом.
-    # Прежде здесь был запрос на проверку, а это самый частый адрес в системе.
+    # Последний прогон каждой структурированной проверки. Прежде здесь был
+    # запрос на проверку, а это самый частый адрес в системе.
+    #
+    # Два плоских запроса, а не один с коррелированным подзапросом: такой
+    # подзапрос выполняется заново для каждой строки внешней выборки, и на
+    # разделе материалов ровно это превратило секунду в полторы минуты.
     structured_ids = [s['id'] for s in SCRIPTS_CONFIG if s.get('structured')]
-    newest_for_script = CheckRunResult.objects.filter(
-        script_id=OuterRef('script_id')
-    ).order_by('-finished_at').values('pk')[:1]
+    newest_at = dict(
+        CheckRunResult.objects.filter(script_id__in=structured_ids)
+        .values_list('script_id')
+        .annotate(Max('finished_at'))
+    )
     latest_results = {
         run.script_id: run
         for run in CheckRunResult.objects.filter(
-            script_id__in=structured_ids, pk__in=Subquery(newest_for_script)
+            script_id__in=structured_ids, finished_at__in=set(newest_at.values())
         )
+        if newest_at.get(run.script_id) == run.finished_at
     }
     result = []
     for script in SCRIPTS_CONFIG:
