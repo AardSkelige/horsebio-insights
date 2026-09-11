@@ -343,3 +343,45 @@ class OzonReturn(models.Model):
     def needs_attention(self):
         """Возврат ещё не разобран: товар принять, деньги вернуть."""
         return self.handled_at is None
+
+
+def mask_phone(digits):
+    """Номер для хранения: код страны, звёздочки, последние четыре цифры.
+
+    Полный номер здесь не нужен — записи ведутся ради статистики, а не ради
+    связи с покупателем, и хранить лишние персональные данные в таблице,
+    которая копится годами, незачем. Последних четырёх цифр хватает, чтобы
+    узнать свой же тестовый номер и отделить прогоны от покупателей.
+    """
+    digits = digits or ''
+    if len(digits) <= 4:
+        return '•' * len(digits)
+    return f'{digits[0]}{"•" * (len(digits) - 5)}{digits[-4:]}'
+
+
+class OzonAvailabilityCheck(models.Model):
+    """Проверка доступности доставки Ozon по телефону: факт и результат.
+
+    Ответ эндпоинта нигде не оседал, и о том, как часто корзина вообще
+    спрашивает про Ozon, приходилось судить по логам Caddy — по размеру тела
+    ответа, потому что available в них не попадает. Логи же ротируются, и
+    глубина набиралась меньше двух недель.
+
+    Записи копятся по одной на проверку — корзина зовёт эндпоинт, когда
+    покупатель вводит телефон, так что это заодно и счётчик дошедших до
+    оформления. Нагрузка мизерная: единицы строк в сутки.
+    """
+
+    available = models.BooleanField('Доставка доступна', db_index=True)
+    phone_mask = models.CharField('Телефон (маска)', max_length=20)
+    ip = models.GenericIPAddressField('IP покупателя', null=True, blank=True)
+    referer = models.CharField('Страница', max_length=200, blank=True)
+    created_at = models.DateTimeField('Когда', auto_now_add=True, db_index=True)
+
+    class Meta:
+        verbose_name = 'Проверка доступности Ozon'
+        verbose_name_plural = 'Проверки доступности Ozon'
+        ordering = ['-created_at']
+
+    def __str__(self):
+        return f'{self.phone_mask} · {"доступна" if self.available else "недоступна"}'

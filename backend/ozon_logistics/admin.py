@@ -2,8 +2,8 @@ from django.contrib import admin
 from django.utils import timezone
 
 from .models import (
-    OzonDeliveryQuote, OzonOAuthToken, OzonPickupPoint, OzonPosting, OzonProduct,
-    OzonReturn,
+    OzonAvailabilityCheck, OzonDeliveryQuote, OzonOAuthToken, OzonPickupPoint,
+    OzonPosting, OzonProduct, OzonReturn,
 )
 
 
@@ -77,3 +77,20 @@ class OzonReturnAdmin(admin.ModelAdmin):
     def mark_handled(self, request, queryset):
         updated = queryset.update(handled_at=timezone.now())
         self.message_user(request, f'Отмечено возвратов: {updated}')
+
+
+@admin.register(OzonAvailabilityCheck)
+class OzonAvailabilityCheckAdmin(admin.ModelAdmin):
+    """Только чтение: записи делает корзина, руками их не заводят и не правят."""
+
+    list_display = ('created_at', 'available', 'phone_mask', 'ip', 'referer')
+    list_filter = ('available',)
+    search_fields = ('phone_mask', 'ip')
+    date_hierarchy = 'created_at'
+    readonly_fields = ('created_at', 'available', 'phone_mask', 'ip', 'referer')
+
+    def has_add_permission(self, request):
+        return False
+
+    def has_change_permission(self, request, obj=None):
+        return False

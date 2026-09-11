@@ -18,7 +18,9 @@ from django.http import JsonResponse
 from django.views.decorators.csrf import csrf_exempt
 from django.views.decorators.http import require_GET, require_POST
 
-from ozon_logistics.models import OzonPickupPoint, OzonProduct
+from ozon_logistics.models import (
+    OzonAvailabilityCheck, OzonPickupPoint, OzonProduct, mask_phone,
+)
 from ozon_logistics.services import orders, pickup_points
 from ozon_logistics.services.client import (
     OzonLogisticsClient, OzonLogisticsError, normalize_phone,
@@ -140,6 +142,23 @@ def _upstream_error(exc):
     )
 
 
+def _record_availability(request, digits, available):
+    """Складывает проверку в таблицу — из неё считаем воронку корзины.
+
+    Промах записи не должен стоить покупателю ответа: доставка ему нужнее,
+    чем нам статистика. Поэтому ошибку сюда и глотаем, оставляя след в логе.
+    """
+    try:
+        OzonAvailabilityCheck.objects.create(
+            available=available,
+            phone_mask=mask_phone(digits),
+            ip=_client_ip(request) or None,
+            referer=request.META.get('HTTP_REFERER', '')[:200],
+        )
+    except Exception:
+        logger.exception('Ozon Доставка: проверку доступности не удалось записать')
+
+
 def _payload(request):
     try:
         return json.loads(request.body or '{}')
@@ -170,7 +189,7 @@ def availability(request):
         return _bad_request('Укажите телефон')
 
     try:
-        normalize_phone(phone)
+        digits = normalize_phone(phone)
     except OzonLogisticsError as exc:
         return _bad_request(str(exc))
 
@@ -179,7 +198,9 @@ def availability(request):
     except (OzonOAuthError, OzonLogisticsError) as exc:
         return _upstream_error(exc)
 
-    return JsonResponse({'status': 'ok', 'available': bool(result.get('is_possible'))})
+    available = bool(result.get('is_possible'))
+    _record_availability(request, digits, available)
+    return JsonResponse({'status': 'ok', 'available': available})
 
 
 @require_GET

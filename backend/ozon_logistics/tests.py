@@ -13,8 +13,8 @@ from django.test import TestCase, override_settings
 from django.utils import timezone
 
 from ozon_logistics.models import (
-    OzonAuthState, OzonDeliveryQuote, OzonOAuthToken, OzonPickupPoint, OzonPosting,
-    OzonProduct, OzonReturn,
+    OzonAuthState, OzonAvailabilityCheck, OzonDeliveryQuote, OzonOAuthToken,
+    OzonPickupPoint, OzonPosting, OzonProduct, OzonReturn,
 )
 from ozon_logistics.services import catalog
 from ozon_logistics import site_api
@@ -964,6 +964,54 @@ class SiteApiTests(TestCase):
             )
         self.assertEqual(response.status_code, 200)
         self.assertTrue(response.json()['available'])
+
+    def test_availability_is_recorded(self):
+        """Каждая проверка оседает в таблице: по ней потом считают воронку."""
+        with patch('requests.post', return_value=FakeResponse(data={'is_possible': True})):
+            self.client.post(
+                '/api/ozon-logistics/site/availability/',
+                data=json.dumps({'phone': '+7 (916) 111-22-33'}),
+                content_type='application/json',
+                HTTP_REFERER='https://horse-bio.ru/shop/cart',
+            )
+        check = OzonAvailabilityCheck.objects.get()
+        self.assertTrue(check.available)
+        self.assertEqual(check.phone_mask, '7••••••2233')
+        self.assertEqual(check.referer, 'https://horse-bio.ru/shop/cart')
+
+    def test_unavailable_is_recorded_too(self):
+        with patch('requests.post', return_value=FakeResponse(data={'is_possible': False})):
+            response = self.client.post(
+                '/api/ozon-logistics/site/availability/',
+                data=json.dumps({'phone': '79161112233'}),
+                content_type='application/json',
+            )
+        self.assertFalse(response.json()['available'])
+        self.assertFalse(OzonAvailabilityCheck.objects.get().available)
+
+    def test_broken_recording_does_not_break_the_answer(self):
+        """Упавшая запись статистики не должна стоить покупателю доставки."""
+        with patch('requests.post', return_value=FakeResponse(data={'is_possible': True})), \
+             patch('ozon_logistics.site_api.OzonAvailabilityCheck.objects.create',
+                   side_effect=RuntimeError('база прилегла')):
+            with self.assertLogs('ozon_logistics.site_api', level='ERROR'):
+                response = self.client.post(
+                    '/api/ozon-logistics/site/availability/',
+                    data=json.dumps({'phone': '79161112233'}),
+                    content_type='application/json',
+                )
+        self.assertEqual(response.status_code, 200)
+        self.assertTrue(response.json()['available'])
+
+    def test_failed_check_is_not_recorded(self):
+        """Ozon не ответил — записывать нечего: результата проверки нет."""
+        with patch('requests.post', return_value=FakeResponse(status_code=403, text='nope')):
+            self.client.post(
+                '/api/ozon-logistics/site/availability/',
+                data=json.dumps({'phone': '79161112233'}),
+                content_type='application/json',
+            )
+        self.assertEqual(OzonAvailabilityCheck.objects.count(), 0)
 
     def test_availability_requires_phone(self):
         response = self.client.post(
