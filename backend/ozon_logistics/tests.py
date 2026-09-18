@@ -23,6 +23,7 @@ from ozon_logistics.services import pickup_points
 from ozon_logistics.services import site_orders
 from ozon_logistics.services import ms_duplicates
 from ozon_logistics.services import ms_orders
+from ozon_logistics.services import ms_returns
 from ozon_logistics.services import returns as returns_service
 from ozon_logistics.services import tracking
 from ozon_logistics.services import client as client_module
@@ -2595,6 +2596,26 @@ class OzonReturnsTests(TestCase):
         self.assertIn('Примите товар', found[0].action)
 
 
+def _demand_doc(article='11-08AP0300', name='d-1'):
+    """Отгрузка поставки: реквизиты возврата берутся из неё."""
+    def meta(entity, ident):
+        return {'meta': {
+            'href': f'https://api.moysklad.ru/api/remap/1.2/entity/{entity}/{ident}',
+            'type': entity, 'mediaType': 'application/json',
+        }}
+
+    doc = {
+        'name': '06056',
+        **meta('demand', name),        # у документа есть и своя meta
+        'organization': meta('organization', 'org-farm'),
+        'agent': meta('counterparty', 'ozon'),
+        'contract': meta('contract', 'commission'),
+        'store': meta('store', 'finished-goods'),
+        'positions': {'rows': [{'assortment': {'article': article}}]},
+    }
+    return doc
+
+
 class PostingWindowTests(TestCase):
     """Окно дат для FBO: без него Ozon отвечает «date since or date to must not be empty»."""
 
@@ -2909,6 +2930,8 @@ class ShippedStateTests(TestCase):
                 return self._data
 
         def fake_get(url, headers=None, params=None):
+            if '/entity/demand/' in url:
+                return Response(_demand_doc())
             text = str(params)
             if 'states/' in text:                     # поиск поставок на FBO
                 offset = dict(params).get('offset') if isinstance(params, dict) else \
@@ -3186,9 +3209,9 @@ class ReturnSafetyTests(TestCase):
 
         def fake_get(url, headers=None, params=None):
             if '/entity/demand/' in url:
-                article = demand_contents.get(url.rsplit('/', 1)[-1])
-                rows = [{'assortment': {'article': article}}] if article else []
-                return Response({'positions': {'rows': rows}})
+                name = url.rsplit('/', 1)[-1]
+                article = demand_contents.get(name, '11-08AP0300')
+                return Response(_demand_doc(article, name))
             text = str(params)
             if 'states/' in text:
                 offset = next((v for k, v in params if k == 'offset'), 0)
@@ -3309,3 +3332,41 @@ class ReturnSafetyTests(TestCase):
         self.assertEqual(len(calls), first)
         self.quote.refresh_from_db()
         self.assertIsNotNone(self.quote.ms_checked_at)
+
+    def test_supplies_are_searched_among_ozon_only(self):
+        """Статус «FBO» стоит и у поставок на ВБ и Яндекс — возврат по чужой МойСклад отвергает."""
+        asked = []
+        order = self.order
+
+        def watching_get(url, headers=None, params=None):
+            query = str(params)
+            asked.append(query)
+            # заказ сайта находим, поставок «не находим» — важен сам запрос
+            rows = [] if 'states/' in query else [order]
+
+            class Response:
+                @staticmethod
+                def json():
+                    return {'rows': rows}
+
+            return Response()
+
+        with patch('msapi.http.get', side_effect=watching_get), \
+             patch('msapi.http.put') as put:
+            ms_orders.sync_orders()
+            put.return_value.json.return_value = {}
+
+        supply_queries = [q for q in asked if 'states/' in q]
+        self.assertTrue(supply_queries)
+        for query in supply_queries:
+            self.assertIn(ms_returns.AGENT_ID, query)
+
+    def test_requisites_are_taken_from_the_basis_shipment(self):
+        """Свои константы разойдутся с жизнью — реквизиты берём из отгрузки."""
+        stats, created, _ = self._run()
+
+        payload = created[0]
+        self.assertTrue(payload['agent']['meta']['href'].endswith('/ozon'))
+        self.assertTrue(payload['organization']['meta']['href'].endswith('/org-farm'))
+        self.assertTrue(payload['contract']['meta']['href'].endswith('/commission'))
+        self.assertTrue(payload['store']['meta']['href'].endswith('/finished-goods'))

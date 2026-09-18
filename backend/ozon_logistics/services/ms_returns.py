@@ -24,16 +24,14 @@ from ozon_logistics.services.ms_client import MoyskladError
 
 logger = logging.getLogger(__name__)
 
-# Реквизиты подтверждены на живых документах: поставки на FBO уходят от
-# ФАРМПРОТЕКТа на контрагента «Озон» по договору комиссии МП ИР-231527/22
-# со «Склада готовой продукции» (пример — отгрузка 07786 от 20.08.2026).
-ORGANIZATION_ID = '41d1c536-266b-11eb-0a80-090200155c67'   # ООО «ФАРМПРОТЕКТ»
-AGENT_ID = '0bae2cd0-e446-11ee-0a80-0bdd011e453d'          # Озон
-CONTRACT_ID = '4286eef8-0b7a-11ef-0a80-031c00354e4a'       # МП ИР-231527/22
-STORE_ID = '7507005e-266e-11eb-0a80-030b001555bd'          # Склад готовой продукции
+# Контрагент «Озон»: им помечены поставки на склады Ozon и продажи маркетплейса.
+AGENT_ID = '0bae2cd0-e446-11ee-0a80-0bdd011e453d'
 
-# Статус, которым в МойСкладе помечают заказ-поставку на склад Ozon. По нему
-# отличаем поставку от обычной продажи маркетплейса: контрагент у них один.
+# Статус заказа, которым помечают поставку на склад маркетплейса. Сам по себе он
+# Озон не означает: в последних ста таких заказах 86 на Озон, 9 на Вайлдберриз,
+# 5 на Яндекс Маркет — поэтому ищем по статусу И контрагенту сразу. Возврат по
+# чужой поставке МойСклад отвергает («поле agent не соответствует полю
+# связанного объекта»), и это выяснилось на живом документе 18.09.2026.
 FBO_STATE_ID = '5b087787-9e6c-11ee-0a80-026a00112ccb'
 
 # Сколько поставок просматриваем, разыскивая последнюю с нужным товаром.
@@ -52,6 +50,24 @@ def _meta(entity, entity_id):
         'type': entity,
         'mediaType': 'application/json',
     }}
+
+
+def _load_demand(href):
+    """Отгрузка целиком: и состав, и реквизиты.
+
+    Реквизиты возврата берём из неё, а не из своих констант: МойСклад требует,
+    чтобы у возврата с основанием совпадали организация, контрагент и договор,
+    а поставки на разные юрлица идут с разными.
+    """
+    clean = href.split('?')[0]
+    document = ms_client.get(
+        f"/entity/demand/{clean.rsplit('/', 1)[-1]}",
+        {'expand': 'positions.assortment,agent,organization,contract,store'},
+    )
+    # В ответе МойСклад повторяет ссылку запроса — вместе с ?expand=…, и она
+    # уезжает в документ как есть. Возвращаем ссылку без параметров.
+    document.setdefault('meta', {})['href'] = clean
+    return document
 
 
 def fbo_products(postings):
@@ -74,18 +90,13 @@ def fbo_products(postings):
     return totals
 
 
-def _demand_has(demand, article):
+def _demand_has(full, article):
     """Есть ли товар в этой отгрузке поставки.
 
     Поставку могут везти в несколько приёмов, и отгрузок у заказа тогда
     несколько. Основанием должна быть та, где товар действительно уехал:
     чужая отдаст себестоимость не той партии.
     """
-    href = ((demand.get('meta') or {}).get('href') or '')
-    if not href:
-        return False
-    full = ms_client.get(f"/entity/demand/{href.rsplit('/', 1)[-1]}",
-                         {'expand': 'positions.assortment'})
     for position in (full.get('positions') or {}).get('rows', []):
         if ((position.get('assortment') or {}).get('article') or '').strip() == article:
             return True
@@ -94,14 +105,16 @@ def _demand_has(demand, article):
 
 def _basis_demand(demands, article):
     """Отгрузка-основание: единственная либо та, в которой есть этот товар."""
-    demands = [d for d in demands if ((d.get('meta') or {}).get('href') or '')]
-    if not demands:
+    hrefs = [((d.get('meta') or {}).get('href') or '') for d in demands]
+    hrefs = [href for href in hrefs if href]
+    if not hrefs:
         return None
-    if len(demands) == 1:
-        return demands[0]
-    for demand in reversed(demands):
-        if _demand_has(demand, article):
-            return demand
+    if len(hrefs) == 1:
+        return _load_demand(hrefs[0])
+    for href in reversed(hrefs):
+        full = _load_demand(href)
+        if _demand_has(full, article):
+            return full
     return None
 
 
@@ -114,7 +127,8 @@ def _supply_orders():
             ('order', 'moment,desc'),
             ('expand', 'positions.assortment,demands'),
             ('filter',
-             f'state={ms_client.BASE}/entity/customerorder/metadata/states/{FBO_STATE_ID}'),
+             f'state={ms_client.BASE}/entity/customerorder/metadata/states/{FBO_STATE_ID}'
+             f';agent={ms_client.BASE}/entity/counterparty/{AGENT_ID}'),
         ]).get('rows', [])
         if not rows:
             return
@@ -178,7 +192,7 @@ def build_payload(products, *, site_order_id, order_number, posting_numbers):
     if not products:
         raise ReturnNotPossible('в отправлениях нет ни одной позиции с FBO')
 
-    positions, sources, demands = [], [], set()
+    positions, sources, bases = [], [], {}
     supplies = SupplyCache()
     for article, quantity in sorted(products.items()):
         found = find_supply_position(article, supplies)
@@ -192,7 +206,7 @@ def build_payload(products, *, site_order_id, order_number, posting_numbers):
                 f'у поставки {found["order_name"]} нет ссылки на отгрузку — '
                 'не к чему привязать возврат'
             )
-        demands.add(demand_href)
+        bases[demand_href] = found['demand']
         positions.append({
             'assortment': {'meta': (found['assortment'].get('meta') or {})},
             'quantity': quantity,
@@ -202,11 +216,11 @@ def build_payload(products, *, site_order_id, order_number, posting_numbers):
         })
         sources.append(f"{article} × {quantity:g} — из поставки {found['order_name']}")
 
-    demand_href = demands.pop()
-    if demands:
+    if len(bases) > 1:
         raise ReturnNotPossible(
             'товары уехали разными поставками, одним возвратом их не оформить'
         )
+    demand_href, basis = next(iter(bases.items()))
 
     description = '\n'.join([
         'Авто: товар уехал покупателю сайта через Ozon Доставку со склада FBO.',
@@ -217,18 +231,27 @@ def build_payload(products, *, site_order_id, order_number, posting_numbers):
         *sources,
     ])
 
-    return {
-        'organization': _meta('organization', ORGANIZATION_ID),
-        'agent': _meta('counterparty', AGENT_ID),
-        'contract': _meta('contract', CONTRACT_ID),
-        'store': _meta('store', STORE_ID),
-        'demand': {'meta': {
-            'href': demand_href, 'type': 'demand', 'mediaType': 'application/json',
-        }},
+    # Организацию, контрагента, договор и склад берём из отгрузки-основания:
+    # МойСклад требует, чтобы они совпадали, а свои константы рано или поздно
+    # разойдутся с жизнью — так и вышло на первой же попытке.
+    payload = {
         'applicable': True,
         'description': description,
         'positions': positions,
+        'demand': {'meta': {
+            'href': demand_href, 'type': 'demand', 'mediaType': 'application/json',
+        }},
     }
+    for field in ('organization', 'agent', 'contract', 'store'):
+        source = basis.get(field) or {}
+        meta = source.get('meta')
+        if meta:
+            payload[field] = {'meta': meta}
+        elif field != 'contract':   # договор в отгрузке может и не стоять
+            raise ReturnNotPossible(
+                f'в отгрузке-основании нет поля «{field}» — возврат не собрать'
+            )
+    return payload
 
 
 def payload_for(quote, postings):
