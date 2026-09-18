@@ -14,12 +14,17 @@
 4. **Возврат** — посылка физически едет обратно на склад: её надо принять, а
    покупателю вернуть деньги. Это отдельный повод от отмены: отмена говорит про
    статус доставки, возврат — про товар, который сейчас в пути к нам.
+5. **Возврат от Озона не собрался** — единственный повод не про деньги.
+   Товар уехал со склада FBO, где он в МойСкладе списан ещё при поставке, и
+   перед отгрузкой покупателю его надо забрать у Озона возвратом. Пока возврата
+   нет, робот не ставит «Отгружен»: сценарий создал бы отгрузку в минус.
 
 Отпечаток строится из статуса и номера: пока состояние то же, уведомление
 остаётся прочитанным. Появился новый статус — человек увидит его снова.
 """
 
 from ozon_logistics.models import OzonDeliveryQuote, OzonPosting, OzonReturn
+from ozon_logistics.services.ms_orders import awaiting_manual_shipment
 
 from .core import CRITICAL, WARNING, Notification, provider
 
@@ -39,6 +44,7 @@ def ozon_delivery_notifications():
     yield from _failed_orders()
     yield from _uncertain_orders()
     yield from _returns()
+    yield from _shipped_from_ozon_warehouse()
 
 
 def _undelivered():
@@ -121,4 +127,26 @@ def _returns():
             ),
             action='Примите товар на складе и верните оплату покупателю',
             fingerprint=f'{item.return_id}:{item.status_sys_name}',
+        )
+
+
+def _shipped_from_ozon_warehouse():
+    """Товар уехал с FBO, а возврат от Озона робот собрать не смог."""
+    for quote, postings in awaiting_manual_shipment():
+        numbers = ', '.join(
+            p.posting_number for p in postings if p.schema == OzonPosting.SCHEMA_FBO
+        )
+        yield Notification(
+            key=f'ozon-delivery:manual-shipment:{quote.id}',
+            level=WARNING,
+            title=f'Нужен возврат от Озона — {_order_label(quote)}',
+            body=(
+                f'Посылка уехала со склада Ozon (отправление {numbers}), а не с нашего. '
+                'Этот товар списан в МойСкладе ещё при поставке на FBO, и собрать '
+                'возврат от Озона автоматически не вышло — скорее всего не нашлась '
+                'поставка с этим товаром. Статус «Отгружен» робот не ставит: '
+                'отгрузка ушла бы в минус.'
+            ),
+            action='Создайте возврат от Озона вручную и поставьте статус «Отгружен»',
+            fingerprint=':'.join(sorted(f'{p.posting_number}={p.status}' for p in postings)),
         )

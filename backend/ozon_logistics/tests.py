@@ -22,6 +22,7 @@ from ozon_logistics.services import orders
 from ozon_logistics.services import pickup_points
 from ozon_logistics.services import site_orders
 from ozon_logistics.services import ms_duplicates
+from ozon_logistics.services import ms_orders
 from ozon_logistics.services import returns as returns_service
 from ozon_logistics.services import tracking
 from ozon_logistics.services import client as client_module
@@ -2592,3 +2593,719 @@ class OzonReturnsTests(TestCase):
         self.assertEqual(len(found), 1)
         self.assertIn('Полный возврат', found[0].title)
         self.assertIn('Примите товар', found[0].action)
+
+
+class PostingWindowTests(TestCase):
+    """Окно дат для FBO: без него Ozon отвечает «date since or date to must not be empty»."""
+
+    def setUp(self):
+        self.quote = OzonDeliveryQuote.objects.create(
+            phone='79166229030',
+            items=[{'sku': 101, 'quantity': 1}],
+            map_point_id=378617,
+            checkout_response=_checkout_response(),
+            status=OzonDeliveryQuote.STATUS_ORDERED,
+            order_number='57279866-0143',
+            postings=['57279866-0143-1'],
+            site_order_id='28735318',
+        )
+
+    def _client(self, *, fbs_error=None, fbo_error=None):
+        class TrackingClient:
+            def __init__(self):
+                self.fbs_calls = []
+                self.fbo_calls = []
+
+            def posting_fbs_list(self, **kwargs):
+                self.fbs_calls.append(kwargs)
+                if fbs_error:
+                    raise client_module.OzonLogisticsError(fbs_error)
+                return {'postings': [], 'has_next': False}
+
+            def posting_fbo_list(self, **kwargs):
+                self.fbo_calls.append(kwargs)
+                if fbo_error:
+                    raise client_module.OzonLogisticsError(fbo_error)
+                return {'postings': [], 'has_next': False}
+
+        return TrackingClient()
+
+    def test_fbo_request_carries_date_window(self):
+        client = self._client()
+        tracking.sync_postings(client=client)
+
+        call = client.fbo_calls[0]
+        self.assertIn('since', call)
+        self.assertIn('to', call)
+        self.assertLess(call['since'], call['to'])
+
+    def test_window_reaches_the_oldest_quote(self):
+        """Застрявшая посылка живёт дольше окна наблюдения — окно должно доставать до неё."""
+        old = timezone.now() - timezone.timedelta(days=tracking.TRACK_DAYS + 30)
+        OzonDeliveryQuote.objects.filter(pk=self.quote.pk).update(created_at=old)
+        OzonPosting.objects.create(
+            posting_number='57279866-0143-1', order_number='57279866-0143',
+            quote=self.quote, schema=OzonPosting.SCHEMA_FBO, status='delivering',
+        )
+
+        client = self._client()
+        tracking.sync_postings(client=client)
+
+        self.assertLess(client.fbo_calls[0]['since'], old.isoformat())
+
+    def test_refused_fbo_does_not_stop_fbs(self):
+        """Скоупа на FBO может не быть — это не повод не обновить FBS."""
+        client = self._client(fbo_error='HTTP 403: no access for this HTTP endpoint')
+        stats = tracking.sync_postings(client=client)
+
+        self.assertEqual(len(client.fbs_calls), 1)
+        self.assertEqual(len(stats['errors']), 1)
+        self.assertIn('403', stats['errors'][0])
+
+    def test_broken_fbs_does_not_stop_fbo(self):
+        client = self._client(fbs_error='HTTP 500')
+        stats = tracking.sync_postings(client=client)
+
+        self.assertEqual(len(client.fbo_calls), 1)
+        self.assertEqual(len(stats['errors']), 1)
+
+    def test_clean_run_reports_no_errors(self):
+        stats = tracking.sync_postings(client=self._client())
+        self.assertEqual(stats['errors'], [])
+
+
+class MoyskladOrderNoteTests(TestCase):
+    """Сведения о доставке Ozon в комментарии заказа МойСклада."""
+
+    def setUp(self):
+        self.quote = OzonDeliveryQuote.objects.create(
+            phone='79166229030',
+            items=[{'sku': 101, 'quantity': 1}],
+            map_point_id=378617,
+            checkout_response=_checkout_response(),
+            status=OzonDeliveryQuote.STATUS_ORDERED,
+            order_number='57279866-0143',
+            postings=['57279866-0143-1'],
+            site_order_id='28735318',
+        )
+        self.order = {
+            'id': 'ms-order-id',
+            'name': '09065',
+            'externalCode': '28735318',
+            'description': 'Способ доставки: Доставка OZON ПВЗ\nСтатус оплаты: Оплачен',
+        }
+
+    def _posting(self, *, schema=OzonPosting.SCHEMA_FBS, status='delivering'):
+        return OzonPosting.objects.create(
+            posting_number='57279866-0143-1', order_number='57279866-0143',
+            quote=self.quote, schema=schema, status=status,
+        )
+
+    NOT_GIVEN = object()
+
+    def _moysklad(self, order=NOT_GIVEN):
+        """Подменяет МойСклад: GET отдаёт заказ, PUT запоминает записанное.
+
+        `order=None` означает «заказа в МойСкладе нет», поэтому «не передан» —
+        отдельное значение, а не None.
+        """
+        written = []
+        found = self.order if order is self.NOT_GIVEN else order
+
+        class Response:
+            def __init__(self, data):
+                self._data = data
+
+            def json(self):
+                return self._data
+
+        def fake_get(url, headers=None, params=None):
+            return Response({'rows': [found] if found else []})
+
+        def fake_put(url, headers=None, json=None):
+            written.append((url, json))
+            return Response(dict(found or {}, **(json or {})))
+
+        return fake_get, fake_put, written
+
+    def test_writes_order_number_and_posting(self):
+        self._posting()
+        fake_get, fake_put, written = self._moysklad()
+
+        with patch('msapi.http.get', side_effect=fake_get), \
+             patch('msapi.http.put', side_effect=fake_put):
+            stats = ms_orders.sync_orders()
+
+        self.assertEqual(stats['written'], 1)
+        description = written[0][1]['description']
+        self.assertIn('Заказ Ozon Доставки: 57279866-0143', description)
+        self.assertIn('Отправление 57279866-0143-1', description)
+        self.assertIn('доставляется', description)
+
+    def test_keeps_text_written_by_people(self):
+        self._posting()
+        fake_get, fake_put, written = self._moysklad()
+
+        with patch('msapi.http.get', side_effect=fake_get), \
+             patch('msapi.http.put', side_effect=fake_put):
+            ms_orders.sync_orders()
+
+        description = written[0][1]['description']
+        self.assertIn('Способ доставки: Доставка OZON ПВЗ', description)
+        self.assertIn('Статус оплаты: Оплачен', description)
+
+    def test_block_does_not_multiply_on_second_run(self):
+        """Прежние свои строки снимаем, а не дописываем поверх."""
+        self._posting()
+        stale = dict(self.order, description=(
+            'Статус оплаты: Оплачен\n'
+            'Заказ Ozon Доставки: 57279866-0143\n'
+            'Отправление 57279866-0143-1 — FBS — наш склад, ожидает отгрузки\n'
+            'https://seller.ozon.ru/app/postings/fbs?postingDetails=57279866-0143-1'
+        ))
+        fake_get, fake_put, written = self._moysklad(order=stale)
+
+        with patch('msapi.http.get', side_effect=fake_get), \
+             patch('msapi.http.put', side_effect=fake_put):
+            ms_orders.sync_orders()
+
+        description = written[0][1]['description']
+        self.assertEqual(description.count('Заказ Ozon Доставки:'), 1)
+        self.assertIn('доставляется', description)
+        self.assertNotIn('ожидает отгрузки', description)
+
+    def test_unchanged_note_does_not_touch_moysklad(self):
+        """Робот крутится каждые пять минут — лишних запросов быть не должно."""
+        self._posting()
+        fake_get, fake_put, written = self._moysklad()
+
+        with patch('msapi.http.get', side_effect=fake_get), \
+             patch('msapi.http.put', side_effect=fake_put):
+            ms_orders.sync_orders()
+            calls_after_first = len(written)
+            with patch('msapi.http.get', side_effect=AssertionError('лишний запрос в МойСклад')):
+                stats = ms_orders.sync_orders()
+
+        self.assertEqual(len(written), calls_after_first)
+        self.assertEqual(stats['unchanged'], 1)
+
+    def test_missing_order_is_not_an_error(self):
+        """Заказ сайта могли ещё не завести — вернёмся на следующем прогоне."""
+        self._posting()
+        fake_get, fake_put, written = self._moysklad(order=None)
+
+        with patch('msapi.http.get', side_effect=fake_get), \
+             patch('msapi.http.put', side_effect=fake_put):
+            stats = ms_orders.sync_orders()
+
+        self.assertEqual(stats['missing'], 1)
+        self.assertEqual(written, [])
+        self.assertEqual(stats['errors'], [])
+        self.quote.refresh_from_db()
+        self.assertEqual(self.quote.ms_note, '')
+
+    def test_order_without_postings_gets_at_least_the_number(self):
+        fake_get, fake_put, written = self._moysklad()
+
+        with patch('msapi.http.get', side_effect=fake_get), \
+             patch('msapi.http.put', side_effect=fake_put):
+            ms_orders.sync_orders()
+
+        description = written[0][1]['description']
+        self.assertIn('Заказ Ozon Доставки: 57279866-0143', description)
+        self.assertNotIn('Отправление', description)
+
+    def test_cabinet_link_differs_by_schema(self):
+        self.assertEqual(
+            ms_orders.cabinet_url('57279866-0143-1', OzonPosting.SCHEMA_FBO),
+            'https://seller.ozon.ru/app/postings/fbo/57279866-0143-1',
+        )
+        self.assertEqual(
+            ms_orders.cabinet_url('34060723-0377-1', OzonPosting.SCHEMA_FBS),
+            'https://seller.ozon.ru/app/postings/fbs?postingDetails=34060723-0377-1',
+        )
+
+    def test_quote_without_site_order_is_skipped(self):
+        OzonDeliveryQuote.objects.filter(pk=self.quote.pk).update(site_order_id='')
+
+        with patch('msapi.http.get', side_effect=AssertionError('незачем идти в МойСклад')):
+            stats = ms_orders.sync_orders()
+
+        self.assertEqual(stats['checked'], 0)
+
+    def test_moysklad_failure_is_reported_not_raised(self):
+        self._posting()
+
+        with patch('msapi.http.get', side_effect=RuntimeError('сеть упала')):
+            stats = ms_orders.sync_orders()
+
+        self.assertEqual(len(stats['errors']), 1)
+        self.assertEqual(stats['written'], 0)
+
+
+class ShippedStateTests(TestCase):
+    """Статус «Отгружен»: ставим сами, но только когда товар уехал с нашего склада."""
+
+    def setUp(self):
+        self.quote = OzonDeliveryQuote.objects.create(
+            phone='79166229030',
+            items=[{'sku': 101, 'quantity': 1}],
+            map_point_id=378617,
+            checkout_response=_checkout_response(),
+            status=OzonDeliveryQuote.STATUS_ORDERED,
+            order_number='57279866-0143',
+            postings=['57279866-0143-1'],
+            site_order_id='28735318',
+        )
+        self.order = {
+            'id': 'ms-order-id',
+            'name': '09065',
+            'externalCode': '28735318',
+            'description': 'Статус оплаты: Оплачен',
+            'state': {'meta': {'href': (
+                'https://api.moysklad.ru/api/remap/1.2/entity/customerorder/'
+                'metadata/states/50cfc5c8-71b1-11ef-0a80-0218000bda38'  # Можно собирать
+            )}},
+            'demands': [],
+        }
+
+    def _posting(self, *, schema=OzonPosting.SCHEMA_FBS, status='delivering', number=None,
+                 article='11-08AP0300', quantity=1):
+        # Состав отправления нужен FBO-ветке: из него собирается возврат от Озона
+        details = {'products': [{'offer_id': article, 'quantity': quantity}]}
+        return OzonPosting.objects.create(
+            posting_number=number or '57279866-0143-1',
+            order_number='57279866-0143',
+            quote=self.quote, schema=schema, status=status, details=details,
+        )
+
+    SUPPLY = {
+        'name': '05878',
+        'positions': {'rows': [{
+            'quantity': 11.0, 'price': 277000, 'vat': 0, 'vatEnabled': False,
+            'assortment': {
+                'article': '11-08AP0300',
+                'name': 'Хондропротектор ХОНДРО ArtroPro для собак, 300 г',
+                'meta': {'href': 'https://api.moysklad.ru/api/remap/1.2/entity/product/p-1'},
+            },
+        }]},
+        'demands': [{'meta': {
+            'href': 'https://api.moysklad.ru/api/remap/1.2/entity/demand/d-1',
+            'type': 'demand',
+        }}],
+    }
+
+    def _moysklad(self, order=None, *, supplies=None):
+        """Фейковый МойСклад: заказ сайта, список поставок на FBO и создание возврата."""
+        written, created = [], []
+        found = self.order if order is None else order
+        supply_rows = self.SUPPLY if supplies is None else supplies
+
+        class Response:
+            def __init__(self, data):
+                self._data = data
+
+            def json(self):
+                return self._data
+
+        def fake_get(url, headers=None, params=None):
+            text = str(params)
+            if 'states/' in text:                     # поиск поставок на FBO
+                offset = dict(params).get('offset') if isinstance(params, dict) else \
+                    next((v for k, v in params if k == 'offset'), 0)
+                rows = [] if offset else ([supply_rows] if supply_rows else [])
+                return Response({'rows': rows})
+            return Response({'rows': [found] if found else []})
+
+        def fake_post(url, headers=None, json=None):
+            created.append((url, json))
+            return Response({'id': 'sr-1', 'name': '09999'})
+
+        def fake_put(url, headers=None, json=None):
+            written.append(json)
+            return Response(dict(found, **(json or {})))
+
+        return fake_get, fake_post, fake_put, written, created
+
+    def _run(self, order=None, *, supplies=None):
+        fake_get, fake_post, fake_put, written, created = self._moysklad(order, supplies=supplies)
+        with patch('msapi.http.get', side_effect=fake_get), \
+             patch('msapi.http.post', side_effect=fake_post), \
+             patch('msapi.http.put', side_effect=fake_put):
+            stats = ms_orders.sync_orders()
+        return stats, written, created
+
+    def _state_href(self, payload):
+        return ((payload.get('state') or {}).get('meta') or {}).get('href', '')
+
+    def test_own_warehouse_order_is_marked_shipped(self):
+        self._posting()
+        stats, written, created = self._run()
+
+        self.assertEqual(stats['shipped'], 1)
+        self.assertIn(ms_orders.SHIPPED_STATE_ID, self._state_href(written[0]))
+        self.quote.refresh_from_db()
+        self.assertIsNotNone(self.quote.ms_shipped_at)
+
+    def test_ozon_warehouse_order_gets_a_return_first(self):
+        """Товар с FBO списан ещё при поставке: сначала забираем его у Озона."""
+        self._posting(schema=OzonPosting.SCHEMA_FBO)
+        stats, written, created = self._run()
+
+        self.assertEqual(stats['shipped'], 1)
+        self.assertEqual(stats['by_hand'], 0)
+        self.assertEqual(len(created), 1)
+        url, payload = created[0]
+        self.assertIn('/entity/salesreturn', url)
+        self.assertTrue(payload['applicable'])
+        self.assertEqual(payload['positions'][0]['quantity'], 1)
+        self.assertEqual(payload['positions'][0]['price'], 277000)   # цена поставки
+        self.assertIn('/entity/demand/d-1', payload['demand']['meta']['href'])
+        self.assertIn('57279866-0143-1', payload['description'])
+        self.assertIn('05878', payload['description'])
+        self.quote.refresh_from_db()
+        self.assertEqual(self.quote.ms_return, '09999')
+        self.assertIsNotNone(self.quote.ms_shipped_at)
+
+    def test_return_is_created_before_the_status(self):
+        """Сценарий создаёт отгрузку сразу после статуса — опоздавший возврат бесполезен."""
+        self._posting(schema=OzonPosting.SCHEMA_FBO)
+        order_of_calls = []
+
+        fake_get, fake_post, fake_put, written, created = self._moysklad()
+
+        def watched_post(*a, **kw):
+            order_of_calls.append('возврат')
+            return fake_post(*a, **kw)
+
+        def watched_put(*a, **kw):
+            if 'state' in (kw.get('json') or {}):
+                order_of_calls.append('статус')
+            return fake_put(*a, **kw)
+
+        with patch('msapi.http.get', side_effect=fake_get), \
+             patch('msapi.http.post', side_effect=watched_post), \
+             patch('msapi.http.put', side_effect=watched_put):
+            ms_orders.sync_orders()
+
+        self.assertEqual(order_of_calls, ['возврат', 'статус'])
+
+    def test_without_a_supply_nothing_is_touched(self):
+        """Не нашли поставку — статус не ставим: отгрузка ушла бы в минус."""
+        self._posting(schema=OzonPosting.SCHEMA_FBO)
+        stats, written, created = self._run(supplies=None if False else {})
+
+        self.assertEqual(stats['by_hand'], 1)
+        self.assertEqual(stats['shipped'], 0)
+        self.assertEqual(created, [])
+        self.assertNotIn('state', written[0])          # комментарий записали, статус — нет
+        self.assertEqual(len(stats['errors']), 1)
+        self.quote.refresh_from_db()
+        self.assertIsNone(self.quote.ms_shipped_at)
+        self.assertEqual(self.quote.ms_return, '')
+
+    def test_second_run_does_not_create_a_second_return(self):
+        """Второй возврат вернул бы товар, которого не было."""
+        self._posting(schema=OzonPosting.SCHEMA_FBO)
+        self._run()
+        stats, written, created = self._run()
+
+        self.assertEqual(created, [])
+        self.assertEqual(stats['shipped'], 0)
+
+    def test_mixed_order_returns_only_the_fbo_part(self):
+        """Со своего склада вернули бы товар, который никуда не уезжал."""
+        self._posting()
+        self._posting(schema=OzonPosting.SCHEMA_FBO, number='57279866-0143-2')
+        stats, _, created = self._run()
+
+        self.assertEqual(stats['shipped'], 1)
+        self.assertEqual(len(created), 1)
+        self.assertEqual(len(created[0][1]['positions']), 1)   # только FBO-позиция
+
+    def test_posting_on_the_way_is_not_shipped_yet(self):
+        self._posting(status='awaiting_deliver')
+        stats, written, created = self._run()
+
+        self.assertEqual(stats['shipped'], 0)
+        self.assertNotIn('state', written[0])
+
+    def test_cancelled_posting_is_not_a_shipment(self):
+        self._posting(status='cancelled')
+        stats, written, created = self._run()
+
+        self.assertEqual(stats['shipped'], 0)
+        self.assertEqual(stats['by_hand'], 0)
+
+    def test_cancelled_sibling_does_not_block_the_shipment(self):
+        """Одно отправление отменили, второе уехало — заказ всё равно отгружен."""
+        self._posting()
+        self._posting(status='cancelled', number='57279866-0143-2')
+        stats, written, created = self._run()
+
+        self.assertEqual(stats['shipped'], 1)
+        self.assertIn(ms_orders.SHIPPED_STATE_ID, self._state_href(written[0]))
+
+    def test_order_shipped_by_a_person_is_not_touched(self):
+        self._posting()
+        by_hand = dict(self.order, state={'meta': {'href': (
+            'https://api.moysklad.ru/api/remap/1.2/entity/customerorder/'
+            f'metadata/states/{ms_orders.SHIPPED_STATE_ID}'
+        )}})
+        stats, written, created = self._run(order=by_hand)
+
+        self.assertEqual(stats['shipped'], 0)
+        self.assertNotIn('state', written[0])
+        self.quote.refresh_from_db()
+        self.assertIsNotNone(self.quote.ms_shipped_at)   # вопрос закрыт, не возвращаемся
+
+    def test_order_with_a_demand_is_not_touched(self):
+        """Отгрузка уже есть — второй раз списывать нечего."""
+        self._posting()
+        shipped = dict(self.order, demands=[{'meta': {'href': 'demand'}}])
+        stats, _, _created = self._run(order=shipped)
+
+        self.assertEqual(stats['shipped'], 0)
+        self.quote.refresh_from_db()
+        self.assertIsNotNone(self.quote.ms_shipped_at)
+
+    def test_status_is_set_once(self):
+        self._posting()
+        self._run()
+        stats, written, created = self._run()
+
+        self.assertEqual(stats['shipped'], 0)
+        self.assertEqual(written, [])
+
+    def test_delivered_order_is_still_shipped(self):
+        """Робот мог не успеть увидеть delivering — delivered тоже считается."""
+        self._posting(status='delivered')
+        stats, written, created = self._run()
+
+        self.assertEqual(stats['shipped'], 1)
+
+    def test_person_waiting_orders_are_rechecked_rarely(self):
+        """Заказ может ждать человека неделями — незачем дёргать МойСклад каждые 5 минут."""
+        self._posting(schema=OzonPosting.SCHEMA_FBO)
+        self._run(supplies={})            # возврат не собрался, заказ ждёт человека
+
+        with patch('msapi.http.get', side_effect=AssertionError('лишний запрос в МойСклад')):
+            stats = ms_orders.sync_orders()
+        self.assertEqual(stats['unchanged'], 1)
+
+        OzonDeliveryQuote.objects.filter(pk=self.quote.pk).update(
+            ms_checked_at=timezone.now() - ms_orders.RECHECK_AFTER - timezone.timedelta(minutes=1)
+        )
+        stats, _, created = self._run(supplies={})
+        self.assertEqual(stats['by_hand'], 1)
+
+    def test_notification_shows_the_order_waiting_for_a_person(self):
+        from api.notifications.ozon_delivery import ozon_delivery_notifications
+
+        self._posting(schema=OzonPosting.SCHEMA_FBO)
+        self._run(supplies={})            # поставку не нашли — возврат не собрался
+
+        titles = [n.title for n in ozon_delivery_notifications()]
+        self.assertTrue(any('Нужен возврат от Озона' in title for title in titles), titles)
+
+    def test_notification_goes_away_once_the_return_is_created(self):
+        from api.notifications.ozon_delivery import ozon_delivery_notifications
+
+        self._posting(schema=OzonPosting.SCHEMA_FBO)
+        self._run()
+
+        titles = [n.title for n in ozon_delivery_notifications()]
+        self.assertFalse(any('Нужен возврат от Озона' in title for title in titles), titles)
+
+    def test_own_warehouse_order_raises_no_notification(self):
+        from api.notifications.ozon_delivery import ozon_delivery_notifications
+
+        self._posting()
+        self._run()
+
+        titles = [n.title for n in ozon_delivery_notifications()]
+        self.assertFalse(any('Нужен возврат от Озона' in title for title in titles), titles)
+
+
+class ReturnSafetyTests(TestCase):
+    """Возврат от Озона — документ, который нельзя создать дважды."""
+
+    def setUp(self):
+        self.quote = OzonDeliveryQuote.objects.create(
+            phone='79166229030', items=[], checkout_response=_checkout_response(),
+            status=OzonDeliveryQuote.STATUS_ORDERED,
+            order_number='57279866-0143', postings=['57279866-0143-1'],
+            site_order_id='28735318',
+        )
+        OzonPosting.objects.create(
+            posting_number='57279866-0143-1', order_number='57279866-0143',
+            quote=self.quote, schema=OzonPosting.SCHEMA_FBO, status='delivered',
+            details={'products': [{'offer_id': '11-08AP0300', 'quantity': 1}]},
+        )
+        self.order = {
+            'id': 'ms-order-id', 'name': '09065', 'externalCode': '28735318',
+            'description': 'Статус оплаты: Оплачен',
+            'state': {'meta': {'href': (
+                'https://api.moysklad.ru/api/remap/1.2/entity/customerorder/'
+                'metadata/states/50cfc5c8-71b1-11ef-0a80-0218000bda38'
+            )}},
+            'demands': [],
+        }
+
+    def _supply(self, demands):
+        return {
+            'name': '05878',
+            'positions': {'rows': [{
+                'quantity': 11.0, 'price': 277000, 'vat': 0, 'vatEnabled': False,
+                'assortment': {
+                    'article': '11-08AP0300',
+                    'meta': {'href': 'https://api.moysklad.ru/api/remap/1.2/entity/product/p-1'},
+                },
+            }]},
+            'demands': demands,
+        }
+
+    def _demand(self, name):
+        return {'meta': {
+            'href': f'https://api.moysklad.ru/api/remap/1.2/entity/demand/{name}',
+            'type': 'demand',
+        }}
+
+    def _fakes(self, *, supply=None, demand_contents=None, put_fails=False):
+        """МойСклад: заказ сайта, поставки, содержимое отгрузок и запись."""
+        created, written = [], []
+        supply = self._supply([self._demand('d-1')]) if supply is None else supply
+        demand_contents = demand_contents or {}
+
+        class Response:
+            def __init__(self, data):
+                self._data = data
+
+            def json(self):
+                return self._data
+
+        def fake_get(url, headers=None, params=None):
+            if '/entity/demand/' in url:
+                article = demand_contents.get(url.rsplit('/', 1)[-1])
+                rows = [{'assortment': {'article': article}}] if article else []
+                return Response({'positions': {'rows': rows}})
+            text = str(params)
+            if 'states/' in text:
+                offset = next((v for k, v in params if k == 'offset'), 0)
+                return Response({'rows': [] if offset else ([supply] if supply else [])})
+            return Response({'rows': [self.order]})
+
+        def fake_post(url, headers=None, json=None):
+            created.append(json)
+            return Response({'id': 'sr-1', 'name': '09999'})
+
+        def fake_put(url, headers=None, json=None):
+            written.append(json)
+            if put_fails:
+                raise RuntimeError('МойСклад упал сразу после возврата')
+            return Response(dict(self.order, **(json or {})))
+
+        return fake_get, fake_post, fake_put, created, written
+
+    def _run(self, *, apply=True, **kwargs):
+        fake_get, fake_post, fake_put, created, written = self._fakes(**kwargs)
+        with patch('msapi.http.get', side_effect=fake_get), \
+             patch('msapi.http.post', side_effect=fake_post), \
+             patch('msapi.http.put', side_effect=fake_put):
+            stats = ms_orders.sync_orders(apply=apply)
+        return stats, created, written
+
+    def test_failed_order_update_does_not_duplicate_the_return(self):
+        """Возврат создан, а запись в заказ упала — второй возврат не создаём."""
+        self._run(put_fails=True)
+        self.quote.refresh_from_db()
+        self.assertEqual(self.quote.ms_return, '09999')   # номер сохранён до правки заказа
+
+        stats, created, _ = self._run()
+        self.assertEqual(created, [])
+
+    def test_dry_run_creates_nothing(self):
+        stats, created, written = self._run(apply=False)
+
+        self.assertEqual(created, [])
+        self.assertEqual(written, [])
+        self.quote.refresh_from_db()
+        self.assertEqual(self.quote.ms_return, '')
+
+    def test_basis_is_the_shipment_that_carried_the_goods(self):
+        """Поставку могли везти в два приёма — основанием должна быть нужная отгрузка."""
+        supply = self._supply([self._demand('d-1'), self._demand('d-2')])
+        stats, created, _ = self._run(
+            supply=supply,
+            demand_contents={'d-1': '11-08AP0300', 'd-2': 'другой-товар'},
+        )
+
+        self.assertEqual(len(created), 1)
+        self.assertTrue(created[0]['demand']['meta']['href'].endswith('/d-1'))
+
+    def test_no_suitable_shipment_stops_the_return(self):
+        supply = self._supply([self._demand('d-1'), self._demand('d-2')])
+        stats, created, written = self._run(
+            supply=supply, demand_contents={'d-1': 'чужое', 'd-2': 'тоже чужое'},
+        )
+
+        self.assertEqual(created, [])
+        self.assertEqual(stats['by_hand'], 1)
+        self.assertNotIn('state', written[0])
+
+    def test_shipment_without_a_link_is_refused(self):
+        stats, created, _ = self._run(supply=self._supply([{'meta': {}}]))
+
+        self.assertEqual(created, [])
+        self.assertEqual(stats['by_hand'], 1)
+
+    def test_notification_stays_quiet_until_the_robot_tried(self):
+        """Между статусом delivering и прогоном робота звать человека не за чем."""
+        from api.notifications.ozon_delivery import ozon_delivery_notifications
+
+        titles = [n.title for n in ozon_delivery_notifications()]
+        self.assertFalse(any('Нужен возврат' in title for title in titles), titles)
+
+        self._run(supply={})          # робот сходил и не смог
+        titles = [n.title for n in ozon_delivery_notifications()]
+        self.assertTrue(any('Нужен возврат' in title for title in titles), titles)
+
+    def test_notification_skips_cancelled_postings(self):
+        from api.notifications.ozon_delivery import ozon_delivery_notifications
+
+        OzonPosting.objects.create(
+            posting_number='57279866-0143-2', order_number='57279866-0143',
+            quote=self.quote, schema=OzonPosting.SCHEMA_FBO, status='cancelled',
+            details={'products': [{'offer_id': '11-08AP0300', 'quantity': 1}]},
+        )
+        self._run(supply={})
+
+        bodies = [n.body for n in ozon_delivery_notifications() if 'Нужен возврат' in n.title]
+        self.assertEqual(len(bodies), 1)
+        self.assertIn('57279866-0143-1', bodies[0])
+        self.assertNotIn('57279866-0143-2', bodies[0])
+
+    def test_missing_site_order_is_not_polled_every_run(self):
+        """Заказа сайта может не быть неделями — незачем ходить каждые пять минут."""
+        self.order = None
+        calls = []
+        fake_get, fake_post, fake_put, _, _ = self._fakes()
+
+        def counting_get(url, headers=None, params=None):
+            calls.append(url)
+
+            class Response:
+                @staticmethod
+                def json():
+                    return {'rows': []}
+
+            return Response()
+
+        with patch('msapi.http.get', side_effect=counting_get):
+            ms_orders.sync_orders()
+            first = len(calls)
+            ms_orders.sync_orders()
+
+        self.assertEqual(len(calls), first)
+        self.quote.refresh_from_db()
+        self.assertIsNotNone(self.quote.ms_checked_at)

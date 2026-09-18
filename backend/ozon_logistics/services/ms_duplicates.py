@@ -16,39 +16,23 @@
 """
 
 import logging
-import os
 import re
-from pathlib import Path
 
 from django.db.models import Q
 from django.utils import timezone
-from dotenv import load_dotenv
 
-from msapi import http as ms_http
 from ozon_logistics.models import OzonPosting
+from ozon_logistics.services import ms_client
+from ozon_logistics.services.ms_client import (  # noqa: F401  (MoyskladError зовут снаружи)
+    MoyskladError, order_by_external_code as _order_by_external_code,
+)
 
 logger = logging.getLogger(__name__)
-
-load_dotenv(Path(__file__).resolve().parents[2] / '.env')
-
-BASE = 'https://api.moysklad.ru/api/remap/1.2'
 
 # Как часто перепроверять отправление, по которому уже всё разобрано. Дубль
 # создаёт синхронизация МойСклад ↔ Ozon, и теоретически она может завести его
 # заново — но не за пять минут, а раз в сутки перепроверить достаточно.
 RECHECK_AFTER = timezone.timedelta(hours=24)
-
-
-def _headers():
-    """Собираем на каждый запрос: сменённый токен не должен требовать перезапуска."""
-    return {
-        'Authorization': f"Bearer {os.getenv('MOYSKLAD_TOKEN')}",
-        'Accept-Encoding': 'gzip',
-    }
-
-
-class MoyskladError(RuntimeError):
-    """МойСклад недоступен или ответил ошибкой."""
 
 
 # Метка, по которой видно, что данные из дубля уже перенесены. Номер отправления
@@ -61,14 +45,9 @@ def _marker_for(posting_number):
     return f'{TRANSFER_MARKER} {posting_number}'
 
 
-def _get(path, params=None):
-    try:
-        data = ms_http.get(f'{BASE}{path}', headers=_headers(), params=params).json()
-    except Exception as exc:  # сеть, таймаут, некорректный JSON
-        raise MoyskladError(f'МойСклад недоступен: {exc}') from exc
-    if isinstance(data, dict) and data.get('errors'):
-        raise MoyskladError(f'МойСклад вернул ошибку: {data["errors"]}')
-    return data
+_get = ms_client.get
+_put = ms_client.put
+_delete = ms_client.delete
 
 
 def _orders_by_text(text, *, limit=10):
@@ -80,28 +59,6 @@ def _orders_by_text(text, *, limit=10):
     return _get('/entity/customerorder', {
         'search': text, 'limit': limit, 'expand': 'salesChannel,agent',
     }).get('rows', [])
-
-
-def _put(path, payload):
-    try:
-        data = ms_http.put(f'{BASE}{path}', headers=_headers(), json=payload).json()
-    except Exception as exc:
-        raise MoyskladError(f'МойСклад недоступен: {exc}') from exc
-    if isinstance(data, dict) and data.get('errors'):
-        raise MoyskladError(f'МойСклад отказал в изменении: {data["errors"]}')
-    return data
-
-
-def _delete(path):
-    try:
-        response = ms_http.delete(f'{BASE}{path}', headers=_headers())
-    except Exception as exc:
-        raise MoyskladError(f'МойСклад недоступен: {exc}') from exc
-    if response.status_code not in (200, 204):
-        raise MoyskladError(
-            f'МойСклад отказал в удалении ({response.status_code}): {response.text[:300]}'
-        )
-    return True
 
 
 def _mentions_posting(text, posting_number):
@@ -124,14 +81,6 @@ def _is_ozon_document(order):
     channel = ((order.get('salesChannel') or {}).get('name') or '').upper()
     agent = ((order.get('agent') or {}).get('name') or '').upper()
     return any('ОЗОН' in value or 'OZON' in value for value in (channel, agent))
-
-
-def _order_by_external_code(external_code):
-    """Наш заказ сайта: демон 06 кладёт номер заказа сайта в externalCode."""
-    rows = _get(
-        '/entity/customerorder', {'filter': f'externalCode={external_code}', 'limit': 1}
-    ).get('rows', [])
-    return rows[0] if rows else None
 
 
 def _summary(order):

@@ -238,7 +238,7 @@ SCRIPTS_CONFIG = [
         'name': 'Статусы отправлений Ozon',
         'account': 'HorseBio',
         'schedule': 'Каждые 5 мин',
-        'description': 'Статусы отправлений Ozon Доставки: отмены и невыкупы, по которым надо вернуть деньги (Django-команда sync_ozon_postings)',
+        'description': 'Статусы отправлений Ozon Доставки: отмены и невыкупы, по которым надо вернуть деньги; заодно пишет номер заказа и отправлений Ozon в комментарий заказа МойСклада (Django-команда sync_ozon_postings)',
         'script': '/app/manage.py',
         'args': ['sync_ozon_postings'],
     },

@@ -192,6 +192,20 @@ class OzonDeliveryQuote(models.Model):
     postings = models.JSONField('Номера отправлений', null=True, blank=True)
     error = models.TextField('Ошибка создания', blank=True)
     attempts = models.PositiveSmallIntegerField('Попыток создания', default=0)
+    # Что о доставке Ozon уже лежит в комментарии заказа МойСклада. Нужна, чтобы
+    # не ходить в МойСклад каждые пять минут ради текста, который не изменился:
+    # лимит запросов там общий на весь аккаунт.
+    ms_note = models.TextField('Записано в заказ МойСклада', blank=True)
+    # Когда вопрос с отгрузкой в МойСкладе закрылся: мы поставили «Отгружен» или
+    # увидели, что заказ уже отгружен человеком. После этого к нему не возвращаемся.
+    ms_shipped_at = models.DateTimeField('Отгрузка в МойСкладе закрыта', null=True, blank=True)
+    # Номер возврата от Озона по этому заказу: товар уехал со склада FBO, где он
+    # в МойСкладе уже списан, и мы забираем его обратно перед отгрузкой покупателю.
+    # Хранится ради идемпотентности — второй возврат вернул бы несуществующий товар.
+    ms_return = models.CharField('Возврат от Озона', max_length=64, blank=True)
+    # Когда последний раз смотрели статус заказа в МойСкладе. Заказ, который ждёт
+    # решения человека, иначе перечитывался бы каждые пять минут неделями.
+    ms_checked_at = models.DateTimeField('Заказ МойСклада проверен', null=True, blank=True)
 
     created_at = models.DateTimeField(auto_now_add=True)
     ordered_at = models.DateTimeField('Заказ создан', null=True, blank=True)

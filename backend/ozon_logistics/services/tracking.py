@@ -12,7 +12,7 @@ from django.db import transaction
 from django.utils import timezone
 
 from ozon_logistics.models import OzonDeliveryQuote, OzonPosting
-from ozon_logistics.services.client import OzonLogisticsClient
+from ozon_logistics.services.client import OzonLogisticsClient, OzonLogisticsError
 
 logger = logging.getLogger(__name__)
 
@@ -25,11 +25,26 @@ CHUNK_SIZE = 50
 # из наблюдения выходит: иначе он остаётся в фильтре навсегда и список растёт
 # сам по себе. Такой случай виден в уведомлениях, им занимается человек.
 TRACK_DAYS = 90
+# Запас по краям окна дат для FBO: заказ мог быть создан минутой раньше, чем
+# записан у нас, а доставка — закончиться позже, чем мы спросили.
+WINDOW_MARGIN = timezone.timedelta(days=1)
 
 
 def _chunks(values, size=CHUNK_SIZE):
     for start in range(0, len(values), size):
         yield values[start:start + size]
+
+
+def _window(quotes):
+    """Окно дат для списка FBO: без него метод отвечает «date since or date to
+    must not be empty», сколько бы номеров отправлений мы ни передали.
+
+    Начало считаем от самого старого заказа под наблюдением, а не от TRACK_DAYS:
+    застрявшая посылка остаётся в наблюдении и на сотый день, и окно должно
+    доставать до неё.
+    """
+    oldest = min(quote.created_at for quote in quotes)
+    return (oldest - WINDOW_MARGIN).isoformat(), (timezone.now() + WINDOW_MARGIN).isoformat()
 
 
 def _active_quotes():
@@ -140,7 +155,7 @@ def _collect(fetch, *, schema, quote_by_order, stats):
 def sync_postings(*, client=None):
     """Обновляет статусы отправлений по нашим заказам Ozon."""
     quotes = _active_quotes()
-    stats = {'quotes': len(quotes), 'seen': 0, 'need_attention': 0}
+    stats = {'quotes': len(quotes), 'seen': 0, 'need_attention': 0, 'errors': []}
     if not quotes:
         return stats
 
@@ -148,25 +163,42 @@ def sync_postings(*, client=None):
     quote_by_order = {q.order_number: q for q in quotes}
     order_numbers = list(quote_by_order)
     posting_numbers = [n for q in quotes for n in (q.postings or [])]
+    since, to = _window(quotes)
+
+    def gather(batches, fetch, schema):
+        """Схемы независимы: отказ в правах на одну не должен гасить другую.
+
+        До 17.09.2026 исключение из FBO обрывало весь прогон, и статусы не
+        обновлялись вообще — включая FBS, который в тот момент работал.
+        """
+        for batch in batches:
+            try:
+                _collect(
+                    lambda cursor, batch=batch: fetch(batch, cursor),
+                    schema=schema, quote_by_order=quote_by_order, stats=stats,
+                )
+            except OzonLogisticsError as exc:
+                stats['errors'].append(f'{schema}: {exc}')
+                logger.error('Ozon Доставка: не удалось получить отправления %s: %s', schema, exc)
 
     # FBS ищется по номерам заказов — это и есть наш ключ
-    for batch in _chunks(order_numbers):
-        _collect(
-            lambda cursor, batch=batch: client.posting_fbs_list(
-                order_numbers=batch, limit=PAGE_SIZE, cursor=cursor
-            ),
-            schema=OzonPosting.SCHEMA_FBS, quote_by_order=quote_by_order, stats=stats,
-        )
+    gather(
+        _chunks(order_numbers),
+        lambda batch, cursor: client.posting_fbs_list(
+            order_numbers=batch, limit=PAGE_SIZE, cursor=cursor
+        ),
+        OzonPosting.SCHEMA_FBS,
+    )
 
     # FBO фильтруется только по номерам отправлений, поэтому нужны те, что
     # Ozon вернул при создании заказа
-    for batch in _chunks(posting_numbers):
-        _collect(
-            lambda cursor, batch=batch: client.posting_fbo_list(
-                posting_numbers=batch, limit=PAGE_SIZE, cursor=cursor
-            ),
-            schema=OzonPosting.SCHEMA_FBO, quote_by_order=quote_by_order, stats=stats,
-        )
+    gather(
+        _chunks(posting_numbers),
+        lambda batch, cursor: client.posting_fbo_list(
+            posting_numbers=batch, since=since, to=to, limit=PAGE_SIZE, cursor=cursor
+        ),
+        OzonPosting.SCHEMA_FBO,
+    )
 
     logger.info(
         'Ozon Доставка: статусы обновлены — заказов %(quotes)s, отправлений %(seen)s, '
