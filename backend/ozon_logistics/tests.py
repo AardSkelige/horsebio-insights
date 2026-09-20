@@ -2596,24 +2596,27 @@ class OzonReturnsTests(TestCase):
         self.assertIn('Примите товар', found[0].action)
 
 
-def _demand_doc(article='11-08AP0300', name='d-1'):
-    """Отгрузка поставки: реквизиты возврата берутся из неё."""
-    def meta(entity, ident):
-        return {'meta': {
-            'href': f'https://api.moysklad.ru/api/remap/1.2/entity/{entity}/{ident}',
-            'type': entity, 'mediaType': 'application/json',
-        }}
+def _ms_meta(entity, ident):
+    return {'meta': {
+        'href': f'https://api.moysklad.ru/api/remap/1.2/entity/{entity}/{ident}',
+        'type': entity, 'mediaType': 'application/json',
+    }}
 
-    doc = {
-        'name': '06056',
-        **meta('demand', name),        # у документа есть и своя meta
-        'organization': meta('organization', 'org-farm'),
-        'agent': meta('counterparty', 'ozon'),
-        'contract': meta('contract', 'commission'),
-        'store': meta('store', 'finished-goods'),
-        'positions': {'rows': [{'assortment': {'article': article}}]},
+
+def _supply_requisites():
+    """Реквизиты поставки на Озон: возврат копирует их из неё."""
+    return {
+        'organization': _ms_meta('organization', 'org-farm'),
+        'agent': _ms_meta('counterparty', 'ozon'),
+        'contract': _ms_meta('contract', 'commission'),
+        'store': _ms_meta('store', 'finished-goods'),
     }
-    return doc
+
+
+def _evaluated(payload):
+    """Ответ мастера себестоимости: то же, но с cost у позиций."""
+    positions = [dict(p, cost=31656) for p in (payload or {}).get('positions', [])]
+    return dict(payload or {}, positions=positions)
 
 
 class PostingWindowTests(TestCase):
@@ -2910,10 +2913,7 @@ class ShippedStateTests(TestCase):
                 'meta': {'href': 'https://api.moysklad.ru/api/remap/1.2/entity/product/p-1'},
             },
         }]},
-        'demands': [{'meta': {
-            'href': 'https://api.moysklad.ru/api/remap/1.2/entity/demand/d-1',
-            'type': 'demand',
-        }}],
+        **_supply_requisites(),
     }
 
     def _moysklad(self, order=None, *, supplies=None):
@@ -2930,8 +2930,6 @@ class ShippedStateTests(TestCase):
                 return self._data
 
         def fake_get(url, headers=None, params=None):
-            if '/entity/demand/' in url:
-                return Response(_demand_doc())
             text = str(params)
             if 'states/' in text:                     # поиск поставок на FBO
                 offset = dict(params).get('offset') if isinstance(params, dict) else \
@@ -2941,6 +2939,8 @@ class ShippedStateTests(TestCase):
             return Response({'rows': [found] if found else []})
 
         def fake_post(url, headers=None, json=None):
+            if 'wizard' in url:
+                return Response(_evaluated(json))
             created.append((url, json))
             return Response({'id': 'sr-1', 'name': '09999'})
 
@@ -2983,7 +2983,7 @@ class ShippedStateTests(TestCase):
         self.assertTrue(payload['applicable'])
         self.assertEqual(payload['positions'][0]['quantity'], 1)
         self.assertEqual(payload['positions'][0]['price'], 277000)   # цена поставки
-        self.assertIn('/entity/demand/d-1', payload['demand']['meta']['href'])
+        self.assertEqual(payload['positions'][0]['cost'], 31656)   # себестоимость от МойСклада
         self.assertIn('57279866-0143-1', payload['description'])
         self.assertIn('05878', payload['description'])
         self.quote.refresh_from_db()
@@ -2997,9 +2997,10 @@ class ShippedStateTests(TestCase):
 
         fake_get, fake_post, fake_put, written, created = self._moysklad()
 
-        def watched_post(*a, **kw):
-            order_of_calls.append('возврат')
-            return fake_post(*a, **kw)
+        def watched_post(url, **kw):
+            if 'wizard' not in url:     # расчёт себестоимости — не документ
+                order_of_calls.append('возврат')
+            return fake_post(url, **kw)
 
         def watched_put(*a, **kw):
             if 'state' in (kw.get('json') or {}):
@@ -3175,7 +3176,7 @@ class ReturnSafetyTests(TestCase):
             'demands': [],
         }
 
-    def _supply(self, demands):
+    def _supply(self, **extra):
         return {
             'name': '05878',
             'positions': {'rows': [{
@@ -3185,20 +3186,13 @@ class ReturnSafetyTests(TestCase):
                     'meta': {'href': 'https://api.moysklad.ru/api/remap/1.2/entity/product/p-1'},
                 },
             }]},
-            'demands': demands,
+            **dict(_supply_requisites(), **extra),
         }
 
-    def _demand(self, name):
-        return {'meta': {
-            'href': f'https://api.moysklad.ru/api/remap/1.2/entity/demand/{name}',
-            'type': 'demand',
-        }}
-
-    def _fakes(self, *, supply=None, demand_contents=None, put_fails=False):
-        """МойСклад: заказ сайта, поставки, содержимое отгрузок и запись."""
+    def _fakes(self, *, supply=None, put_fails=False):
+        """МойСклад: заказ сайта, поставки на Озон, мастер себестоимости и запись."""
         created, written = [], []
-        supply = self._supply([self._demand('d-1')]) if supply is None else supply
-        demand_contents = demand_contents or {}
+        supply = self._supply() if supply is None else supply
 
         class Response:
             def __init__(self, data):
@@ -3208,10 +3202,6 @@ class ReturnSafetyTests(TestCase):
                 return self._data
 
         def fake_get(url, headers=None, params=None):
-            if '/entity/demand/' in url:
-                name = url.rsplit('/', 1)[-1]
-                article = demand_contents.get(name, '11-08AP0300')
-                return Response(_demand_doc(article, name))
             text = str(params)
             if 'states/' in text:
                 offset = next((v for k, v in params if k == 'offset'), 0)
@@ -3219,6 +3209,8 @@ class ReturnSafetyTests(TestCase):
             return Response({'rows': [self.order]})
 
         def fake_post(url, headers=None, json=None):
+            if 'wizard' in url:
+                return Response(_evaluated(json))
             created.append(json)
             return Response({'id': 'sr-1', 'name': '09999'})
 
@@ -3255,29 +3247,22 @@ class ReturnSafetyTests(TestCase):
         self.quote.refresh_from_db()
         self.assertEqual(self.quote.ms_return, '')
 
-    def test_basis_is_the_shipment_that_carried_the_goods(self):
-        """Поставку могли везти в два приёма — основанием должна быть нужная отгрузка."""
-        supply = self._supply([self._demand('d-1'), self._demand('d-2')])
-        stats, created, _ = self._run(
-            supply=supply,
-            demand_contents={'d-1': '11-08AP0300', 'd-2': 'другой-товар'},
-        )
+    def test_cost_is_asked_from_moysklad(self):
+        """Без себестоимости товар вернулся бы на склад бесплатным и увёл FIFO."""
+        stats, created, _ = self._run()
 
-        self.assertEqual(len(created), 1)
-        self.assertTrue(created[0]['demand']['meta']['href'].endswith('/d-1'))
+        self.assertEqual(created[0]['positions'][0]['cost'], 31656)
 
-    def test_no_suitable_shipment_stops_the_return(self):
-        supply = self._supply([self._demand('d-1'), self._demand('d-2')])
-        stats, created, written = self._run(
-            supply=supply, demand_contents={'d-1': 'чужое', 'd-2': 'тоже чужое'},
-        )
+    def test_return_carries_no_basis(self):
+        """Какая именно единица уехала, знает только Озон — поставку не указываем."""
+        stats, created, _ = self._run()
 
-        self.assertEqual(created, [])
-        self.assertEqual(stats['by_hand'], 1)
-        self.assertNotIn('state', written[0])
+        self.assertNotIn('demand', created[0])
 
-    def test_shipment_without_a_link_is_refused(self):
-        stats, created, _ = self._run(supply=self._supply([{'meta': {}}]))
+    def test_supply_without_requisites_is_refused(self):
+        supply = self._supply()
+        supply.pop('store')
+        stats, created, _ = self._run(supply=supply)
 
         self.assertEqual(created, [])
         self.assertEqual(stats['by_hand'], 1)
@@ -3361,8 +3346,8 @@ class ReturnSafetyTests(TestCase):
         for query in supply_queries:
             self.assertIn(ms_returns.AGENT_ID, query)
 
-    def test_requisites_are_taken_from_the_basis_shipment(self):
-        """Свои константы разойдутся с жизнью — реквизиты берём из отгрузки."""
+    def test_requisites_are_taken_from_the_supply(self):
+        """Свои константы разойдутся с жизнью — реквизиты берём из поставки."""
         stats, created, _ = self._run()
 
         payload = created[0]

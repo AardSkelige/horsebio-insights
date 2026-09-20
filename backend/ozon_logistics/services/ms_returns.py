@@ -11,9 +11,13 @@
 (см. ms_orders). Без возврата отгрузка списала бы ту же единицу второй раз —
 так уже вышло с заказом сайта №2095, разобранным руками 16.09.2026.
 
-Возврат делаем **с основанием** — ссылкой на отгрузку той поставки, откуда
-товар уехал. Тогда МойСклад сам возьмёт себестоимость нужной партии; возврат
-без основания встал бы с нулевой себестоимостью и увёл бы FIFO.
+Возврат делаем **без основания**, то есть без ссылки на конкретную поставку.
+Так решено 19.09.2026, после двух отказов МойСклада на живом документе: какая
+именно единица уехала покупателю, знает только Озон — на его складе лежат наши
+поставки вперемешку, и «наверное, из последней» раз за разом попадало то в
+возвращённую поставку, то в отменённую. Себестоимость при этом не теряется:
+её считает мастер МойСклада (`/wizard/salesreturn?action=evaluate_cost`) по
+тому же FIFO. Поставку, из которой взята цена, пишем в комментарий — человеку.
 """
 
 import logging
@@ -125,7 +129,7 @@ def _supply_orders():
             ('limit', SUPPLY_PAGE_SIZE),
             ('offset', page * SUPPLY_PAGE_SIZE),
             ('order', 'moment,desc'),
-            ('expand', 'positions.assortment,demands'),
+            ('expand', 'positions.assortment,organization,agent,contract,store'),
             ('filter',
              f'state={ms_client.BASE}/entity/customerorder/metadata/states/{FBO_STATE_ID}'
              f';agent={ms_client.BASE}/entity/counterparty/{AGENT_ID}'),
@@ -155,21 +159,15 @@ class SupplyCache:
 
 
 def find_supply_position(article, supplies=None):
-    """Последняя поставка на FBO с этим товаром.
+    """Последняя поставка на Озон с этим товаром.
 
-    Возвращает цену, НДС, товар и отгрузку-основание — всё, что нужно, чтобы
-    возврат встал в ту же цену и ту же партию, что и поставка.
+    Отсюда берём цену, НДС и реквизиты: по какой цене товар уходил на склад
+    Озона, по такой же и возвращаем.
     """
     for order in (supplies if supplies is not None else SupplyCache()):
         for position in (order.get('positions') or {}).get('rows', []):
             assortment = position.get('assortment') or {}
             if (assortment.get('article') or '').strip() != article:
-                continue
-            demands = [d for d in (order.get('demands') or []) if isinstance(d, dict)]
-            basis = _basis_demand(demands, article)
-            if basis is None:
-                # Поставку ещё не отвезли (или товар уехал не этой отгрузкой) —
-                # возвращать пока не из чего, смотрим поставки дальше
                 continue
             return {
                 'order_name': order.get('name'),
@@ -177,36 +175,42 @@ def find_supply_position(article, supplies=None):
                 'price': position.get('price') or 0,
                 'vat': position.get('vat') or 0,
                 'vat_enabled': bool(position.get('vatEnabled')),
-                'demand': basis,
+                'supply': order,
             }
     return None
 
 
-def build_payload(products, *, site_order_id, order_number, posting_numbers):
-    """Собирает возврат: позиции, основание и комментарий.
+def _with_costs(payload):
+    """Себестоимость позиций считает мастер МойСклада — по тому же FIFO.
 
-    Основание у всех позиций должно быть одно — МойСклад связывает возврат
-    с одной отгрузкой. Если товары приехали разными поставками, возврат
-    придётся делать человеку: молча свалить их в одну мы не имеем права.
+    Возврат без основания без неё встал бы с нулевой себестоимостью, и FIFO
+    поехало бы: товар вернулся бы на склад бесплатным.
     """
+    evaluated = ms_client.post('/wizard/salesreturn?action=evaluate_cost', payload)
+    costs = [position.get('cost') for position in (evaluated.get('positions') or [])]
+    if len(costs) != len(payload['positions']):
+        raise ReturnNotPossible('МойСклад не посчитал себестоимость возврата')
+    for position, cost in zip(payload['positions'], costs):
+        if cost is None:
+            raise ReturnNotPossible('МойСклад не посчитал себестоимость позиции')
+        position['cost'] = cost
+    return payload
+
+
+def build_payload(products, *, site_order_id, order_number, posting_numbers):
+    """Собирает возврат: позиции, реквизиты поставки и комментарий."""
     if not products:
         raise ReturnNotPossible('в отправлениях нет ни одной позиции с FBO')
 
-    positions, sources, bases = [], [], {}
+    positions, sources, supply = [], [], None
     supplies = SupplyCache()
     for article, quantity in sorted(products.items()):
         found = find_supply_position(article, supplies)
         if found is None:
             raise ReturnNotPossible(
-                f'не нашли поставку на FBO с товаром {article} — возвращать не из чего'
+                f'не нашли поставку на Озон с товаром {article} — не с чего взять цену'
             )
-        demand_href = ((found['demand'].get('meta') or {}).get('href') or '')
-        if not demand_href:
-            raise ReturnNotPossible(
-                f'у поставки {found["order_name"]} нет ссылки на отгрузку — '
-                'не к чему привязать возврат'
-            )
-        bases[demand_href] = found['demand']
+        supply = supply or found['supply']
         positions.append({
             'assortment': {'meta': (found['assortment'].get('meta') or {})},
             'quantity': quantity,
@@ -214,13 +218,7 @@ def build_payload(products, *, site_order_id, order_number, posting_numbers):
             'vat': found['vat'],
             'vatEnabled': found['vat_enabled'],
         })
-        sources.append(f"{article} × {quantity:g} — из поставки {found['order_name']}")
-
-    if len(bases) > 1:
-        raise ReturnNotPossible(
-            'товары уехали разными поставками, одним возвратом их не оформить'
-        )
-    demand_href, basis = next(iter(bases.items()))
+        sources.append(f"{article} × {quantity:g} — цена из поставки {found['order_name']}")
 
     description = '\n'.join([
         'Авто: товар уехал покупателю сайта через Ozon Доставку со склада FBO.',
@@ -231,27 +229,23 @@ def build_payload(products, *, site_order_id, order_number, posting_numbers):
         *sources,
     ])
 
-    # Организацию, контрагента, договор и склад берём из отгрузки-основания:
-    # МойСклад требует, чтобы они совпадали, а свои константы рано или поздно
-    # разойдутся с жизнью — так и вышло на первой же попытке.
+    # Организацию, контрагента, договор и склад берём из самой поставки: свои
+    # константы рано или поздно разойдутся с жизнью — так и вышло на первой же
+    # попытке, когда под статус «FBO» попала поставка на Яндекс Маркет.
     payload = {
         'applicable': True,
         'description': description,
         'positions': positions,
-        'demand': {'meta': {
-            'href': demand_href, 'type': 'demand', 'mediaType': 'application/json',
-        }},
     }
     for field in ('organization', 'agent', 'contract', 'store'):
-        source = basis.get(field) or {}
-        meta = source.get('meta')
+        meta = (supply.get(field) or {}).get('meta')
         if meta:
             payload[field] = {'meta': meta}
-        elif field != 'contract':   # договор в отгрузке может и не стоять
+        elif field != 'contract':   # договор в заказе может и не стоять
             raise ReturnNotPossible(
-                f'в отгрузке-основании нет поля «{field}» — возврат не собрать'
+                f'в поставке {supply.get("name")} нет поля «{field}» — возврат не собрать'
             )
-    return payload
+    return _with_costs(payload)
 
 
 def payload_for(quote, postings):
