@@ -383,7 +383,7 @@ class ParserTask(BaseTask):
         """Инкрементальная синхронизация материалов"""
         structured_logger.section_start("Синхронизация материалов", "Инкрементальное обновление материалов из МойСклад")
         try:
-            last_sync_time = cache.get('last_materials_sync_time')
+            last_sync_time = await cache.aget('last_materials_sync_time')
 
             if not last_sync_time:
                 last_sync_time = timezone.now() - timedelta(days=7)
@@ -450,7 +450,7 @@ class ParserTask(BaseTask):
 
                 await asyncio.sleep(0.1)
 
-            cache.set('last_materials_sync_time', timezone.now(), timeout=None)
+            await cache.aset('last_materials_sync_time', timezone.now(), timeout=None)
 
             self.update_progress(
                 message=f"Синхронизация материалов завершена. Обновлено: {updated_count}/{total_materials}",
@@ -595,7 +595,7 @@ class ParserTask(BaseTask):
             )
 
             if not self.should_stop():
-                self._finish()
+                await self._finish()
 
         except Exception as e:
             structured_logger.error(f"Критическая ошибка при выполнении задачи: {str(e)}")
@@ -606,7 +606,7 @@ class ParserTask(BaseTask):
                 error=str(e)
             )
 
-    def _finish(self):
+    async def _finish(self):
         """Итог прогона: удача, «частично» или ошибка.
 
         Отметку свежести (`last_successful_update`) ставим только после
@@ -655,9 +655,9 @@ class ParserTask(BaseTask):
         )
         update_time = timezone.now()
 
-        cache.set('last_successful_update', update_time, timeout=None)
+        await cache.aset('last_successful_update', update_time, timeout=None)
 
         if getattr(self, 'is_auto_sync', False):
-            cache.set('last_auto_sync_update', update_time, timeout=None)
+            await cache.aset('last_auto_sync_update', update_time, timeout=None)
         else:
-            cache.set('last_manual_update', update_time, timeout=None)
+            await cache.aset('last_manual_update', update_time, timeout=None)
