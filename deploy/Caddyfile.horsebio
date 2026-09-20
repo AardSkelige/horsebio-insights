@@ -12,7 +12,9 @@
 # Их изменение требует пересоздания контейнера, reload не подхватит ни то, ни другое.
 #
 # Тома: /srv/horsebio — собранный фронтенд (наполняет деплой фронта),
-# /srv/horsebio-django — статика админки (её кладёт collectstatic бэкенда).
+# /srv/horsebio-django — статика админки (её кладёт collectstatic бэкенда),
+# /srv/horsebio-zakaz — бланк заказа для контрагентов: обычный каталог
+# на хосте, файл туда кладётся через scp (см. «Бланк заказа/deploy/»).
 
 {
 	email mystmuse@gmail.com
@@ -45,6 +47,26 @@ insight.horse-bio.ru {
 	# Приставка /static/ свободна — собранные файлы фронта лежат в /assets/.
 	handle_path /static/* {
 		root * /srv/horsebio-django
+		file_server
+	}
+
+	# Бланк заказа для контрагентов: статическая страница под паролем.
+	# Ставить ВЫШЕ общего `handle` с одностраничным приложением, иначе
+	# try_files отдаст index.html фронтенда и до файла дело не дойдёт.
+	handle_path /zakaz* {
+		basic_auth {
+			# bcrypt-хеш; сам пароль — в «Бланк заказа/deploy/README.md»
+			partner <хеш из caddy hash-password>
+		}
+
+		# Страница не для поиска: её находят только по присланной ссылке.
+		header X-Robots-Tag "noindex, nofollow"
+
+		# Файл один и меняется при обновлении цен — кэшировать нечего.
+		header Cache-Control "no-store"
+
+		root * /srv/horsebio-zakaz
+		try_files {path} /index.html
 		file_server
 	}
 
