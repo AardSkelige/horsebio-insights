@@ -28,6 +28,11 @@ from ozon_logistics.services.ms_client import MoyskladError
 
 logger = logging.getLogger(__name__)
 
+# Статус возврата «Ушёл покупателю с FBO»: заведён 20.09.2026 специально под эти
+# документы. Без него возврат выглядит как обычный — будто товар едет к нам на
+# склад, — а он чисто учётный: товар уехал покупателю и на полки не ляжет.
+STATE_ID = 'f350e80d-b4bb-11f1-0a80-05af0090c6ac'
+
 # Контрагент «Озон»: им помечены поставки на склады Ozon и продажи маркетплейса.
 AGENT_ID = '0bae2cd0-e446-11ee-0a80-0bdd011e453d'
 
@@ -56,24 +61,6 @@ def _meta(entity, entity_id):
     }}
 
 
-def _load_demand(href):
-    """Отгрузка целиком: и состав, и реквизиты.
-
-    Реквизиты возврата берём из неё, а не из своих констант: МойСклад требует,
-    чтобы у возврата с основанием совпадали организация, контрагент и договор,
-    а поставки на разные юрлица идут с разными.
-    """
-    clean = href.split('?')[0]
-    document = ms_client.get(
-        f"/entity/demand/{clean.rsplit('/', 1)[-1]}",
-        {'expand': 'positions.assortment,agent,organization,contract,store'},
-    )
-    # В ответе МойСклад повторяет ссылку запроса — вместе с ?expand=…, и она
-    # уезжает в документ как есть. Возвращаем ссылку без параметров.
-    document.setdefault('meta', {})['href'] = clean
-    return document
-
-
 def fbo_products(postings):
     """Что именно уехало со склада Ozon: артикул → количество.
 
@@ -92,34 +79,6 @@ def fbo_products(postings):
             if article and quantity > 0:
                 totals[article] = totals.get(article, 0) + quantity
     return totals
-
-
-def _demand_has(full, article):
-    """Есть ли товар в этой отгрузке поставки.
-
-    Поставку могут везти в несколько приёмов, и отгрузок у заказа тогда
-    несколько. Основанием должна быть та, где товар действительно уехал:
-    чужая отдаст себестоимость не той партии.
-    """
-    for position in (full.get('positions') or {}).get('rows', []):
-        if ((position.get('assortment') or {}).get('article') or '').strip() == article:
-            return True
-    return False
-
-
-def _basis_demand(demands, article):
-    """Отгрузка-основание: единственная либо та, в которой есть этот товар."""
-    hrefs = [((d.get('meta') or {}).get('href') or '') for d in demands]
-    hrefs = [href for href in hrefs if href]
-    if not hrefs:
-        return None
-    if len(hrefs) == 1:
-        return _load_demand(hrefs[0])
-    for href in reversed(hrefs):
-        full = _load_demand(href)
-        if _demand_has(full, article):
-            return full
-    return None
 
 
 def _supply_orders():
@@ -236,6 +195,11 @@ def build_payload(products, *, site_order_id, order_number, posting_numbers):
         'applicable': True,
         'description': description,
         'positions': positions,
+        'state': {'meta': {
+            'href': f'{ms_client.BASE}/entity/salesreturn/metadata/states/{STATE_ID}',
+            'type': 'state',
+            'mediaType': 'application/json',
+        }},
     }
     for field in ('organization', 'agent', 'contract', 'store'):
         meta = (supply.get(field) or {}).get('meta')

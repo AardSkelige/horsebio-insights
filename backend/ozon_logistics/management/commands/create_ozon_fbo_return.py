@@ -54,11 +54,14 @@ class Command(BaseCommand):
             if not apply:
                 # Показываем документ целиком: на боевых данных лучше сперва посмотреть
                 self.stdout.write('\nСоздал бы возврат покупателя:')
-                self.stdout.write(f"  основание: отгрузка {payload['demand']['meta']['href'].rsplit('/', 1)[-1]}")
+                for field in ('organization', 'agent', 'contract', 'store'):
+                    meta = (payload.get(field) or {}).get('meta') or {}
+                    self.stdout.write(f"  {field}: {meta.get('href', '—').rsplit('/', 1)[-1]}")
                 for position in payload['positions']:
                     self.stdout.write(
                         f"  позиция: {position['quantity']:g} шт по "
-                        f"{position['price'] / 100:.2f} ₽, НДС {position['vat']}"
+                        f"{position['price'] / 100:.2f} ₽, НДС {position['vat']}, "
+                        f"себестоимость {position.get('cost', 0) / 100:.2f} ₽"
                     )
                 self.stdout.write('  комментарий:')
                 for line in payload['description'].split('\n'):

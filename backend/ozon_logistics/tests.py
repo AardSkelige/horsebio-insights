@@ -3253,6 +3253,14 @@ class ReturnSafetyTests(TestCase):
 
         self.assertEqual(created[0]['positions'][0]['cost'], 31656)
 
+    def test_return_carries_its_own_state(self):
+        """Без статуса возврат выглядит как обычный — будто товар едет к нам."""
+        stats, created, _ = self._run()
+
+        href = created[0]['state']['meta']['href']
+        self.assertTrue(href.endswith(ms_returns.STATE_ID))
+        self.assertIn('/entity/salesreturn/metadata/states/', href)
+
     def test_return_carries_no_basis(self):
         """Какая именно единица уехала, знает только Озон — поставку не указываем."""
         stats, created, _ = self._run()
@@ -3355,3 +3363,90 @@ class ReturnSafetyTests(TestCase):
         self.assertTrue(payload['organization']['meta']['href'].endswith('/org-farm'))
         self.assertTrue(payload['contract']['meta']['href'].endswith('/commission'))
         self.assertTrue(payload['store']['meta']['href'].endswith('/finished-goods'))
+
+
+class FboReturnCommandTests(TestCase):
+    """Разовая команда для заказов, отгруженных руками до появления робота."""
+
+    def setUp(self):
+        self.quote = OzonDeliveryQuote.objects.create(
+            phone='79166229030', items=[], checkout_response=_checkout_response(),
+            status=OzonDeliveryQuote.STATUS_ORDERED,
+            order_number='57279866-0143', postings=['57279866-0143-1'],
+            site_order_id='28735318', ms_shipped_at=timezone.now(),
+        )
+        OzonPosting.objects.create(
+            posting_number='57279866-0143-1', order_number='57279866-0143',
+            quote=self.quote, schema=OzonPosting.SCHEMA_FBO, status='delivered',
+            details={'products': [{'offer_id': '11-08AP0300', 'quantity': 1}]},
+        )
+        self.supply = {
+            'name': '05878',
+            'positions': {'rows': [{
+                'quantity': 11.0, 'price': 277000, 'vat': 5, 'vatEnabled': True,
+                'assortment': {
+                    'article': '11-08AP0300',
+                    'meta': {'href': 'https://api.moysklad.ru/api/remap/1.2/entity/product/p-1'},
+                },
+            }]},
+            **_supply_requisites(),
+        }
+        self.order = {'id': 'ms-order-id', 'name': '09065', 'externalCode': '28735318',
+                      'description': 'Статус оплаты: Оплачен'}
+
+    def _patched(self, created):
+        class Response:
+            def __init__(self, data):
+                self._data = data
+
+            def json(self):
+                return self._data
+
+        def fake_get(url, headers=None, params=None):
+            rows = [self.supply] if 'states/' in str(params) else [self.order]
+            return Response({'rows': rows})
+
+        def fake_post(url, headers=None, json=None):
+            if 'wizard' in url:
+                return Response(_evaluated(json))
+            created.append(json)
+            return Response({'id': 'sr-1', 'name': '08176'})
+
+        def fake_put(url, headers=None, json=None):
+            return Response(dict(self.order, **(json or {})))
+
+        return fake_get, fake_post, fake_put
+
+    def _run(self, *args):
+        created = []
+        fake_get, fake_post, fake_put = self._patched(created)
+        out = StringIO()
+        with patch('msapi.http.get', side_effect=fake_get), \
+             patch('msapi.http.post', side_effect=fake_post), \
+             patch('msapi.http.put', side_effect=fake_put):
+            call_command('create_ozon_fbo_return', '28735318', *args, stdout=out)
+        return out.getvalue(), created
+
+    def test_dry_run_shows_the_document_and_creates_nothing(self):
+        """Печать холостого прогона — тоже код: на ней уже один раз упали."""
+        output, created = self._run()
+
+        self.assertEqual(created, [])
+        self.assertIn('Создал бы возврат покупателя', output)
+        self.assertIn('себестоимость 316.56', output)
+        self.assertIn('11-08AP0300 × 1', output)
+
+    def test_apply_creates_the_return_and_marks_the_quote(self):
+        output, created = self._run('--apply')
+
+        self.assertEqual(len(created), 1)
+        self.assertIn('Создан возврат от Озона 08176', output)
+        self.quote.refresh_from_db()
+        self.assertEqual(self.quote.ms_return, '08176')
+
+    def test_second_apply_does_nothing(self):
+        self._run('--apply')
+        output, created = self._run('--apply')
+
+        self.assertEqual(created, [])
+        self.assertIn('уже создан', output)
