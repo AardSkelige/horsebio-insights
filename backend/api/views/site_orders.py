@@ -8,6 +8,7 @@ from rest_framework.decorators import api_view
 from rest_framework.response import Response
 
 from ozon_logistics.models import OzonDeliveryQuote, OzonPosting
+from ozon_logistics.services.ms_orders import cabinet_url
 
 from .scripts_monitor import scripts_auth
 
@@ -200,6 +201,10 @@ def _ozon_block(quote, postings):
         'error': (quote.error or '')[:300] or None,
         'posting_number': shown.posting_number if shown else None,
         'posting_status': shown.status if shown else None,
+        # Ссылка в кабинет продавца — на то же отправление, что показано в чипе.
+        # Адрес у FBS и FBO разный, поэтому берём общий хелпер (ms_orders.py),
+        # которым робот пишет ссылку в комментарий заказа МойСклада.
+        'cabinet_link': cabinet_url(shown.posting_number, shown.schema) if shown else None,
         'needs_attention': alarming is not None,
         # Отменять есть смысл, пока хоть одно отправление ещё в пути
         'cancellable': (

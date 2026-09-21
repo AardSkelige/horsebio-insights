@@ -63,6 +63,7 @@ describe('SiteOrdersTable — доставка Ozon', () => {
         order_number: '34742020-0375', posting_number: '34742020-0375-1',
         posting_status: 'awaiting_packaging', delivery_cost: 97,
         needs_attention: false, cancellable: true,
+        cabinet_link: 'https://seller.ozon.ru/app/postings/fbs?postingDetails=34742020-0375-1',
     };
 
     // У обычных заказов доставки Ozon нет — колонка должна молчать, а не
@@ -122,6 +123,29 @@ describe('SiteOrdersTable — доставка Ozon', () => {
         });
 
         expect(screen.getByText('Ozon: Заказ создан в Ozon')).toBeInTheDocument();
+    });
+
+    // Номер отправления в чипе есть, а открыть его в кабинете было нечем —
+    // сотрудник копировал номер и искал вручную.
+    it('ведёт на отправление в кабинете продавца', () => {
+        renderTable({ ozon: OZON });
+
+        expect(screen.getByText('Открыть отправление в кабинете Ozon').previousSibling)
+            .toHaveAttribute('href', OZON.cabinet_link);
+    });
+
+    it('без ссылки на кабинет иконки нет', () => {
+        renderTable({ ozon: { ...OZON, cabinet_link: null } });
+
+        expect(screen.queryByText('Открыть отправление в кабинете Ozon')).not.toBeInTheDocument();
+    });
+
+    // Подпись чипа обрезается многоточием, когда колонка узкая, — полный
+    // статус должен оставаться доступен в подсказке.
+    it('полный статус отправления есть в подсказке', () => {
+        renderTable({ ozon: OZON });
+
+        expect(screen.getByText('Ожидает сборки')).toBeInTheDocument();
     });
 
     it('невыкуп подсвечивается как проблема', () => {

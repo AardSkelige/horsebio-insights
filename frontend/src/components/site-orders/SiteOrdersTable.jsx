@@ -59,10 +59,11 @@ function OzonChip({ ozon }) {
     return (
         <div className="status-wrap" tabIndex={0}>
             <span className={`chip ${tone}`}>
-                <Truck size={11} style={{ marginRight: 4 }} />
-                Ozon: {label}
+                <Truck size={11} style={{ marginRight: 4, flexShrink: 0 }} />
+                <span className="chip-label">Ozon: {label}</span>
             </span>
             <div className="tip">
+                <div className="step-line"><span className="m">Статус</span><span>{label}</span></div>
                 {ozon.order_number && (
                     <div className="step-line"><span className="m">Заказ</span><span>{ozon.order_number}</span></div>
                 )}
@@ -121,7 +122,7 @@ function StatusChip({ row }) {
     const cls = STATUS_CLASS[row.status] || 'processing';
     return (
         <div className="status-wrap" tabIndex={0}>
-            <span className={`chip ${cls}`}><span className="cdot" />{row.status_label}</span>
+            <span className={`chip ${cls}`}><span className="cdot" /><span className="chip-label">{row.status_label}</span></span>
             {row.timeline?.length > 0 && (
                 <div className="tip">
                     {row.timeline.map((ev, i) => (
@@ -169,6 +170,18 @@ function RowActions({ row, onDeleted, canDelete }) {
                 </a>
                 <span className="tip act-tip">{row.ms_link ? 'Открыть в МойСклад' : 'Черновик ещё не создан'}</span>
             </span>
+            {row.ozon?.cabinet_link && (
+                <span className="act-wrap" tabIndex={0}>
+                    <a
+                        className="icon-btn"
+                        href={row.ozon.cabinet_link}
+                        target="_blank" rel="noopener noreferrer"
+                    >
+                        <Truck size={15} />
+                    </a>
+                    <span className="tip act-tip">Открыть отправление в кабинете Ozon</span>
+                </span>
+            )}
             <CancelOzonButton row={row} onDone={onDeleted} />
             {canDelete && (
                 <span className="act-wrap" tabIndex={0}>
@@ -247,14 +260,20 @@ export default function SiteOrdersTable({ rows, loading, sort, onSortChange, onD
     return (
         <div style={{ border: '1px solid var(--hairline)', borderRadius: 10 }}>
             <table className="site-orders-table">
+                {/* Столбец действий — в пикселях, а не в процентах: иконок в нём до пяти
+                    штук фиксированного размера, и на узком экране доля от ширины таблицы
+                    оказывалась меньше их суммы — иконки вылезали за правую границу.
+                    Ширину держит .actions-col в CSS — двумя значениями: обычным
+                    и увеличенным для тач-экранов, где иконки крупнее.
+                    Покупатель — auto, забирает остаток. */}
                 <colgroup>
+                    <col />
+                    <col style={{ width: '7%' }} />
+                    <col style={{ width: '9%' }} />
+                    <col style={{ width: '10%' }} />
+                    <col style={{ width: '17%' }} />
                     <col style={{ width: '22%' }} />
-                    <col style={{ width: '8%' }} />
-                    <col style={{ width: '12%' }} />
-                    <col style={{ width: '10%' }} />
-                    <col style={{ width: '20%' }} />
-                    <col style={{ width: '18%' }} />
-                    <col style={{ width: '10%' }} />
+                    <col className="actions-col" />
                 </colgroup>
                 <thead>
                     <tr>

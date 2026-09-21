@@ -85,9 +85,16 @@
 /* Классы иконок-действий раскоуплены из-под .site-orders-table: мобильные
    карточки (OrderCard) рендерятся вне таблицы, а раньше стили висели на
    .site-orders-table и до карточек не доезжали — иконки на телефоне ломались. */
-.actions-cell { display: inline-flex; align-items: center; gap: var(--space-1); white-space: nowrap; }
+.actions-cell { display: inline-flex; align-items: center; gap: 2px; white-space: nowrap; }
 /* В десктопной таблице последний столбец прижимаем вправо */
 .site-orders-table tbody td:last-child { text-align: right; }
+
+/* Ширина столбца действий считается от содержимого, а не от ширины таблицы:
+   до пяти иконок по 30px с зазором 2px плюс горизонтальные поля ячейки (2×14px).
+   Процентная доля на узком экране оказывалась меньше этой суммы, и иконки
+   вылезали за правую границу таблицы (table-layout: fixed не переносит и не
+   обрезает — просто выпускает содержимое наружу). */
+.site-orders-table col.actions-col { width: 186px; }
 
 .icon-btn {
     display: inline-flex;
@@ -113,7 +120,11 @@
 .icon-btn:disabled { opacity: .5; cursor: default; }
 
 /* Статус-чип с тултипом */
-.status-wrap { position: relative; display: inline-block; }
+/* max-width держит чип внутри своей ячейки: колонки заданы долями, а подпись
+   статуса — нет, и на узкой таблице «Ozon: Ожидает отгрузки» наползал на
+   соседние иконки. Теперь подпись обрезается многоточием, полный текст —
+   в подсказке. */
+.status-wrap { position: relative; display: inline-block; max-width: 100%; }
 .status-wrap:focus-within .tip, .status-wrap:hover .tip { opacity: 1; visibility: visible; }
 
 .chip {
@@ -126,7 +137,9 @@
     font-weight: 500;
     white-space: nowrap;
     cursor: default;
+    max-width: 100%;
 }
+.chip .chip-label { overflow: hidden; text-overflow: ellipsis; min-width: 0; }
 .chip .cdot { width: 6px; height: 6px; border-radius: 50%; flex-shrink: 0; }
 .chip.warn { background: var(--warning-bg, color-mix(in srgb, var(--warning) 12%, transparent)); color: var(--warning); }
 .chip.warn .cdot { background: var(--warning); }
@@ -162,9 +175,24 @@
     visibility: hidden;
     transition: opacity 140ms ease, transform 140ms ease;
     transform: translateY(3px);
-    pointer-events: none;
+    /* Курсор можно завести внутрь и выделить номер заказа. Скрытый тултип
+       мышь не ловит и так — visibility: hidden исключает его из hit-testing. */
+    pointer-events: auto;
+    user-select: text;
+    cursor: text;
     z-index: 40;
     box-shadow: var(--shadow-menu);
+}
+/* Мостик через зазор между чипом и тултипом (bottom: 100% + 10px). Без него
+   курсор по дороге вверх выходит из .status-wrap, hover слетает и тултип
+   исчезает раньше, чем до него доедешь. */
+.tip::after {
+    content: "";
+    position: absolute;
+    top: 100%;
+    left: 0;
+    right: 0;
+    height: 10px;
 }
 .status-wrap:hover .tip, .status-wrap:focus-within .tip { transform: translateY(0); }
 .tip::before {
@@ -192,7 +220,7 @@
    Правила идут ПОСЛЕ .tip, чтобы перебить его left: 0. */
 .act-wrap { position: relative; display: inline-flex; }
 .act-wrap:hover .tip, .act-wrap:focus-within .tip { opacity: 1; visibility: visible; transform: translateY(0); }
-.act-tip { left: auto; right: 0; max-width: 240px; }
+.act-tip { left: auto; right: 0; max-width: 240px; pointer-events: none; cursor: default; }
 .act-tip::before { left: auto; right: 12px; }
 
 /* Мобильная раскладка — карточки вместо таблицы (см. SiteOrdersTable.jsx isMobile) */
@@ -216,9 +244,17 @@
         display: none;
     }
 
+    /* Крупная зона тапа — карточкам: ниже 1100px показываются именно они
+       (TABLE_BREAKPOINT в SiteOrdersPage.jsx). В таблице иконки оставляем
+       прежними: она появляется только на широком экране, а раздутый столбец
+       съедал бы там колонку «Покупатель». */
     .icon-btn {
         width: 40px;
         height: 40px;
+    }
+    .site-orders-table .icon-btn {
+        width: 30px;
+        height: 30px;
     }
 
     .site-orders-table .tip,

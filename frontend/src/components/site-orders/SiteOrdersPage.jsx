@@ -8,6 +8,12 @@ import SiteOrdersTable from './SiteOrdersTable';
 
 const PAGE_SIZE = 20;
 
+// Порог карточек у этой страницы выше общего (768): в таблице семь колонок,
+// и столбцу действий нужны свои 186px под иконки. Ниже 1100px остатка на имя
+// покупателя почти не остаётся — оно уезжает в три строки, а чипы статуса
+// подпирают соседние колонки. Карточки на таком экране просто читаются лучше.
+const TABLE_BREAKPOINT = 1100;
+
 function timeAgo(iso) {
     if (!iso) return null;
     const diffMin = Math.max(0, Math.round((Date.now() - new Date(iso).getTime()) / 60000));
@@ -25,7 +31,7 @@ export default function SiteOrdersPage() {
     const [data, setData] = useState(null);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState(null);
-    const isMobile = useIsMobile();
+    const isMobile = useIsMobile(TABLE_BREAKPOINT);
     // Удалять заказ из журнала может только суперпользователь (бэкенд site_order_delete
     // под @scripts_auth); смотреть список — любой залогиненный. Кнопку удаления
     // прячем у обычных пользователей, чтобы не показывать заведомо 403-действие.
