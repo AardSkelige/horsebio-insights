@@ -44,7 +44,8 @@ const FloatingLoadingCard = () => {
     // «частично»: остальное свежее, а эти остались вчерашними — и молчать
     // об этом нельзя, отчёты считаются уже на смеси.
     const failedEntities = (loadingProgress?.entities || []).filter(entity => entity.status === 'failed');
-    const keepOpen = failedEntities.length > 0;
+    // Ошибку тоже не прячем сами: за три секунды её не прочитать.
+    const keepOpen = failedEntities.length > 0 || loadingProgress?.status === 'error';
 
     const clearTimers = () => {
         if (hideTimerRef.current) clearTimeout(hideTimerRef.current);
@@ -85,9 +86,12 @@ const FloatingLoadingCard = () => {
         }
     }, [isCompleted, keepOpen, resetStates]);
 
-    // Сброс состояния завершения при новой загрузке
+    // Сброс состояния завершения при новой загрузке. Карточку показываем
+    // заново: после прошлой загрузки она осталась спрятанной, и новый запуск
+    // был виден только круглой кнопкой в углу.
     useEffect(() => {
         if (isLoading) {
+            setIsVisible(true);
             clearTimers();
             setIsCompleted(false);
             setIsHiding(false);
@@ -162,7 +166,7 @@ const FloatingLoadingCard = () => {
             case 'completed':
                 return 'Загрузка завершена успешно!';
             case 'error':
-                return 'Ошибка при загрузке';
+                return loadingProgress.message || 'Ошибка при загрузке';
             default:
                 return loadingProgress.message || 'Загрузка...';
         }

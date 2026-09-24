@@ -26,6 +26,8 @@ vi.mock('../../contexts/LoadingContext', () => ({
     useLoading: () => loadingState,
 }));
 
+const initialState = { ...loadingState };
+
 describe('FloatingLoadingCard', () => {
     beforeEach(() => {
         vi.useFakeTimers({ shouldAdvanceTime: true });
@@ -33,6 +35,9 @@ describe('FloatingLoadingCard', () => {
 
     afterEach(() => {
         vi.useRealTimers();
+        // Тесты меняют общую заглушку — возвращаем её, даже если проверка упала.
+        Object.assign(loadingState, initialState);
+        vi.clearAllMocks();
     });
 
     it('называет сущности, которые остались вчерашними', () => {
@@ -55,6 +60,39 @@ describe('FloatingLoadingCard', () => {
         await act(async () => { await vi.advanceTimersByTimeAsync(5000); });
 
         expect(screen.getByText('Отгрузки')).toBeInTheDocument();
+        expect(loadingState.resetStates).not.toHaveBeenCalled();
+    });
+
+    it('показывает карточку заново при следующей загрузке', async () => {
+        // После удачной загрузки карточка прячется сама. Раньше она так и
+        // оставалась спрятанной, и следующий запуск был виден только
+        // круглой кнопкой в углу — казалось, что нажатие ничего не сделало.
+        Object.assign(loadingState, {
+            loadingProgress: { status: 'completed', message: 'Готово', processed: 100, total: 100, entities: [] },
+        });
+
+        const { rerender } = render(<FloatingLoadingCard />);
+        await act(async () => { await vi.advanceTimersByTimeAsync(4000); });
+        expect(screen.getByTitle('Показать статус загрузки')).toBeInTheDocument();
+
+        Object.assign(loadingState, {
+            isLoading: true,
+            loadingProgress: { status: 'running', message: 'Загружаем отгрузки', processed: 10, total: 100 },
+        });
+        rerender(<FloatingLoadingCard />);
+
+        expect(screen.queryByTitle('Показать статус загрузки')).not.toBeInTheDocument();
+    });
+
+    it('показывает причину ошибки и не прячет её сама', async () => {
+        Object.assign(loadingState, {
+            loadingProgress: { status: 'error', message: 'Дата окончания не может быть в будущем', processed: 0, total: 100 },
+        });
+
+        render(<FloatingLoadingCard />);
+        await act(async () => { await vi.advanceTimersByTimeAsync(5000); });
+
+        expect(screen.getByText('Дата окончания не может быть в будущем')).toBeInTheDocument();
         expect(loadingState.resetStates).not.toHaveBeenCalled();
     });
 });

@@ -29,6 +29,13 @@ export const LoadingProvider = ({ children }) => {
     // прошлый прогон — законченный — и гасит полосу через полсекунды после
     // нажатия, пока запущенная синхронизация идёт незаметно.
     const runIdRef = useRef(null);
+
+    // Идёт запрос на запуск, номера прогона ещё нет. Опрос стартует вместе
+    // с нажатием и успевает спросить сервер раньше, чем тот ответит «запустил»:
+    // ответ приходит про прошлый прогон, законченный, и полоса гасла через
+    // полсекунды, а синхронизация шла незаметно. Пока номера нет, ответы
+    // опроса не принимаем — сравнить их не с чем.
+    const startingRef = useRef(false);
     
     // Как часто спрашивать сервер, что там с синхронизацией. Три секунды —
     // столько же, сколько у StarPony: полоса двигается по этапам, а не
@@ -47,8 +54,11 @@ export const LoadingProvider = ({ children }) => {
 
     const startLoading = useCallback(async (dateRange) => {
         try {
+            startingRef.current = true;
+            runIdRef.current = null;
             setIsLoading(true);
             setError(null);
+            setLoadingProgress(null);
             setLoadingKey(prev => prev + 1);
             setLogs([]);
             setProgress({ processed: 0, total: 0 });
@@ -79,11 +89,31 @@ export const LoadingProvider = ({ children }) => {
             });
 
         } catch (err) {
+            if (err.status === 409) {
+                // Синхронизация уже идёт — ночная, чужая или запущенная
+                // прошлым нажатием. Показываем её, а не стираем всё:
+                // иначе нажатие только моргает, и снова непонятно, идёт ли.
+                // Номера прогона нет, поэтому опрос следит за последним.
+                setLoadingProgress({
+                    status: 'running',
+                    message: 'Синхронизация уже идёт',
+                    processed: 0,
+                    total: 100
+                });
+                return;
+            }
+            // Запуск не удался — оставляем карточку с причиной. Раньше здесь
+            // всё сбрасывалось, и нажатие только моргало: ошибку было видно
+            // лишь в консоли браузера.
             console.error('Error starting load:', err);
-            setError(err.message || 'Произошла ошибка при загрузке данных');
-            resetStates();
+            const message = err.message || 'Произошла ошибка при загрузке данных';
+            setError(message);
+            setLoadingProgress({ status: 'error', message, processed: 0, total: 100 });
+            setIsLoading(false);
+        } finally {
+            startingRef.current = false;
         }
-    }, [resetStates]);
+    }, []);
 
     const cancelLoading = useCallback(async () => {
         try {
@@ -125,7 +155,7 @@ export const LoadingProvider = ({ children }) => {
         let isMounted = true;
 
         const applyState = (state, isRunning) => {
-            if (!isMounted || !state) return;
+            if (!isMounted || !state || startingRef.current) return;
 
             // Чужой прогон — не наш: страница показывает его как чужой,
             // но завершать по нему свою загрузку нельзя.
