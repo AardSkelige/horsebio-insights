@@ -413,7 +413,12 @@ function Category({ cat, excKeys, excMap, onChanged }) {
                 )}
                 {visible.slice(0, shown).map((it) => {
                     const ekey = it.key || it.object;
-                    const excepted = cat.kind && it.key && (excKeys[cat.kind] || []).includes(it.key);
+                    // Бейдж — только у deviations: прочие исключённые находки сюда не
+                    // доходят (их прячет isAckExcepted). Скачок цены, у которого
+                    // исключение от прошлой приёмки, — новая находка: ему нужна кнопка
+                    // «в искл.», а прошлый разбор и так виден строкой «уже разбирали».
+                    const excepted = cat.kind === 'deviations' && it.key
+                        && (excKeys[cat.kind] || []).includes(it.key);
                     // Прошлый разбор этого товара: причина исключения прямо в находке
                     const prevReason = excFor(it)?.reason || '';
                     return (
