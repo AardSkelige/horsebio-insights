@@ -34,6 +34,13 @@
 
 .uc-col-count { font-variant-numeric: tabular-nums; }
 
+.uc-col-rule {
+    margin: -4px 0 10px;
+    font-size: 12px;
+    line-height: 1.35;
+    color: var(--muted);
+}
+
 .uc-list { display: flex; flex-direction: column; gap: 9px; }
 
 /* ── карточка позиции ──────────────────────────────────── */
@@ -254,3 +261,13 @@
     gap: 24px;
     align-items: start;
 }
+
+/* ── подсказки по наведению ────────────────────────────── */
+/* Пунктир появляется при наведении и фокусе: в покое карточка остаётся чистой,
+   а курсор-вопрос сразу говорит, что у цифры есть пояснение. */
+.uc-hint { cursor: help; border-bottom: 1px dotted transparent; }
+.uc-hint:hover,
+.uc-hint:focus-visible { border-bottom-color: currentColor; }
+.uc-hint:focus-visible { outline: 2px solid var(--primary); outline-offset: 2px; border-radius: 2px; }
+/* Строки «На сайте» и «На Ozon» — каждая на своей строке, но шириной по тексту */
+.uc-card > .uc-hint { display: flex; width: fit-content; }

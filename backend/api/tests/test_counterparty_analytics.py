@@ -24,7 +24,13 @@ from forecasting.services.categorization.categorizer import CounterpartyCategori
 
 class CategorizatorTests(TestCase):
     def setUp(self):
-        self.now = timezone.now()
+        # Тесты считают календарные месяцы, поэтому отсчёт ведём от середины
+        # прошлого месяца: от «сейчас» отгрузки 2 и 3 дня назад в начале месяца
+        # разъезжаются по разным месяцам, а 10 и 40 дней назад 10 февраля
+        # сходятся в один (31 и 1 января).
+        self.now = (timezone.localtime().replace(day=1) - timedelta(days=1)).replace(
+            day=15, hour=12, minute=0, second=0, microsecond=0,
+        )
         self.product = Product.objects.create(
             name='Товар', external_id='p-1', group='Товары', subgroup='Био',
         )

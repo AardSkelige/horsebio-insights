@@ -2,6 +2,8 @@ import { useState } from 'react';
 import PropTypes from 'prop-types';
 import { ExternalLink, EyeOff, Package } from 'lucide-react';
 import { Button } from '../ui';
+import Tooltip from '../ui/Tooltip';
+import { formatDate } from '../../utils/formatters';
 import { discountedApi } from '../../api/discountedApi';
 
 const money = (value) => `${Math.round(value).toLocaleString('ru-RU')} ₽`;
@@ -12,6 +14,21 @@ function term(position) {
     if (position.days_left === 0) return { text: 'истекает сегодня', hot: true };
     return { text: `осталось ${position.days_left} дн`, hot: false };
 }
+
+// Откуда взялась цифра и что из неё следует — по наведению: на карточке места
+// хватает только на сами значения.
+function termHint(position, months) {
+    if (position.state === 'no_date') return '«Годен до» в карточке МойСклад не заполнено — без даты не посчитать, когда снимать';
+    const until = `Годен до ${formatDate(position.expires)}`;
+    if (position.state === 'ok') return `${until}. Продаём, пока до конца срока больше ${months} мес`;
+    if (position.state === 'expired') return `${until}. Срок вышел — снимаем с продажи и списываем`;
+    return `${until}. До конца срока меньше ${months} мес — по регламенту снимаем с продажи и списываем`;
+}
+
+const Hint = ({ content, children }) => (
+    <Tooltip content={content} className="uc-hint">{children}</Tooltip>
+);
+Hint.propTypes = { content: PropTypes.node.isRequired, children: PropTypes.node.isRequired };
 
 /**
  * Уценённая позиция на складе.
@@ -35,7 +52,7 @@ function term(position) {
  * после успешного снятия карточка не исчезает — она просто перестаёт предлагать
  * это действие, а сама позиция остаётся на складе до списания.
  */
-export default function DiscountedCard({ position, onDelisted }) {
+export default function DiscountedCard({ position, delistMonths, discountRate, onDelisted }) {
     const [busy, setBusy] = useState(false);
     const [done, setDone] = useState(false);
     const [error, setError] = useState(null);
@@ -65,36 +82,50 @@ export default function DiscountedCard({ position, onDelisted }) {
             <div className="art">{position.article}</div>
 
             <div className="row">
-                <span className={`term${hot ? ' hot' : ''}`}>{text}</span>
-                <span className="qty">{position.quantity} шт</span>
+                <Hint content={termHint(position, delistMonths)}>
+                    <span className={`term${hot ? ' hot' : ''}`}>{text}</span>
+                </Hint>
+                <Hint content="Остаток уценённой карточки в МойСклад">
+                    <span className="qty">{position.quantity} шт</span>
+                </Hint>
             </div>
 
             <div className="row">
-                <span className="price">
-                    {money(position.price)}
-                    {position.price_full > position.price && (
-                        <span className="was">{money(position.price_full)}</span>
-                    )}
-                </span>
-                <span className="qty">{money(position.sum)}</span>
+                <Hint content={`Цена уценки — ${Math.round((1 - discountRate) * 100)} % от РРЦ сайта. Зачёркнута РРЦ`}>
+                    <span className="price">
+                        {money(position.price)}
+                        {position.price_full > position.price && (
+                            <span className="was">{money(position.price_full)}</span>
+                        )}
+                    </span>
+                </Hint>
+                <Hint content="Весь остаток по цене уценки — столько выручим, если продадим всё">
+                    <span className="qty">{money(position.sum)}</span>
+                </Hint>
             </div>
 
             {position.published !== null && (
-                <div className={`uc-site${position.published ? ' live' : ''}`}>
-                    <span className="dot" />
-                    {position.published
-                        ? `На сайте: ${money(position.site_price)}, ${position.site_quantity} шт`
-                        : 'Нет на витрине'}
-                </div>
+                <Hint content={position.published
+                    ? 'Цена и остаток, которые сейчас видит покупатель на horse-bio.ru'
+                    : 'Покупатели карточку не видят: её не загружали файлом или она скрыта в админке'}>
+                    <span className={`uc-site${position.published ? ' live' : ''}`}>
+                        <span className="dot" />
+                        {position.published
+                            ? `На сайте: ${money(position.site_price)}, ${position.site_quantity} шт`
+                            : 'Нет на витрине'}
+                    </span>
+                </Hint>
             )}
 
             {position.ozon_url && (
-                <div className="uc-site live">
-                    <span className="dot" />
-                    {position.ozon_price
-                        ? `На Ozon: ${money(position.ozon_price)}, ${position.ozon_quantity} шт`
-                        : 'На Ozon'}
-                </div>
+                <Hint content="Цена на Ozon отличается от сайта намеренно. Остаток подтягивается из МойСклад каждые 15 минут">
+                    <span className="uc-site live">
+                        <span className="dot" />
+                        {position.ozon_price
+                            ? `На Ozon: ${money(position.ozon_price)}, ${position.ozon_quantity} шт`
+                            : 'На Ozon'}
+                    </span>
+                </Hint>
             )}
 
             <div className="uc-actions">
@@ -142,6 +173,7 @@ DiscountedCard.propTypes = {
         name: PropTypes.string,
         state: PropTypes.string.isRequired,
         days_left: PropTypes.number,
+        expires: PropTypes.string,
         quantity: PropTypes.number,
         price: PropTypes.number,
         price_full: PropTypes.number,
@@ -155,5 +187,7 @@ DiscountedCard.propTypes = {
         ozon_price: PropTypes.number,
         ozon_quantity: PropTypes.number,
     }).isRequired,
+    delistMonths: PropTypes.number.isRequired,
+    discountRate: PropTypes.number.isRequired,
     onDelisted: PropTypes.func,
 };

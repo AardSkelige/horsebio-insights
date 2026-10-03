@@ -12,11 +12,15 @@ const money = (value) => `${Math.round(value || 0).toLocaleString('ru-RU')} ₽`
 const units = (value) => `${Math.round(value || 0).toLocaleString('ru-RU')} шт`;
 
 // Три дорожки. Порядок — от срочного к спокойному: экран читается слева направо,
-// и пустая левая колонка сразу означает «делать нечего».
+// и пустая левая колонка сразу означает «делать нечего». Под заголовком — правило
+// попадания в дорожку: без него колонки приходится угадывать.
 const LANES = [
-    { key: 'urgent',  title: 'Снять с продажи', tone: 'urgent', states: ['expired'],           empty: 'Просроченного нет' },
-    { key: 'soon',    title: 'Скоро снимать',   tone: 'warn',   states: ['delist', 'no_date'], empty: 'Ничего не подходит к сроку' },
-    { key: 'selling', title: 'В продаже',       tone: 'ok',     states: ['ok'],                empty: 'Пусто' },
+    { key: 'urgent',  title: 'Снять с продажи', tone: 'urgent', states: ['expired', 'delist'],
+      rule: (m) => `До конца срока меньше ${m} мес или срок вышел`, empty: 'Снимать нечего' },
+    { key: 'no_date', title: 'Нет даты',        tone: 'warn',   states: ['no_date'],
+      rule: () => 'В карточке МойСклад не заполнено «Годен до»', empty: 'У всех позиций дата есть' },
+    { key: 'selling', title: 'В продаже',       tone: 'ok',     states: ['ok'],
+      rule: (m) => `До конца срока больше ${m} мес`, empty: 'Пусто' },
 ];
 
 // Процесс живёт в трёх местах сразу, и без подсказки на экране приходится каждый
@@ -71,7 +75,7 @@ export default function DiscountedPage() {
                     subtitle={
                         <>
                             Товар с подходящим сроком годности
-                            {data?.rules && ` — скидка ${Math.round(data.rules.discount_rate * 100)} %, снимаем с продажи за ${data.rules.months_to_delist} месяца до конца срока`}
+                            {data?.rules && ` — скидка ${Math.round(data.rules.discount_rate * 100)} %, продаём, пока до конца срока больше ${data.rules.months_to_delist} мес, дальше снимаем и списываем`}
                         </>
                     }
                     actions={
@@ -127,13 +131,16 @@ export default function DiscountedPage() {
                                             <span>{lane.title}</span>
                                             <span className="uc-col-count">{items.length}</span>
                                         </div>
+                                        <p className="uc-col-rule">{lane.rule(data.rules.months_to_delist)}</p>
                                         {items.length === 0 ? (
                                             <div className="uc-empty">{lane.empty}</div>
                                         ) : (
                                             <Stagger className="uc-list">
                                                 {items.map((position) => (
                                                     <StaggerItem key={position.id}>
-                                                        <DiscountedCard position={position} />
+                                                        <DiscountedCard position={position} delistMonths={data.rules.months_to_delist}
+                                                            discountRate={data.rules.discount_rate}
+                                                        />
                                                     </StaggerItem>
                                                 ))}
                                             </Stagger>
