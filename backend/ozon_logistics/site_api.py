@@ -14,6 +14,7 @@ import logging
 
 from django.conf import settings
 from django.core.cache import cache
+from django.db.models import Max
 from django.http import JsonResponse
 from django.views.decorators.csrf import csrf_exempt
 from django.views.decorators.http import require_GET, require_POST
@@ -292,6 +293,70 @@ def _parse_destination(data):
     return None, (latitude, longitude)
 
 
+class UnknownProduct(ValueError):
+    """Артикула корзины нет в таблице товаров Ozon — sku взять неоткуда."""
+
+    def __init__(self, offer_id):
+        self.offer_id = offer_id
+        super().__init__(f'Товар {offer_id or "?"} недоступен для доставки Ozon')
+
+
+def _unknown_product_debug(offer_id):
+    """Почему артикул не нашёлся — для консоли браузера, покупатель её не видит.
+
+    Отличаем случаи, ведущие в разные места: каталог не синхронизирован вовсе,
+    карточка в архиве, артикул в Ozon записан иначе, чем на сайте, или карточки
+    в Ozon нет.
+    """
+    total = OzonProduct.objects.count()
+    last_sync = OzonProduct.objects.aggregate(last=Max('synced_at'))['last']
+    debug = {
+        'code': 'unknown_offer_id',
+        'offer_id': offer_id,
+        'catalog_size': total,
+        'catalog_synced_at': last_sync.isoformat() if last_sync else None,
+    }
+    if not total:
+        debug['hint'] = 'Таблица товаров Ozon пуста: синхронизация каталога (sync_ozon_products) не запускалась или падает'
+        return debug
+
+    similar = OzonProduct.objects.filter(offer_id__iexact=(offer_id or '').strip()).first()
+    if similar and similar.archived:
+        debug['hint'] = (
+            f'Карточка «{similar.offer_id}» в архиве Ozon. Если её достали из архива — '
+            'запустите синхронизацию каталога'
+        )
+    elif similar:
+        debug['hint'] = f'В Ozon артикул записан как «{similar.offer_id}» — расходится с сайтом регистром или пробелами'
+    else:
+        debug['hint'] = (
+            'Артикула нет в каталоге Ozon по последней синхронизации: карточки на Ozon нет, '
+            'артикул на сайте и в Ozon разный, или каталог давно не обновлялся'
+        )
+    return debug
+
+
+def _unavailable_debug(saved):
+    """Что ответил Ozon по каждой посылке, если доставить нельзя."""
+    return {
+        'code': 'ozon_unavailable',
+        'splits': [
+            {
+                'items': [
+                    {'offer_id': i.get('offer_id'), 'sku': i.get('sku'), 'quantity': i.get('quantity')}
+                    for i in split.get('items') or []
+                ],
+                'warehouse_id': split.get('warehouse_id'),
+                'delivery_schema': split.get('delivery_schema'),
+                'available': bool(split.get('commissions')),
+                'unavailable_reason': split.get('unavailable_reason'),
+                'method_unavailable_reason': (split.get('delivery_method') or {}).get('unavailable_reason'),
+            }
+            for split in saved.splits
+        ],
+    }
+
+
 def _parse_items(raw):
     """Позиции корзины → список для Ozon. Артикулы переводим в sku по своей таблице."""
     if not isinstance(raw, list) or not raw:
@@ -302,7 +367,7 @@ def _parse_items(raw):
     offer_ids = [str(i.get('offer_id')) for i in raw if i.get('offer_id') and not i.get('sku')]
     by_offer_id = {
         p.offer_id: p.sku
-        for p in OzonProduct.objects.filter(offer_id__in=offer_ids)
+        for p in OzonProduct.objects.filter(offer_id__in=offer_ids, archived=False)
     } if offer_ids else {}
 
     items = []
@@ -316,7 +381,7 @@ def _parse_items(raw):
 
         sku = entry.get('sku') or by_offer_id.get(str(entry.get('offer_id')))
         if not sku:
-            raise ValueError(f'Товар {entry.get("offer_id") or "?"} недоступен для доставки Ozon')
+            raise UnknownProduct(entry.get('offer_id'))
         items.append({'sku': int(sku), 'quantity': quantity})
     return items
 
@@ -345,6 +410,11 @@ def quote(request):
 
     try:
         items = _parse_items(data.get('items'))
+    except UnknownProduct as exc:
+        return JsonResponse(
+            {'status': 'error', 'message': str(exc), 'debug': _unknown_product_debug(exc.offer_id)},
+            status=400,
+        )
     except ValueError as exc:
         return _bad_request(str(exc))
 
@@ -369,6 +439,7 @@ def quote(request):
             'status': 'ok',
             'available': False,
             'reasons': saved.unavailable_reasons(),
+            'debug': _unavailable_debug(saved),
         })
 
     return JsonResponse({

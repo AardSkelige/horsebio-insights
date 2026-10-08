@@ -64,6 +64,19 @@ def sync_products(*, client=None):
             break
     else:
         logger.warning('Ozon Доставка: пагинация каталога прервана на %s страницах', MAX_PAGES)
+        seen_offer_ids = None  # список неполный — по нему нельзя судить, кого нет
+
+    # Архивные карточки Ozon в список не отдаёт, поэтому ушедший в архив товар
+    # просто перестаёт приходить. Без этой пометки он навсегда оставался бы в
+    # таблице годным, и корзина пускала бы его в расчёт. Пустой ответ — скорее
+    # сбой, чем пустой каталог: тогда таблицу не трогаем.
+    stats['archived'] = 0
+    if seen_offer_ids:
+        stats['archived'] = (
+            OzonProduct.objects.filter(archived=False)
+            .exclude(offer_id__in=seen_offer_ids)
+            .update(archived=True)
+        )
 
     # Схема MIX: годится остаток и на нашем складе, и на складе Ozon
     stats['sellable'] = OzonProduct.objects.filter(
@@ -75,7 +88,8 @@ def sync_products(*, client=None):
 
     logger.info(
         'Ozon Доставка: каталог синхронизирован — получено %(fetched)s, '
-        'создано %(created)s, обновлено %(updated)s, годно для доставки %(sellable)s',
+        'создано %(created)s, обновлено %(updated)s, ушло в архив %(archived)s, '
+        'годно для доставки %(sellable)s',
         stats,
     )
     return stats

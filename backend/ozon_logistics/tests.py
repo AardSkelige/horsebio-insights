@@ -633,6 +633,32 @@ class CatalogSyncTests(TestCase):
         self.assertEqual(stats['fetched'], 0)
         self.assertEqual(stats['total_stored'], 0)
 
+    def test_product_missing_from_list_is_marked_archived(self):
+        """Архивные карточки Ozon не отдаёт — пропавший товар значит «в архиве»."""
+        OzonProduct.objects.create(offer_id='GONE', sku=1, has_fbs_stocks=True)
+        page = {'items': [{'offer_id': 'ART-1', 'sku': 111, 'has_fbs_stocks': True}], 'last_id': None}
+
+        stats = catalog.sync_products(client=FakeCatalogClient([page]))
+
+        self.assertEqual(stats['archived'], 1)
+        self.assertTrue(OzonProduct.objects.get(offer_id='GONE').archived)
+        self.assertFalse(OzonProduct.objects.get(offer_id='ART-1').archived)
+
+    def test_unarchived_product_comes_back(self):
+        OzonProduct.objects.create(offer_id='ART-1', sku=111, archived=True)
+        page = {'items': [{'offer_id': 'ART-1', 'sku': 111, 'has_fbs_stocks': True}], 'last_id': None}
+
+        catalog.sync_products(client=FakeCatalogClient([page]))
+
+        self.assertFalse(OzonProduct.objects.get(offer_id='ART-1').archived)
+
+    def test_empty_response_does_not_archive_everything(self):
+        OzonProduct.objects.create(offer_id='ART-1', sku=111, has_fbs_stocks=True)
+
+        catalog.sync_products(client=FakeCatalogClient([{'items': [], 'last_id': None}]))
+
+        self.assertFalse(OzonProduct.objects.get(offer_id='ART-1').archived)
+
     def test_sellable_property(self):
         product = OzonProduct(offer_id='A', sku=1, has_fbs_stocks=True, archived=False)
         self.assertTrue(product.sellable_via_ozon_delivery)
@@ -1102,6 +1128,53 @@ class SiteApiTests(TestCase):
         )
         self.assertEqual(response.status_code, 400)
         self.assertIn('НЕТ-ТАКОГО', response.json()['message'])
+        self.assertIn('пуста', response.json()['debug']['hint'])
+
+    def test_quote_debug_points_at_offer_id_mismatch(self):
+        OzonProduct.objects.create(offer_id='01-12AP1000', sku=1, has_fbs_stocks=True)
+        response = self.client.post(
+            '/api/ozon-logistics/site/quote/',
+            data=json.dumps({
+                'phone': '79161112233',
+                'items': [{'offer_id': '01-12ap1000 ', 'quantity': 1}],
+                'map_point_id': 1,
+            }),
+            content_type='application/json',
+        )
+        debug = response.json()['debug']
+        self.assertEqual(debug['code'], 'unknown_offer_id')
+        self.assertIn('«01-12AP1000»', debug['hint'])
+
+    def test_quote_rejects_archived_product(self):
+        OzonProduct.objects.create(offer_id='A', sku=1, has_fbs_stocks=True, archived=True)
+        with patch('requests.post') as post:
+            response = self.client.post(
+                '/api/ozon-logistics/site/quote/',
+                data=json.dumps({
+                    'phone': '79161112233',
+                    'items': [{'offer_id': 'A', 'quantity': 1}],
+                    'map_point_id': 1,
+                }),
+                content_type='application/json',
+            )
+        post.assert_not_called()  # в Ozon с архивным товаром не ходим
+        self.assertEqual(response.status_code, 400)
+        self.assertIn('в архиве', response.json()['debug']['hint'])
+
+    def test_quote_debug_says_offer_id_is_missing_from_catalog(self):
+        OzonProduct.objects.create(offer_id='A', sku=1, has_fbs_stocks=True)
+        response = self.client.post(
+            '/api/ozon-logistics/site/quote/',
+            data=json.dumps({
+                'phone': '79161112233',
+                'items': [{'offer_id': 'B', 'quantity': 1}],
+                'map_point_id': 1,
+            }),
+            content_type='application/json',
+        )
+        debug = response.json()['debug']
+        self.assertEqual(debug['catalog_size'], 1)
+        self.assertIn('нет в каталоге', debug['hint'])
 
     def test_quote_requires_destination(self):
         OzonProduct.objects.create(offer_id='A', sku=1, has_fbs_stocks=True)
@@ -1130,6 +1203,10 @@ class SiteApiTests(TestCase):
         body = response.json()
         self.assertFalse(body['available'])
         self.assertEqual(body['reasons'], ['OUT_OF_STOCK'])
+        split = body['debug']['splits'][0]
+        self.assertFalse(split['available'])
+        self.assertEqual(split['unavailable_reason'], 'OUT_OF_STOCK')
+        self.assertEqual(split['items'][0]['sku'], 1)
 
     def test_forwarded_header_cannot_reset_the_limit(self):
         """Подделанный X-Forwarded-For не должен обнулять счётчик.
