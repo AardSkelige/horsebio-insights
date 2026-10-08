@@ -207,7 +207,7 @@ SCRIPTS_CONFIG = [
         'topic': 'Обновление данных',
         'name': 'Товары для доставки Ozon',
         'account': 'HorseBio',
-        'schedule': 'Ежедн. в 09:35',
+        'schedule': 'Ежечасно в :35',
         'description': 'Доставку Ozon видно в корзине сайта: сверяет наши артикулы с каталогом Ozon (Django-команда sync_ozon_products)',
         'script': '/app/manage.py',
         'args': ['sync_ozon_products'],

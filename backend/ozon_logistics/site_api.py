@@ -170,10 +170,11 @@ def _payload(request):
 @csrf_exempt
 @require_POST
 def availability(request):
-    """Доступна ли покупателю доставка Ozon: {'available': bool}.
+    """Доступна ли покупателю доставка Ozon: {'available': bool, 'items_ok': bool}.
 
     Ozon отвечает по номеру телефона — по сути проверяет, может ли этот
-    покупатель получить заказ в его сети.
+    покупатель получить заказ в его сети. Если корзина прислала состав,
+    в `items_ok` — возит ли Ozon все эти товары.
     """
     if _foreign_origin(request):
         return _forbidden_origin(request)
@@ -201,7 +202,48 @@ def availability(request):
 
     available = bool(result.get('is_possible'))
     _record_availability(request, digits, available)
-    return JsonResponse({'status': 'ok', 'available': available})
+    response = {'status': 'ok', 'available': available}
+
+    # Состав корзины проверяем здесь же, а не при выборе пункта: иначе покупатель
+    # ищет пункт на карте и только потом узнаёт, что Ozon его заказ не повезёт
+    problems = _unsellable_items(data.get('items'))
+    if problems is not None:
+        response['items_ok'] = not problems
+        if problems:
+            response['debug'] = {'code': 'items_unavailable', 'items': problems}
+    return JsonResponse(response)
+
+
+def _unsellable_items(raw):
+    """Позиции, которые Ozon точно не повезёт, — по своей таблице, без похода в Ozon.
+
+    None — состав не прислали или он неразборчив: тогда о товарах молчим, и
+    решит расчёт при выборе пункта. Пустой список — все товары годны. Хватит ли
+    остатка и возит ли Ozon в этот город, отсюда не видно: это скажет расчёт.
+    """
+    if not isinstance(raw, list) or not raw or len(raw) > MAX_ITEMS:
+        return None
+    offer_ids = [str(i.get('offer_id')).strip() for i in raw if isinstance(i, dict) and i.get('offer_id')]
+    if not offer_ids:
+        return None
+
+    active = {
+        p.offer_id: p
+        for p in OzonProduct.objects.filter(offer_id__in=offer_ids, archived=False)
+    }
+    problems = []
+    for offer_id in dict.fromkeys(offer_ids):
+        product = active.get(offer_id)
+        if product is None:
+            problems.append(_unknown_product_debug(offer_id))
+        elif not product.sellable_via_ozon_delivery:
+            problems.append({
+                'code': 'no_stocks',
+                'offer_id': offer_id,
+                'catalog_synced_at': product.synced_at.isoformat(),
+                'hint': 'В Ozon нет остатка ни на FBS, ни на FBO — выставьте остаток и запустите синхронизацию каталога',
+            })
+    return problems
 
 
 @require_GET

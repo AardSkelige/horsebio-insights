@@ -46,7 +46,9 @@
 */5 * * * * sleep 150 && /root/horsebio/deploy/cron/horsebio-check.sh horsebio_ozon_duplicates
 */5 * * * * sleep 180 && /root/horsebio/deploy/cron/horsebio-check.sh horsebio_ozon_returns
 */15 * * * * sleep 210 && /root/horsebio/deploy/cron/horsebio-check.sh horsebio_discounted_ozon
-35 9 * * * /root/horsebio/deploy/cron/horsebio-check.sh horsebio_ozon_products
+# Каждый час: после выставления остатков товар должен появиться в корзине
+# не на следующее утро. Ходит только в Ozon, лимит МойСклада не трогает.
+35 * * * * /root/horsebio/deploy/cron/horsebio-check.sh horsebio_ozon_products
 45 9 * * * /root/horsebio/deploy/cron/horsebio-check.sh horsebio_ozon_points
 
 # ─── Обновление данных ───────────────────────────────────────────────────────

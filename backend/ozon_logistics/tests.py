@@ -1074,6 +1074,41 @@ class SiteApiTests(TestCase):
             )
         self.assertEqual(response.status_code, 429)
 
+    def _availability_with_items(self, items):
+        with patch('requests.post', return_value=FakeResponse(data={'is_possible': True})):
+            return self.client.post(
+                '/api/ozon-logistics/site/availability/',
+                data=json.dumps({'phone': '79161112233', 'items': items}),
+                content_type='application/json',
+            ).json()
+
+    def test_availability_reports_unsellable_items_upfront(self):
+        OzonProduct.objects.create(offer_id='OK', sku=1, has_fbs_stocks=True)
+        OzonProduct.objects.create(offer_id='EMPTY', sku=2)
+        OzonProduct.objects.create(offer_id='OLD', sku=3, has_fbo_stocks=True, archived=True)
+
+        body = self._availability_with_items([
+            {'offer_id': 'OK', 'quantity': 1},
+            {'offer_id': 'EMPTY', 'quantity': 1},
+            {'offer_id': 'OLD', 'quantity': 1},
+        ])
+
+        self.assertTrue(body['available'])
+        self.assertFalse(body['items_ok'])
+        codes = {i['offer_id']: i['code'] for i in body['debug']['items']}
+        self.assertEqual(codes, {'EMPTY': 'no_stocks', 'OLD': 'unknown_offer_id'})
+
+    def test_availability_items_ok_when_all_sellable(self):
+        OzonProduct.objects.create(offer_id='OK', sku=1, has_fbo_stocks=True)
+        body = self._availability_with_items([{'offer_id': 'OK', 'quantity': 2}])
+        self.assertTrue(body['items_ok'])
+        self.assertNotIn('debug', body)
+
+    def test_availability_without_items_says_nothing_about_them(self):
+        body = self._availability_with_items(None)
+        self.assertTrue(body['available'])
+        self.assertNotIn('items_ok', body)
+
     def test_points_come_from_local_cache(self):
         OzonPickupPoint.objects.create(map_point_id=1, latitude=55.75, longitude=37.61)
         OzonPickupPoint.objects.create(map_point_id=2, latitude=59.93, longitude=30.33)
