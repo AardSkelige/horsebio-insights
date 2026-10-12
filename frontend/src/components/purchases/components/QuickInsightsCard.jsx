@@ -2,6 +2,8 @@ import { useState } from 'react';
 import PropTypes from 'prop-types';
 import { Hint, Notice, StatCard, StatGrid } from '../../ui';
 import { analysisApi } from '../../../api/analysisApi';
+import { num } from '../../../utils/formatters';
+import './QuickInsightsCard.css';
 
 
 const selectStyle = {
@@ -59,7 +61,7 @@ const QuickInsightsCard = ({ analysisData, material, onPeriodChange }) => {
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '12px' }}>
                 <h2 style={{ fontFamily: 'var(--serif)', fontSize: '22px', fontWeight: 400, letterSpacing: '-0.02em', color: 'var(--ink)', margin: 0 }}>Ключевые показатели</h2>
                 <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                    <span style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', fontFamily: 'var(--sans)', fontSize: '13px', color: 'var(--muted)' }}>Период расчёта <Hint text="За какой срок брать расход и сроки поставок. Выбор личный: у коллег остаётся их период." />:</span>
+                    <span style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', fontFamily: 'var(--sans)', fontSize: '13px', color: 'var(--muted)' }}>Период расчёта <Hint text="За какой срок брать расход и сроки поставок. Выбор личный: у коллег остаётся их период." /></span>
                     <select
                         value={periodMonths}
                         onChange={e => patchPeriod(Number(e.target.value))}
@@ -108,14 +110,16 @@ const QuickInsightsCard = ({ analysisData, material, onPeriodChange }) => {
                 <Notice tone={notice.type}>{notice.text}</Notice>
             )}
 
-            <StatGrid>
-                <StatCard tone="dark" title="Потребление в рабочий день" value={dailyConsumption} suffix={material.uom} note={trendDetected ? 'Пн–пт, за 3 мес' : `Пн–пт, среднее за ${periodMonths} мес`} hint="Сколько уходит в производство за рабочий день: отгрузки товаров × нормы из техкарт, без суббот, воскресений и праздников." />
-                <StatCard tone="dark" title="Среднее время поставки" value={leadTime.received ? leadTime.avg : '—'} suffix={leadTime.received ? 'дней' : undefined} note={leadTime.received ? `мин ${leadTime.min} · макс ${leadTime.max}` : 'Нет принятых поставок'} hint="Календарных дней от заказа поставщику до приёмки. Учитываются только принятые заказы за период." />
-                <StatCard tone="dark" title="Точка заказа" value={reorderPoint} suffix={material.uom} note="Запас на доставку + страховой" hint="Остаток, при котором пора заказывать: расход за среднее время поставки плюс страховой запас на случай задержки (не меньше недели расхода)." />
-                <StatCard tone="dark" title="Оптимальный размер (EOQ)" value={optimalOrder} suffix={material.uom} note="Справочно" hint="Партия, при которой суммарные затраты на заказы и хранение минимальны. Ориентир, а не правило." />
-                <StatCard tone="dark" title="Ежемесячный заказ" value={monthlyOrder} suffix={material.uom} note="Расход за месяц" hint="Потребление в рабочий день × среднее число рабочих дней в месяце. Страховой запас сюда не входит, он заложен в точку заказа." />
-                <StatCard tone="dark" title="Квартальный заказ" value={quarterlyOrder} suffix={material.uom} note="Расход за квартал" hint="Месячный расход × 3. Страховой запас сюда не входит, он заложен в точку заказа." />
-            </StatGrid>
+            <div className="purchase-kpis">
+                <StatGrid>
+                    <StatCard tone="dark" title="Расход в день" value={dailyConsumption} format={num} suffix={material.uom} note={trendDetected ? 'Пн–пт, за 3 мес' : `Пн–пт, среднее за ${periodMonths} мес`} hint="Сколько уходит в производство за рабочий день: отгрузки товаров × нормы из техкарт, без суббот, воскресений и праздников." />
+                    <StatCard tone="dark" title="Срок поставки" value={leadTime.received ? leadTime.avg : '—'} format={num} suffix={leadTime.received ? 'дн.' : undefined} note={leadTime.received ? `мин ${leadTime.min} · макс ${leadTime.max}` : 'Нет принятых поставок'} hint="Календарных дней от заказа поставщику до приёмки. Учитываются только принятые заказы за период." />
+                    <StatCard tone="dark" title="Точка заказа" value={reorderPoint} format={num} suffix={material.uom} note="Доставка + запас" hint="Остаток, при котором пора заказывать: расход за среднее время поставки плюс страховой запас на случай задержки (не меньше недели расхода)." />
+                    <StatCard tone="dark" title="Партия EOQ" value={optimalOrder} format={num} suffix={material.uom} note="Оптимальная, справочно" hint="Партия, при которой суммарные затраты на заказы и хранение минимальны. Ориентир, а не правило." />
+                    <StatCard tone="dark" title="Заказ на месяц" value={monthlyOrder} format={num} suffix={material.uom} note="Расход за месяц" hint="Потребление в рабочий день × среднее число рабочих дней в месяце. Страховой запас сюда не входит, он заложен в точку заказа." />
+                    <StatCard tone="dark" title="Заказ на квартал" value={quarterlyOrder} format={num} suffix={material.uom} note="Расход за квартал" hint="Месячный расход × 3. Страховой запас сюда не входит, он заложен в точку заказа." />
+                </StatGrid>
+            </div>
         </div>
     );
 };
