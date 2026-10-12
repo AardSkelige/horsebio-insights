@@ -69,7 +69,7 @@ function MonthPicker({ selected, history, onSelect, isMobile }) {
                             borderRadius: 16,
                             border: `1px solid ${active ? 'transparent' : 'var(--hairline)'}`,
                             background: 'transparent',
-                            color: active ? 'var(--canvas)' : row ? 'var(--body)' : 'var(--muted)',
+                            color: active ? 'var(--on-primary)' : row ? 'var(--body)' : 'var(--muted)',
                             fontFamily: 'var(--sans)',
                             fontSize: 12,
                             cursor: 'pointer',
@@ -83,7 +83,7 @@ function MonthPicker({ selected, history, onSelect, isMobile }) {
                             <motion.span
                                 layoutId="month-picker-pill"
                                 transition={{ type: 'spring', stiffness: 500, damping: 40 }}
-                                style={{ position: 'absolute', inset: -1, borderRadius: 16, background: 'var(--ink)' }}
+                                style={{ position: 'absolute', inset: -1, borderRadius: 16, background: 'var(--primary)' }}
                             />
                         )}
                         <span style={{ position: 'relative' }}>{label}</span>
