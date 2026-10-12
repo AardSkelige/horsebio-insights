@@ -7,10 +7,10 @@ const GENERAL = {
     reorder_point: { value: 1318982, details: 'РАСЧЕТ СРЕДНЕГО ПОТРЕБЛЕНИЯ:\nПериод анализа: ...' },
     optimal_order_quantity: { value: 1069120, details: 'Расчёт EOQ ...' },
     safety_stock: { value: 500000, details: 'Расчёт страхового запаса ...' },
-    lead_time: { avg: 9.3, details: 'Расчёт времени поставки ...' },
+    lead_time: { avg: 9.3, received: 4, details: 'Расчёт времени поставки ...' },
     periodic_orders: {
-        frequent_orders: { total_size: 1000000, details: 'Ежемесячно ...' },
-        quarterly_orders: { total_size: 3000000, details: 'Ежеквартально ...' },
+        frequent_orders: { order_size: 1000000, details: 'Ежемесячно ...' },
+        quarterly_orders: { order_size: 3000000, details: 'Ежеквартально ...' },
     },
 };
 

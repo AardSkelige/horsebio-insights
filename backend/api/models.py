@@ -520,3 +520,27 @@ class PaymentDeadlineSnapshot(models.Model):
         row.payload = payload
         row.save(update_fields=['payload', 'updated_at'])
         return row
+
+
+class MaterialPeriodPreference(models.Model):
+    user = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.CASCADE,
+        related_name='material_period_preferences',
+    )
+    raw_material = models.ForeignKey(
+        'core.RawMaterial',
+        on_delete=models.CASCADE,
+        related_name='period_preferences',
+    )
+    period_months = models.PositiveSmallIntegerField(verbose_name='Период расчёта (мес)')
+
+    class Meta:
+        verbose_name = 'Период расчёта закупок'
+        verbose_name_plural = 'Периоды расчёта закупок'
+        constraints = [
+            models.UniqueConstraint(fields=['user', 'raw_material'], name='uniq_material_period_per_user'),
+        ]
+
+    def __str__(self):
+        return f'{self.user} {self.raw_material_id}: {self.period_months} мес'

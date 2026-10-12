@@ -109,12 +109,6 @@ class RawMaterial(models.Model):
     article = models.CharField(max_length=255, blank=True, null=True, verbose_name='Артикул')
     code = models.CharField(max_length=255, blank=True, null=True, verbose_name='Код')
     description = models.TextField(blank=True, null=True, verbose_name='Описание')
-    lead_time_period_months = models.IntegerField(
-        null=True,
-        blank=True,
-        verbose_name='Период расчёта времени доставки (мес)',
-        help_text='Если не задано — используется 12 месяцев'
-    )
 
     def __str__(self):
         return f"{self.name} ({self.uom_name})" if self.uom_name else self.name

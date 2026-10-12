@@ -1,11 +1,12 @@
 # Запуск тестового расчета оптимизации закупок
 # python manage.py test_material_consumption --material-id=28
 
-from decimal import Decimal
 from dataclasses import dataclass
 from typing import Dict, List, Optional
-from datetime import datetime, timedelta
+from datetime import date, datetime, timedelta
 import math
+from functools import lru_cache
+import holidays
 from django.utils import timezone
 from django.db.models import Avg, Count, Min, Max
 from core.models import PurchaseOrder, Supply, RawMaterial, PurchaseOrderItem, SupplyItem
@@ -20,10 +21,20 @@ logger = logging.getLogger(__name__)
 # If False: always uses yearly average (original behavior)
 ENABLE_TREND_DETECTION = True
 
+MIN_SAFETY_STOCK_WORKING_DAYS = 5
+RU_DAYS_OFF_MISSING_IN_HOLIDAYS = frozenset({
+    date(2026, 1, 9), date(2026, 3, 9), date(2026, 5, 11), date(2026, 12, 31),
+})
+
+
+@lru_cache(maxsize=None)
+def _ru_holidays(year):
+    return frozenset(holidays.RU(years=year)) | RU_DAYS_OFF_MISSING_IN_HOLIDAYS
+
 @dataclass
 class OrderHistory:
     quantity: float
-    lead_time: float
+    lead_time: Optional[float]
     date: str
     price: float
     supplier_name: str = None  # Добавляем поле с значением по умолчанию None
@@ -36,8 +47,11 @@ class PurchaseOptimizationCalculator:
         material_id: int,
         holding_cost_percent: float = 0.15,  # Средний процент затрат на хранение (включает стоимость складского хранения, обслуживания, риски порчи и т.д.)
         ordering_cost: float = 1000,  # Стоимость размещения заказа (включает затраты на оформление, приемку и документооборот)
+        consumption_months: int = 12,
     ):
         self.orders = orders
+        self.consumption_months = consumption_months
+        self.consumption_since = timezone.now() - timedelta(days=consumption_months * 30)
         self.material_id = material_id
         self.holding_cost_percent = holding_cost_percent
         self.ordering_cost = ordering_cost
@@ -45,18 +59,20 @@ class PurchaseOptimizationCalculator:
             start_date=timezone.now() - timedelta(days=365),
             end_date=timezone.now()
         )
+        today = timezone.now().date()
+        year_start, year_end = date(today.year, 1, 1), date(today.year, 12, 31)
+        self.working_days_per_year = self._calculate_working_days(year_start, year_end)
+        self.working_days_per_month = self.working_days_per_year / 12
+        self.calendar_days_per_year = (year_end - year_start).days + 1
         # Инициализируем общие данные о потреблении
         self.total_consumption = self.calculate_total_material_consumption()
         
     def calculate_total_material_consumption(self):
         """Расчет общего среднего потребления"""
         try:
-            # Получаем историю использования материала за последний год
-            one_year_ago = timezone.now() - timedelta(days=365)
-            
             usages = RawMaterialUsage.objects.filter(
                 raw_material_id=self.material_id,
-                shipment_item__shipment__date__gte=one_year_ago
+                shipment_item__shipment__date__gte=self.consumption_since
             ).select_related(
                 'shipment_item__shipment'
             )
@@ -75,29 +91,30 @@ class PurchaseOptimizationCalculator:
             all_quantities = []
 
             for usage in usages:
-                date = usage.shipment_item.shipment.date.date()
+                day = usage.shipment_item.shipment.date.date()
                 quantity = float(usage.quantity)
                 
-                if date not in daily_usage:
-                    daily_usage[date] = 0
-                daily_usage[date] += quantity
+                if day not in daily_usage:
+                    daily_usage[day] = 0
+                daily_usage[day] += quantity
                 total_quantity += quantity
-                all_quantities.append(daily_usage[date])
+                all_quantities.append(daily_usage[day])
 
             # Определяем период
             dates = sorted(daily_usage.keys())
             if not dates:
-                # Нет данных за последний год
+                # Нет данных за период
                 return {
                     "value": self._calculate_average_from_orders(),
-                    "details": "Нет данных об использовании материала за последний год"
+                    "details": f"Нет данных об использовании материала за {self.consumption_months} мес"
                 }
                 
             first_date = dates[0]
             last_date = dates[-1]
             
-            # Считаем рабочие дни (пн-сб)
-            working_days = self._calculate_working_days(first_date, last_date)
+            # Считаем рабочие дни (пн-пт)
+            today = timezone.now().date()
+            working_days = self._calculate_working_days(first_date, today)
 
             if working_days == 0:
                 # Период анализа некорректен
@@ -124,13 +141,13 @@ class PurchaseOptimizationCalculator:
             final_avg_daily = yearly_avg_daily
             trend_details = ""
 
-            if ENABLE_TREND_DETECTION:
+            if ENABLE_TREND_DETECTION and self.consumption_months > 3:
                 three_months_ago = timezone.now() - timedelta(days=90)
 
                 # Group usage by month for trend analysis
                 monthly_usage = {}
-                for date, qty in daily_usage.items():
-                    month_key = date.strftime('%Y-%m')
+                for day, qty in daily_usage.items():
+                    month_key = day.strftime('%Y-%m')
                     if month_key not in monthly_usage:
                         monthly_usage[month_key] = 0
                     monthly_usage[month_key] += qty
@@ -167,7 +184,7 @@ class PurchaseOptimizationCalculator:
                         if recent_dates:
                             recent_working_days = self._calculate_working_days(
                                 min(recent_dates.keys()),
-                                max(recent_dates.keys())
+                                today
                             )
                             if recent_working_days > 0:
                                 recent_avg_daily = sum(recent_dates.values()) / recent_working_days
@@ -176,8 +193,8 @@ class PurchaseOptimizationCalculator:
                                 trend_details = f"""
 
                 ⚠️ ВЫЯВЛЕН РОСТ СПРОСА:
-                - Годовое среднее: {yearly_avg_daily:.2f} ед./день ({yearly_avg_daily * 30:.2f} ед./мес)
-                - Среднее за 3 месяца: {recent_avg_daily:.2f} ед./день ({recent_avg_daily * 30:.2f} ед./мес)
+                - Среднее за {self.consumption_months} мес: {yearly_avg_daily:.2f} ед./день ({yearly_avg_daily * self.working_days_per_month:.2f} ед./мес)
+                - Среднее за 3 месяца: {recent_avg_daily:.2f} ед./день ({recent_avg_daily * self.working_days_per_month:.2f} ед./мес)
                 - Коэффициент роста: {growth_ratio:.2f}x
                 - Месяцев выше порога (1.3x): {months_above_threshold} из {len(recent_months)}
 
@@ -201,8 +218,8 @@ class PurchaseOptimizationCalculator:
                 "details": f"""
                 Расчет общего среднего потребления:
 
-                Период анализа: {first_date.strftime('%d.%m.%Y')} - {last_date.strftime('%d.%m.%Y')}
-                Всего рабочих дней (пн-сб): {working_days}
+                Период анализа: {first_date.strftime('%d.%m.%Y')} - {today.strftime('%d.%m.%Y')}
+                Всего рабочих дней (пн-пт): {working_days}
                 Дней с использованием: {len(daily_usage)}
                 Всего использовано: {total_quantity:.2f} ед.
 
@@ -224,43 +241,33 @@ class PurchaseOptimizationCalculator:
             }
 
     def _calculate_working_days(self, start_date, end_date):
-        """Расчет рабочих дней с учетом 6-дневной рабочей недели и праздников"""
-        HOLIDAYS_2025 = {  # Праздничные дни РФ на 2025 год
-            (1, 1), (1, 2), (1, 3), (1, 4), (1, 5), (1, 6), (1, 7), (1, 8),
-            (2, 23), (3, 8), (5, 1), (5, 9), (6, 12), (11, 4)
-        }
-        
+        """Расчет рабочих дней с учетом 5-дневной рабочей недели и праздников"""
         working_days = 0
         current_date = start_date
         while current_date <= end_date:
-            # Проверяем является ли день рабочим (пн-сб)
-            if current_date.weekday() < 6:  # 0-5 это пн-сб
-                # Проверяем не является ли день праздником
-                if (current_date.month, current_date.day) not in HOLIDAYS_2025:
-                    working_days += 1
+            if current_date.weekday() < 5 and current_date not in _ru_holidays(current_date.year):
+                working_days += 1
             current_date += timedelta(days=1)
         
         return working_days
     def _get_no_data_reason(self):
         """Определение причины отсутствия данных"""
-        one_year_ago = timezone.now() - timedelta(days=365)
-        
-        orders = get_material_order_history(self.material_id)
+        orders = get_material_order_history(self.material_id, months=self.consumption_months)
         if not orders:
             # Проверяем историческое использование
             usage_exists = RawMaterialUsage.objects.filter(
                 raw_material_id=self.material_id,
-                shipment_item__shipment__date__gte=one_year_ago
+                shipment_item__shipment__date__gte=self.consumption_since
             ).exists()
             
             if usage_exists:
                 return """
                 Материал используется в производстве (среднее {:.2f} ед. в день),
-                но нет заказов за последний год.
+                но нет заказов за выбранный период.
                 Рекомендуется проверить источники поставок.
                 """.format(self.calculate_total_material_consumption()["value"])
             
-            return "Нет данных о заказах и использовании материала за последний год"
+            return "Нет данных о заказах и использовании материала за выбранный период"
         
         return "Нет данных об использовании материала в производстве при наличии заказов"
     
@@ -273,11 +280,11 @@ class PurchaseOptimizationCalculator:
         oldest_order = min(self.orders, key=lambda x: datetime.fromisoformat(x.date))
         newest_order = max(self.orders, key=lambda x: datetime.fromisoformat(x.date))
         
-        days_between = (datetime.fromisoformat(newest_order.date) - datetime.fromisoformat(oldest_order.date)).days + 1
-        if days_between < 1:
-            days_between = 1
-            
-        return total_ordered / days_between
+        working_days = self._calculate_working_days(
+            datetime.fromisoformat(oldest_order.date).date(),
+            datetime.fromisoformat(newest_order.date).date()
+        )
+        return total_ordered / max(working_days, 1)
     
     def calculate_supplier_orders(self, supplier_name: str) -> List[OrderHistory]:
         """Получение заказов для конкретного поставщика"""
@@ -315,10 +322,22 @@ class PurchaseOptimizationCalculator:
             return {
                 "avg": 0,
                 "stddev": 0,
+                "min": 0,
+                "max": 0,
+                "received": 0,
                 "details": "Нет данных о заказах"
             }
             
-        lead_times = [order.lead_time for order in self.orders]
+        lead_times = [order.lead_time for order in self.orders if order.lead_time is not None]
+        if not lead_times:
+            return {
+                "avg": 0,
+                "stddev": 0,
+                "min": 0,
+                "max": 0,
+                "received": 0,
+                "details": "Нет принятых поставок"
+            }
         avg_lead_time = sum(lead_times) / len(lead_times)
         
         squared_diff_sum = sum(
@@ -331,6 +350,9 @@ class PurchaseOptimizationCalculator:
         return {
             "avg": avg_lead_time,
             "stddev": lead_time_stddev,
+            "min": min(lead_times),
+            "max": max(lead_times),
+            "received": len(lead_times),
             "details": f"""
             Расчет параметров времени поставки:
             Среднее время поставки = {avg_lead_time:.2f} дней
@@ -339,29 +361,28 @@ class PurchaseOptimizationCalculator:
             """
         }
 
+    def _calendar_daily_consumption(self) -> float:
+        return self.total_consumption["value"] * self.working_days_per_year / self.calendar_days_per_year
+
     def calculate_reorder_point(self) -> Dict:
         """Расчет точки заказа"""
         daily_consumption = self.total_consumption 
+        calendar_daily = self._calendar_daily_consumption()
         lead_time_stats = self.calculate_lead_time_stats()
         
         # Базовая точка заказа - запас на время поставки
         avg_lead_time = lead_time_stats["avg"]
-        base_rop = daily_consumption["value"] * avg_lead_time
+        base_rop = calendar_daily * avg_lead_time
         
-        # Страховой запас зависит от поставщика
-        supplier_orders = [order.quantity for order in self.orders]
-        avg_order_size = sum(supplier_orders) / len(supplier_orders) if supplier_orders else 0
-        
-        # Увеличиваем страховой запас с учетом вариации времени поставки
-        safety_stock = max(
-            avg_order_size,  # Минимум средний заказ
-            daily_consumption["value"] * lead_time_stats["stddev"]  # Запас на вариацию lead time
-        )
+        spread_stock = calendar_daily * lead_time_stats["stddev"]
+        min_stock = daily_consumption["value"] * MIN_SAFETY_STOCK_WORKING_DAYS
+        safety_stock = max(spread_stock, min_stock)
         
         reorder_point = base_rop + safety_stock
         
         return {
             "value": reorder_point,
+            "safety_stock": safety_stock,
             "details": f"""
             РАСЧЕТ СРЕДНЕГО ПОТРЕБЛЕНИЯ:
             {daily_consumption['details']}
@@ -372,12 +393,13 @@ class PurchaseOptimizationCalculator:
             РАСЧЕТ ТОЧКИ ЗАКАЗА (когда нужно делать новый заказ):
             
             1. Базовый запас на время поставки:
-            Общее среднее потребление в день ({daily_consumption["value"]:.2f}) × 
-            Среднее время поставки ({avg_lead_time:.1f} дн) = {base_rop:.2f}
+            Общее среднее потребление в день ({daily_consumption["value"]:.2f}),
+            в пересчёте на календарный день: {calendar_daily:.2f}
+            × Среднее время поставки ({avg_lead_time:.1f} дн) = {base_rop:.2f}
             
             2. Страховой запас (больший из):
-            - Средний объем заказа у поставщика: {avg_order_size:.2f}
-            - Запас на вариацию сроков поставки: {daily_consumption["value"] * lead_time_stats["stddev"]:.2f}
+            - На разброс сроков поставки: {calendar_daily:.2f} × {lead_time_stats["stddev"]:.1f} дн = {spread_stock:.2f}
+            - Неделя расхода: {daily_consumption["value"]:.2f} × {MIN_SAFETY_STOCK_WORKING_DAYS} раб. дн = {min_stock:.2f}
             Выбрано: {safety_stock:.2f}
             
             Итоговая точка заказа = {base_rop:.2f} + {safety_stock:.2f} = {reorder_point:.2f}
@@ -394,10 +416,7 @@ class PurchaseOptimizationCalculator:
         daily_consumption = self.total_consumption["value"]
         
         # Рассчитываем годовой спрос на основе рабочих дней
-        working_days_per_year = self._calculate_working_days(
-            timezone.now().replace(month=1, day=1),
-            timezone.now().replace(month=12, day=31)
-        )
+        working_days_per_year = self.working_days_per_year
         annual_demand = daily_consumption * working_days_per_year
         
         # Расчет средней цены единицы товара
@@ -439,39 +458,6 @@ class PurchaseOptimizationCalculator:
             EOQ = {eoq:.2f}
             """
         }
-    def calculate_safety_stock(self) -> Dict:
-        """Расчет страхового запаса"""
-        try:
-            daily_consumption = Decimal(str(self.total_consumption["value"]))
-            lead_time_stats = self.calculate_lead_time_stats()
-            
-            # Используем только стандартное отклонение времени поставки
-            stddev = Decimal(str(lead_time_stats["stddev"]))
-            
-            # Расчет страхового запаса
-            safety_stock = daily_consumption * stddev
-                
-            return {
-                "value": safety_stock,
-                "details": f"""
-                Расчет страхового запаса:
-                
-                1. Базовые параметры:
-                • Среднее потребление в день: {float(daily_consumption):.2f}
-                • Стандартное отклонение времени поставки: {float(stddev):.2f}
-                
-                2. Формула расчета:
-                Страховой запас = Дневное потребление × Стандартное отклонение времени поставки
-                
-                3. Расчет:
-                {float(daily_consumption):.2f} × {float(stddev):.2f} = {float(safety_stock):.2f}
-                """
-            }
-                
-        except Exception as e:
-            logger.error(f"Error calculating safety stock: {str(e)}")
-            return {"value": 0, "details": "Ошибка расчета страхового запаса"}
-    
     def calculate_periodic_orders(self) -> Dict:
         """Расчет заказов для разных периодов"""
         try:
@@ -479,75 +465,36 @@ class PurchaseOptimizationCalculator:
                 logger.debug("No orders found in calculate_periodic_orders")
                 return {"error": "Нет данных о заказах"}
 
-            # Преобразуем все входные данные в Decimal
-            daily_consumption = Decimal(str(self.total_consumption["value"]))
-            monthly_consumption = daily_consumption * Decimal('30')
-            quarterly_consumption = monthly_consumption * Decimal('3')
+            daily_consumption = self.total_consumption["value"]
+            working_days_per_month = self.working_days_per_month
+            monthly_consumption = daily_consumption * working_days_per_month
+            quarterly_consumption = monthly_consumption * 3
 
-            lead_time_stats = self.calculate_lead_time_stats()
-            avg_lead_time = Decimal(str(lead_time_stats["avg"]))
-            
-            # Получаем базовый страховой запас
-            safety_stock = self.calculate_safety_stock()
-            base_safety_stock = Decimal(str(safety_stock["value"]))
-            
-            # Для ежемесячных заказов
             monthly_order = {
-                "order_size": float(monthly_consumption),  # Преобразуем обратно в float для JSON
-                "safety_stock": float(base_safety_stock),
-                "total_size": float(monthly_consumption + base_safety_stock),
+                "order_size": monthly_consumption,
                 "frequency": "Ежемесячно",
                 "details": f"""
                 РАСЧЕТ РАЗМЕРА ЕЖЕМЕСЯЧНОГО ЗАКАЗА:
 
-                1. Базовое потребление:
-                • Среднее потребление в день: {float(daily_consumption):.2f} ед.
-                • Количество дней в месяце: 30 дней
-                • Месячное потребление: {float(monthly_consumption):.2f} ед.
+                • Среднее потребление в рабочий день: {daily_consumption:.2f} ед.
+                • Рабочих дней в месяце (пн-пт, в среднем за год): {working_days_per_month:.1f}
+                • Месячное потребление: {monthly_consumption:.2f} ед.
 
-                2. Страховой запас: {float(base_safety_stock):.2f} ед.
-                Рассчитан с учетом:
-                • Среднего времени поставки: {float(avg_lead_time):.1f} дней
-                • Вариации в сроках поставок
-                • Вариации в ежедневном потреблении
-                
-                3. Итоговый размер заказа:
-                • Месячное потребление: {float(monthly_consumption):.2f} ед.
-                • Страховой запас: {float(base_safety_stock):.2f} ед.
-                • ИТОГО: {float(monthly_consumption + base_safety_stock):.2f} ед.
+                Страховой запас сюда не входит: он заложен в точку заказа и докупается один раз.
                 """
             }
 
-            # Для квартальных заказов увеличиваем страховой запас на 50%
-            quarterly_safety_stock = base_safety_stock * Decimal('1.5')
-            
             quarterly_order = {
-                "order_size": float(quarterly_consumption),
-                "safety_stock": float(quarterly_safety_stock),
-                "total_size": float(quarterly_consumption + quarterly_safety_stock),
+                "order_size": quarterly_consumption,
                 "frequency": "Ежеквартально",
                 "details": f"""
                 РАСЧЕТ РАЗМЕРА КВАРТАЛЬНОГО ЗАКАЗА:
 
-                1. Базовое потребление:
-                • Месячное потребление: {float(monthly_consumption):.2f} ед.
+                • Месячное потребление: {monthly_consumption:.2f} ед.
                 • Количество месяцев: 3
-                • Квартальное потребление: {float(quarterly_consumption):.2f} ед.
-                
-                2. Увеличенный страховой запас:
-                • Базовый страховой запас: {float(base_safety_stock):.2f} ед.
-                • Коэффициент увеличения: 1.5 (на 50% больше)
-                • Увеличенный страховой запас: {float(quarterly_safety_stock):.2f} ед.
-                
-                Страховой запас увеличен из-за:
-                - Большего периода между поставками
-                - Большего риска задержек
-                - Большей неопределенности в потреблении
-                
-                3. Итоговый размер заказа:
-                • Квартальное потребление: {float(quarterly_consumption):.2f} ед.
-                • Увеличенный страховой запас: {float(quarterly_safety_stock):.2f} ед.
-                • ИТОГО: {float(quarterly_consumption + quarterly_safety_stock):.2f} ед.
+                • Квартальное потребление: {quarterly_consumption:.2f} ед.
+
+                Страховой запас сюда не входит: он заложен в точку заказа и докупается один раз.
                 """
             }
 
@@ -602,15 +549,11 @@ class PurchaseOptimizationCalculator:
             return {
                 "frequent_orders": {
                     "order_size": 0,
-                    "safety_stock": 0,
-                    "total_size": 0,
                     "frequency": "Ежемесячно",
                     "details": "Ошибка расчета"
                 },
                 "quarterly_orders": {
                     "order_size": 0,
-                    "safety_stock": 0,
-                    "total_size": 0,
                     "frequency": "Ежеквартально",
                     "details": "Ошибка расчета"
                 },
@@ -648,6 +591,7 @@ class PurchaseOptimizationCalculator:
                 "yearly_avg": consumption_data.get('yearly_avg'),
                 "recent_avg": consumption_data.get('recent_avg'),
                 "growth_ratio": consumption_data.get('growth_ratio'),
+                "working_days_per_month": self.working_days_per_month,
             }
 
             return {
@@ -657,23 +601,8 @@ class PurchaseOptimizationCalculator:
                 "lead_time": lead_time_stats,
                 "periodic_orders": periodic_orders,
                 "safety_stock": {
-                    "value": reorder_point["value"] - (
-                        self.total_consumption["value"] * 
-                        lead_time_stats["avg"]
-                    ),
-                    "details": f"""
-                    Расчет страхового запаса:
-                    1. Базовые значения:
-                    • Точка заказа: {reorder_point["value"]:.2f}
-                    • Общее среднее потребление в день: {consumption_data["value"]:.2f}
-                    • Среднее время поставки: {lead_time_stats["avg"]:.1f} дней
-                    
-                    2. Формула расчета:
-                    Страховой запас = Точка заказа - (Среднее потребление × Среднее время поставки)
-                    
-                    3. Расчет:
-                    {reorder_point["value"]:.2f} - ({consumption_data["value"]:.2f} × {lead_time_stats["avg"]:.1f}) = {reorder_point["value"] - (consumption_data["value"] * lead_time_stats["avg"]):.2f}
-                    """
+                    "value": reorder_point["safety_stock"],
+                    "details": "Больший из двух: запас на разброс сроков поставки или неделя расхода. Расчёт в блоке «Точка заказа»."
                 }
             }
         except Exception as e:
@@ -705,8 +634,9 @@ def get_material_order_history(material_id: int, months: int = 12) -> List[Order
             continue
             
         # Рассчитываем lead time
-        lead_time = 0
+        lead_time = None
         if order.supplies.exists():
+            lead_time = 0
             first_supply = order.supplies.order_by('date').first()
             if first_supply and first_supply.date > order.date:
                 lead_time = (first_supply.date - order.date).days

@@ -76,8 +76,7 @@ urlpatterns = [
     path('analysis/purchase/', views.purchase_analysis_overview, name='purchase_analysis_overview'),
     path('analysis/purchase/material/<int:material_id>/', views.material_purchase_analysis, name='material_purchase_analysis'),
     path('analysis/purchase/related/<int:material_id>/', views.related_materials_analysis, name='related_materials_analysis'),
-    path('analysis/purchase/optimize/<int:material_id>/', views.optimize_purchase_points, name='optimize_purchase_points'),
-    path('materials/<int:material_id>/period/', views.update_material_period, name='update_material_period'),
+    path('analysis/purchase/material/<int:material_id>/period/', views.update_material_period, name='update_material_period'),
 
     path('analysis/fbo/', fbo.get_fbo_analysis, name='fbo_analysis'),
     path('analysis/fbo/export/', fbo.export_fbo_excel, name='fbo_export'),

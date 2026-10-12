@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import PropTypes from 'prop-types';
-import { Notice, StatCard, StatGrid } from '../../ui';
-import { materialsApi } from '../../../api/materialsApi';
+import { Hint, Notice, StatCard, StatGrid } from '../../ui';
+import { analysisApi } from '../../../api/analysisApi';
 
 
 const selectStyle = {
@@ -29,14 +29,15 @@ const QuickInsightsCard = ({ analysisData, material, onPeriodChange }) => {
     const reorderPoint = calculations?.reorder_point?.value || 0;
     const optimalOrder = calculations?.optimal_order_quantity?.value || 0;
     const periodicOrders = calculations?.periodic_orders || {};
-    const monthlyOrder = periodicOrders?.frequent_orders?.total_size || 0;
-    const quarterlyOrder = periodicOrders?.quarterly_orders?.total_size || 0;
+    const monthlyOrder = periodicOrders?.frequent_orders?.order_size || 0;
+    const quarterlyOrder = periodicOrders?.quarterly_orders?.order_size || 0;
 
     const basicCalcs = calculations?.basic_calculations || {};
     const trendDetected = basicCalcs?.trend_detected || false;
     const yearlyAvg = basicCalcs?.yearly_avg || 0;
     const recentAvg = basicCalcs?.recent_avg || 0;
     const growthRatio = basicCalcs?.growth_ratio || 0;
+    const workingDaysPerMonth = basicCalcs?.working_days_per_month || 0;
 
     const showNotice = (type, text) => {
         setNotice({ type, text });
@@ -46,7 +47,7 @@ const QuickInsightsCard = ({ analysisData, material, onPeriodChange }) => {
     const patchPeriod = async (value) => {
         setSaving(true);
         try {
-            const data = await materialsApi.patchPeriod(material.id, value);
+            const data = await analysisApi.purchase.patchPeriod(material.id, value);
             if (data.status === 'success') { showNotice('success', value ? 'Период сохранён' : 'Сброшено к 12 мес'); onPeriodChange?.(); }
             else showNotice('error', data.message || 'Ошибка');
         } catch { showNotice('error', 'Ошибка сохранения'); }
@@ -58,7 +59,7 @@ const QuickInsightsCard = ({ analysisData, material, onPeriodChange }) => {
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '12px' }}>
                 <h2 style={{ fontFamily: 'var(--serif)', fontSize: '22px', fontWeight: 400, letterSpacing: '-0.02em', color: 'var(--ink)', margin: 0 }}>Ключевые показатели</h2>
                 <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                    <span style={{ fontFamily: 'var(--sans)', fontSize: '13px', color: 'var(--muted)' }}>Период расчёта:</span>
+                    <span style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', fontFamily: 'var(--sans)', fontSize: '13px', color: 'var(--muted)' }}>Период расчёта <Hint text="За какой срок брать расход и сроки поставок. Выбор личный: у коллег остаётся их период." />:</span>
                     <select
                         value={periodMonths}
                         onChange={e => patchPeriod(Number(e.target.value))}
@@ -84,9 +85,9 @@ const QuickInsightsCard = ({ analysisData, material, onPeriodChange }) => {
             {trendDetected && (
                 <div style={{ padding: '10px 14px', backgroundColor: 'var(--accent-bg)', border: '1px solid var(--accent-border)', borderRadius: '8px', fontFamily: 'var(--sans)', fontSize: '13px', color: 'var(--primary)' }}>
                     Рост спроса{growthRatio ? ` (${growthRatio.toFixed(1)}×)` : ''} — расчёт по последним 3 месяцам
-                    {yearlyAvg > 0 && recentAvg > 0 && (
+                    {yearlyAvg > 0 && recentAvg > 0 && workingDaysPerMonth > 0 && (
                         <span style={{ color: 'var(--muted)', marginLeft: 8 }}>
-                            Год: {(yearlyAvg * 30).toFixed(0)} {material.uom}/мес → Сейчас: {(recentAvg * 30).toFixed(0)} {material.uom}/мес
+                            За {periodMonths} мес: {(yearlyAvg * workingDaysPerMonth).toFixed(0)} {material.uom}/мес → Сейчас: {(recentAvg * workingDaysPerMonth).toFixed(0)} {material.uom}/мес
                         </span>
                     )}
                 </div>
@@ -108,12 +109,12 @@ const QuickInsightsCard = ({ analysisData, material, onPeriodChange }) => {
             )}
 
             <StatGrid>
-                <StatCard tone="dark" title="Потребление в день" value={dailyConsumption} suffix={material.uom} />
-                <StatCard tone="dark" title="Среднее время поставки" value={leadTime.avg || 0} suffix="дней" note={`мин ${leadTime.min || 0} · макс ${leadTime.max || 0}`} />
-                <StatCard tone="dark" title="Точка заказа" value={reorderPoint} suffix={material.uom} note="Сделайте заказ при этом остатке" />
-                <StatCard tone="dark" title="Оптимальный размер (EOQ)" value={optimalOrder} suffix={material.uom} note="Справочно" />
-                <StatCard tone="dark" title="Ежемесячный заказ" value={monthlyOrder} suffix={material.uom} note="Минимум на 30 дней" />
-                <StatCard tone="dark" title="Квартальный заказ" value={quarterlyOrder} suffix={material.uom} note="Минимум на 90 дней" />
+                <StatCard tone="dark" title="Потребление в рабочий день" value={dailyConsumption} suffix={material.uom} note={trendDetected ? 'Пн–пт, за 3 мес' : `Пн–пт, среднее за ${periodMonths} мес`} hint="Сколько уходит в производство за рабочий день: отгрузки товаров × нормы из техкарт, без суббот, воскресений и праздников." />
+                <StatCard tone="dark" title="Среднее время поставки" value={leadTime.received ? leadTime.avg : '—'} suffix={leadTime.received ? 'дней' : undefined} note={leadTime.received ? `мин ${leadTime.min} · макс ${leadTime.max}` : 'Нет принятых поставок'} hint="Календарных дней от заказа поставщику до приёмки. Учитываются только принятые заказы за период." />
+                <StatCard tone="dark" title="Точка заказа" value={reorderPoint} suffix={material.uom} note="Запас на доставку + страховой" hint="Остаток, при котором пора заказывать: расход за среднее время поставки плюс страховой запас на случай задержки (не меньше недели расхода)." />
+                <StatCard tone="dark" title="Оптимальный размер (EOQ)" value={optimalOrder} suffix={material.uom} note="Справочно" hint="Партия, при которой суммарные затраты на заказы и хранение минимальны. Ориентир, а не правило." />
+                <StatCard tone="dark" title="Ежемесячный заказ" value={monthlyOrder} suffix={material.uom} note="Расход за месяц" hint="Потребление в рабочий день × среднее число рабочих дней в месяце. Страховой запас сюда не входит, он заложен в точку заказа." />
+                <StatCard tone="dark" title="Квартальный заказ" value={quarterlyOrder} suffix={material.uom} note="Расход за квартал" hint="Месячный расход × 3. Страховой запас сюда не входит, он заложен в точку заказа." />
             </StatGrid>
         </div>
     );

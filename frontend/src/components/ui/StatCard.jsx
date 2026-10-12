@@ -1,5 +1,6 @@
 import PropTypes from 'prop-types';
 import AnimatedNumber from './motion/AnimatedNumber';
+import Hint from './Hint';
 
 /**
  * Карточка показателя: подпись капслоком, крупное значение засечным,
@@ -18,6 +19,7 @@ import AnimatedNumber from './motion/AnimatedNumber';
  * - `icon` ставится перед подписью;
  * - `suffix` — единица измерения рядом со значением, набирается мельче;
  * - `note` — пояснение под значением;
+ * - `hint`: подсказка по наведению на значок рядом с подписью;
  * - числовое `value` докручивается анимацией, строковое выводится как есть.
  */
 export default function StatCard({
@@ -26,6 +28,7 @@ export default function StatCard({
     size = 23,
     format,
     note,
+    hint,
     suffix,
     icon: Icon,
     tone = 'card',
@@ -38,6 +41,7 @@ export default function StatCard({
             <div className="ui-stat__title">
                 {Icon && <Icon size={12} aria-hidden="true" />}
                 {title}
+                {hint && <Hint text={hint} />}
             </div>
 
             <div className="ui-stat__value" style={{ fontSize: size, color: accent }}>
@@ -58,6 +62,7 @@ StatCard.propTypes = {
     size: PropTypes.number,
     format: PropTypes.func,
     note: PropTypes.node,
+    hint: PropTypes.string,
     suffix: PropTypes.node,
     icon: PropTypes.elementType,
     tone: PropTypes.oneOf(['card', 'dark', 'plain']),

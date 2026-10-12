@@ -37,5 +37,8 @@ export const analysisApi = {
     purchase: {
         getMaterial: (materialId, signal) =>
             api.get(`/analysis/purchase/material/${materialId}/`, { signal }),
+
+        patchPeriod: (materialId, periodMonths) =>
+            api.patch(`/analysis/purchase/material/${materialId}/period/`, { period_months: periodMonths }),
     },
 };

@@ -10,6 +10,8 @@ from unittest.mock import patch, MagicMock
 from django.core.cache import cache
 from django.test import TestCase, Client
 from django.contrib.auth.models import User
+
+from api.models import MaterialPeriodPreference
 from django.utils import timezone
 
 from core.models import (
@@ -566,7 +568,7 @@ class MaterialPeriodTests(BaseViewTestCase):
     def test_update_material_period_success(self):
         """Test PATCH /api/materials/<id>/period/ endpoint."""
         response = self.client.patch(
-            f'/api/materials/{self.material.id}/period/',
+            f'/api/analysis/purchase/material/{self.material.id}/period/',
             data=json.dumps({'period_months': 3}),
             content_type='application/json'
         )
@@ -577,19 +579,46 @@ class MaterialPeriodTests(BaseViewTestCase):
         self.assertEqual(data['data']['period_months'], 3)
         self.assertTrue(data['data']['period_is_custom'])
 
-        # Verify in database
-        self.material.refresh_from_db()
-        self.assertEqual(self.material.lead_time_period_months, 3)
+        preference = MaterialPeriodPreference.objects.get(user=self.user, raw_material=self.material)
+        self.assertEqual(preference.period_months, 3)
+
+    def test_material_period_is_personal(self):
+        self.client.patch(
+            f'/api/analysis/purchase/material/{self.material.id}/period/',
+            data=json.dumps({'period_months': 3}),
+            content_type='application/json'
+        )
+        from api.access import grant_all_assignable_pages
+        other = User.objects.create_user(username='colleague', password='testpass123')
+        grant_all_assignable_pages(other)
+        self.client.login(username='colleague', password='testpass123')
+
+        response = self.client.get(f'/api/analysis/purchase/material/{self.material.id}/')
+
+        self.assertEqual(response.data['data']['period_months'], 12)
+        self.assertFalse(response.data['data']['period_is_custom'])
+
+    def test_purchases_page_alone_is_enough_to_save_period(self):
+        from api.models import UserPageAccess
+        buyer = User.objects.create_user(username='buyer', password='testpass123')
+        UserPageAccess.objects.create(user=buyer, page_key='purchases')
+        self.client.login(username='buyer', password='testpass123')
+
+        response = self.client.patch(
+            f'/api/analysis/purchase/material/{self.material.id}/period/',
+            data=json.dumps({'period_months': 6}),
+            content_type='application/json'
+        )
+
+        self.assertEqual(response.status_code, 200)
 
     def test_update_material_period_reset(self):
         """Test resetting period to default."""
-        # First set a custom period
-        self.material.lead_time_period_months = 6
-        self.material.save()
+        MaterialPeriodPreference.objects.create(user=self.user, raw_material=self.material, period_months=6)
 
         # Reset to default
         response = self.client.patch(
-            f'/api/materials/{self.material.id}/period/',
+            f'/api/analysis/purchase/material/{self.material.id}/period/',
             data=json.dumps({'period_months': None}),
             content_type='application/json'
         )
@@ -600,14 +629,12 @@ class MaterialPeriodTests(BaseViewTestCase):
         self.assertEqual(data['data']['period_months'], 12)  # Default
         self.assertFalse(data['data']['period_is_custom'])
 
-        # Verify in database
-        self.material.refresh_from_db()
-        self.assertIsNone(self.material.lead_time_period_months)
+        self.assertFalse(MaterialPeriodPreference.objects.filter(user=self.user, raw_material=self.material).exists())
 
     def test_update_material_period_not_found(self):
         """Test updating non-existent material."""
         response = self.client.patch(
-            '/api/materials/99999/period/',
+            '/api/analysis/purchase/material/99999/period/',
             data=json.dumps({'period_months': 3}),
             content_type='application/json'
         )
@@ -616,14 +643,14 @@ class MaterialPeriodTests(BaseViewTestCase):
     def test_update_material_period_invalid_value(self):
         """Test with invalid period value."""
         response = self.client.patch(
-            f'/api/materials/{self.material.id}/period/',
+            f'/api/analysis/purchase/material/{self.material.id}/period/',
             data=json.dumps({'period_months': 0}),
             content_type='application/json'
         )
         self.assertEqual(response.status_code, 400)
 
         response = self.client.patch(
-            f'/api/materials/{self.material.id}/period/',
+            f'/api/analysis/purchase/material/{self.material.id}/period/',
             data=json.dumps({'period_months': 25}),
             content_type='application/json'
         )
@@ -633,7 +660,7 @@ class MaterialPeriodTests(BaseViewTestCase):
         """Test all valid period values."""
         for period in [3, 6, 12]:
             response = self.client.patch(
-                f'/api/materials/{self.material.id}/period/',
+                f'/api/analysis/purchase/material/{self.material.id}/period/',
                 data=json.dumps({'period_months': period}),
                 content_type='application/json'
             )

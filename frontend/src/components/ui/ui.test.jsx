@@ -5,7 +5,7 @@ import { MotionProvider } from './motion';
 import {
     Badge, Button, Card, CloseButton, DataTable, Disclosure, EmptyState, ErrorState,
     IconButton, MultiSelect, Notice, Page, PageHeader, Pagination, SearchInput,
-    StatGrid, Toolbar,
+    StatCard, StatGrid, Toolbar,
 } from './index';
 
 const withProvider = (ui) => render(<MotionProvider>{ui}</MotionProvider>);
@@ -325,5 +325,16 @@ describe('состояния и обёртки', () => {
         expect(document.querySelector('.ui-page')).not.toBeNull();
         expect(document.querySelector('.ui-toolbar')).not.toBeNull();
         expect(screen.getByText('Сводка')).toHaveClass('ui-card__title');
+    });
+});
+
+describe('StatCard', () => {
+    it('показывает подсказку по наведению на значок', async () => {
+        withProvider(<StatCard title="Точка заказа" value="100" hint="Когда пора заказывать" />);
+
+        expect(screen.queryByRole('tooltip')).toBeNull();
+        await userEvent.hover(screen.getByLabelText('Когда пора заказывать'));
+
+        expect(screen.getByRole('tooltip')).toHaveTextContent('Когда пора заказывать');
     });
 });

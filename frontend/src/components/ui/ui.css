@@ -711,6 +711,17 @@
     margin-bottom: 7px;
 }
 
+.ui-hint {
+    cursor: help;
+    opacity: 0.7;
+    transition: opacity 120ms ease;
+}
+
+.ui-hint:hover,
+.ui-hint:focus-visible {
+    opacity: 1;
+}
+
 .ui-stat--dark .ui-stat__title {
     color: var(--on-dark-soft);
 }

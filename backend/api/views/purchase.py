@@ -10,10 +10,10 @@ from core.models import (
     RawMaterial,
     PurchaseOrder,
     PurchaseOrderItem,
-    RawMaterialUsage,
     SupplyItem,
     Supply
 )
+from api.models import MaterialPeriodPreference
 from forecasting.services.analysis.optimized_purchase_analyzer import OptimizedPurchaseAnalyzer
 from api.exceptions import APIException, NotFoundError, DataProcessingError, ValidationError
 from api.utils import to_float_safe as safe_float, get_period_dates
@@ -180,8 +180,9 @@ def material_purchase_analysis(request, material_id):
            raise NotFoundError("Материал не найден")
 
        # Получить период для материала (или 12 по умолчанию)
-       period_months = material.lead_time_period_months or 12
-       period_is_custom = material.lead_time_period_months is not None
+       preference = MaterialPeriodPreference.objects.filter(user=request.user, raw_material=material).first()
+       period_months = preference.period_months if preference else 12
+       period_is_custom = preference is not None
 
        # Создаем анализатор и получаем статистику поставщиков
        analyzer = OptimizedPurchaseAnalyzer()
@@ -200,12 +201,12 @@ def material_purchase_analysis(request, material_id):
        orders_count = len(all_orders)
 
        # Делаем общий расчет без учета поставщиков
-       general_calculator = PurchaseOptimizationCalculator(all_orders, material_id)
+       general_calculator = PurchaseOptimizationCalculator(all_orders, material_id, consumption_months=period_months)
        general_calculations = general_calculator.get_full_recommendations()
 
        # Получаем оптимизацию и рекомендации для каждого поставщика
        try:
-           optimization = analyzer.get_purchase_optimization(material_id)
+           optimization = analyzer.get_purchase_optimization(material_id, months=period_months)
            if 'error' in optimization:
                return Response({
                    'status': 'error',
@@ -224,21 +225,6 @@ def material_purchase_analysis(request, material_id):
            }
 
        recommendations = optimization.get('recommendations', [])
-
-       # Для каждого поставщика делаем отдельные расчеты
-       for recommendation in recommendations:
-           supplier_name = recommendation['supplier_name']
-           supplier_orders = [order for order in all_orders if order.supplier_name == supplier_name]
-           
-           if supplier_orders:
-               try:
-                   calculator = PurchaseOptimizationCalculator(supplier_orders, material_id)
-                   recommendation['detailed_calculations'] = calculator.get_full_recommendations()
-               except Exception as e:
-                   logger.error(f"Error calculating details for supplier {supplier_name}: {str(e)}")
-                   recommendation['detailed_calculations'] = general_calculations
-           else:
-               recommendation['detailed_calculations'] = general_calculations
 
        # Получаем связанные материалы
        related_materials = analyzer.find_related_materials(material_id)
@@ -365,7 +351,7 @@ def related_materials_analysis(request, material_id):
 
 @api_view(['PATCH'])
 def update_material_period(request, material_id):
-    """Обновить период расчёта времени доставки для материала"""
+    """Сохранить личный период расчёта закупок по материалу"""
     try:
         try:
             material = RawMaterial.objects.get(id=material_id)
@@ -383,8 +369,12 @@ def update_material_period(request, material_id):
             except (ValueError, TypeError):
                 raise ValidationError("Период должен быть целым числом")
 
-        material.lead_time_period_months = period_months
-        material.save(update_fields=['lead_time_period_months'])
+        if period_months is None:
+            MaterialPeriodPreference.objects.filter(user=request.user, raw_material=material).delete()
+        else:
+            MaterialPeriodPreference.objects.update_or_create(
+                user=request.user, raw_material=material, defaults={'period_months': period_months}
+            )
 
         return Response({
             'status': 'success',
@@ -400,106 +390,4 @@ def update_material_period(request, material_id):
     except Exception as e:
         logger.error(f"Error in update_material_period: {str(e)}", exc_info=True)
         raise DataProcessingError("Ошибка обновления периода материала")
-
-
-@api_view(['GET'])
-def optimize_purchase_points(request, material_id):
-    """
-    API endpoint для получения оптимизированных точек заказа материала.
-    """
-    try:
-        # Получаем параметры
-        end_date = request.GET.get('end_date')
-        period_months = int(request.GET.get('period_months', 12))
-        safety_stock_days = int(request.GET.get('safety_stock_days', 14))
-        
-        if end_date:
-            try:
-                end_date = datetime.strptime(end_date, '%Y-%m-%d')
-                end_date = timezone.make_aware(end_date)
-            except ValueError:
-                end_date = timezone.now()
-        else:
-            end_date = timezone.now()
-            
-        start_date = end_date - timedelta(days=period_months * 30)
-        
-        # Создаем анализатор
-        analyzer = OptimizedPurchaseAnalyzer(start_date, end_date)
-        
-        try:
-            material = RawMaterial.objects.get(id=material_id)
-        except RawMaterial.DoesNotExist:
-            raise NotFoundError("Материал не найден")
-
-        # Получаем полную оптимизацию закупок
-        optimization = analyzer.get_purchase_optimization(material_id)
-        
-        # Получаем историю использования для расчета средних значений
-        usage_data = RawMaterialUsage.objects.filter(
-            raw_material_id=material_id,
-            shipment_item__shipment__date__range=(start_date, end_date)
-        ).aggregate(
-            total_usage=Sum('quantity'),
-            total_days=Count('shipment_item__shipment__date', distinct=True)
-        )
-
-        total_usage = float(usage_data['total_usage'] or 0)
-        total_days = usage_data['total_days'] or 1  # Избегаем деления на ноль
-        
-        # Рассчитываем среднее дневное использование
-        avg_daily_usage = total_usage / total_days
-
-        # Формируем рекомендации для каждого поставщика
-        recommendations = []
-        for supplier_id in optimization.get('recommendations', []):
-            safety_stock = avg_daily_usage * safety_stock_days
-            reorder_point = safety_stock * 2  # Условно берем двойной запас как точку заказа
-            optimal_batch = max(reorder_point, 10)  # Минимальная партия 10 единиц
-
-            recommendations.append({
-                'supplier_name': supplier_id.get('supplier_name', ''),
-                'reorder_point': safe_float(reorder_point),
-                'optimal_batch': safe_float(optimal_batch),
-                'safety_stock': safe_float(safety_stock),
-                'lead_time': safe_float(supplier_id.get('lead_time', 5)),
-                'reliability': safe_float(supplier_id.get('reliability', 1.0))
-            })
-
-        # Получаем связанные материалы
-        related_materials = analyzer.find_related_materials(material_id)
-
-        return Response({
-            'status': 'success',
-            'data': {
-                'material': {
-                    'id': material.id,
-                    'name': material.name,
-                    'code': material.code or '',
-                    'group': material.group,
-                    'uom': material.uom_name
-                },
-                'period': {
-                    'start_date': start_date.isoformat(),
-                    'end_date': end_date.isoformat(),
-                    'months': period_months
-                },
-                'parameters': {
-                    'safety_stock_days': safety_stock_days
-                },
-                'usage_statistics': {
-                    'total_usage': total_usage,
-                    'avg_daily': safe_float(avg_daily_usage),
-                    'avg_monthly': safe_float(avg_daily_usage * 30)
-                },
-                'recommendations': recommendations,
-                'related_materials': related_materials
-            }
-        })
-
-    except APIException:
-        raise  # Re-raise API exceptions (NotFoundError, etc.)
-    except Exception as e:
-        logger.error(f"Error in optimize_purchase_points: {str(e)}", exc_info=True)
-        raise DataProcessingError("Ошибка оптимизации точек закупки")
 

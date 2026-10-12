@@ -17,6 +17,7 @@ export { default as Notice } from './Notice';
 export { default as PageHeader } from './PageHeader';
 export { Metric, MetricGrid } from './Metric';
 export { default as StatCard } from './StatCard';
+export { default as Hint } from './Hint';
 export { default as StatGrid } from './StatGrid';
 export { default as SectionLabel } from './SectionLabel';
 export { default as Segmented } from './Segmented';

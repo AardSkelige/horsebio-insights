@@ -15,7 +15,7 @@ from .counterparties import (
 from .products import product_data, product_details, product_filters
 from .purchase import (
     purchase_analysis_overview, material_purchase_analysis,
-    related_materials_analysis, optimize_purchase_points,
+    related_materials_analysis,
     update_material_period
 )
 
@@ -47,7 +47,6 @@ __all__ = [
     'purchase_analysis_overview',
     'material_purchase_analysis',
     'related_materials_analysis',
-    'optimize_purchase_points',
     'update_material_period',
     'cash_flow_report',
     'cash_flow_export',

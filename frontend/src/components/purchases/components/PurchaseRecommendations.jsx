@@ -2,6 +2,7 @@ import { useState, useMemo, useCallback } from 'react';
 import { num, plural } from '../../../utils/formatters';
 import PropTypes from 'prop-types';
 import { ChevronDown, ChevronUp, ChevronRight } from 'lucide-react';
+import { Hint } from '../../ui';
 
 const CollapsibleSection = ({ title, hint, defaultOpen = false, children, badge }) => {
     const [open, setOpen] = useState(defaultOpen);
@@ -48,9 +49,9 @@ const DetailBlock = ({ title, content }) => content ? (
 DetailBlock.propTypes = { title: PropTypes.string.isRequired, content: PropTypes.string };
 
 
-const SummaryPill = ({ label, value, uom, accent, note }) => (
+const SummaryPill = ({ label, value, uom, accent, note, hint }) => (
     <div style={{ backgroundColor: 'var(--surface-soft)', borderRadius: '8px', padding: '12px 14px', display: 'flex', flexDirection: 'column', gap: '4px' }}>
-        <div style={{ fontFamily: 'var(--sans)', fontSize: '11px', fontWeight: 600, letterSpacing: '0.06em', textTransform: 'uppercase', color: accent || 'var(--muted)' }}>{label}</div>
+        <div style={{ fontFamily: 'var(--sans)', fontSize: '11px', fontWeight: 600, letterSpacing: '0.06em', textTransform: 'uppercase', color: accent || 'var(--muted)', display: 'flex', alignItems: 'center', gap: '6px' }}>{label}{hint && <Hint text={hint} />}</div>
         <div style={{ fontFamily: 'var(--serif)', fontSize: '20px', color: 'var(--ink)', lineHeight: 1, fontVariantNumeric: 'lining-nums', fontFeatureSettings: '"lnum" 1' }}>
             {value}
             {uom && value !== '—' && <span style={{ fontFamily: 'var(--sans)', fontSize: '12px', color: 'var(--muted)', marginLeft: '4px' }}>{uom}</span>}
@@ -59,7 +60,7 @@ const SummaryPill = ({ label, value, uom, accent, note }) => (
     </div>
 );
 
-SummaryPill.propTypes = { label: PropTypes.string.isRequired, value: PropTypes.oneOfType([PropTypes.string, PropTypes.number]), uom: PropTypes.string, accent: PropTypes.string, note: PropTypes.string };
+SummaryPill.propTypes = { label: PropTypes.string.isRequired, value: PropTypes.oneOfType([PropTypes.string, PropTypes.number]), uom: PropTypes.string, accent: PropTypes.string, note: PropTypes.string, hint: PropTypes.string };
 
 const DetailedCalculations = ({ details, uom }) => {
     const [showMath, setShowMath] = useState(false);
@@ -71,9 +72,10 @@ const DetailedCalculations = ({ details, uom }) => {
     const optimal = details.optimal_order_quantity?.value || 0;
     const optimalMissing = optimal <= 0;
     const safety = details.safety_stock?.value || 0;
+    const leadReceived = details.lead_time?.received > 0;
     const leadAvg = details.lead_time?.avg || 0;
-    const monthly = details.periodic_orders?.frequent_orders?.total_size || 0;
-    const quarterly = details.periodic_orders?.quarterly_orders?.total_size || 0;
+    const monthly = details.periodic_orders?.frequent_orders?.order_size || 0;
+    const quarterly = details.periodic_orders?.quarterly_orders?.order_size || 0;
 
     return (
         <div style={{ display: 'flex', flexDirection: 'column', gap: '16px', marginTop: '4px' }}>
@@ -85,17 +87,17 @@ const DetailedCalculations = ({ details, uom }) => {
 
             {/* Ключевые числа */}
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(150px, 1fr))', gap: '10px' }}>
-                <SummaryPill label="Точка заказа" value={num(reorder)} uom={uom} accent="var(--primary)" note="когда делать заказ" />
-                <SummaryPill label="Оптимальная партия" value={optimalMissing ? '—' : num(optimal)} uom={uom} note={optimalMissing ? 'нет данных о цене' : 'EOQ'} />
-                <SummaryPill label="Страховой запас" value={num(safety)} uom={uom} note="буфер на задержки" />
-                <SummaryPill label="Срок поставки" value={leadAvg.toFixed(1)} uom="дн." note="в среднем" />
+                <SummaryPill label="Точка заказа" value={num(reorder)} uom={uom} accent="var(--primary)" note="когда делать заказ" hint="Расход за среднее время поставки плюс страховой запас." />
+                <SummaryPill label="Оптимальная партия" value={optimalMissing ? '—' : num(optimal)} uom={uom} note={optimalMissing ? 'нет данных о цене' : 'EOQ'} hint="Партия, при которой суммарные затраты на заказы и хранение минимальны." />
+                <SummaryPill label="Страховой запас" value={num(safety)} uom={uom} note="на задержки, минимум неделя" hint="Больший из двух: расход за разброс сроков поставки или неделя расхода." />
+                <SummaryPill label="Срок поставки" value={leadReceived ? leadAvg.toFixed(1) : '—'} uom="дн." note={leadReceived ? 'в среднем' : 'нет принятых поставок'} hint="Календарных дней от заказа до приёмки, по принятым заказам этого поставщика." />
             </div>
 
             {/* Периодичность */}
             {(monthly > 0 || quarterly > 0) && (
                 <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(150px, 1fr))', gap: '10px' }}>
-                    {monthly > 0 && <SummaryPill label="Ежемесячно" value={num(monthly)} uom={uom} note="партия на 30 дней" />}
-                    {quarterly > 0 && <SummaryPill label="Ежеквартально" value={num(quarterly)} uom={uom} note="партия на 90 дней" />}
+                    {monthly > 0 && <SummaryPill label="Ежемесячно" value={num(monthly)} uom={uom} note="расход за месяц" hint="Без страхового запаса, он заложен в точку заказа." />}
+                    {quarterly > 0 && <SummaryPill label="Ежеквартально" value={num(quarterly)} uom={uom} note="расход за квартал" hint="Без страхового запаса, он заложен в точку заказа." />}
                 </div>
             )}
 

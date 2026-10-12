@@ -334,22 +334,21 @@ class OptimizedPurchaseAnalyzer:
             }
     
     
-    def get_purchase_optimization(self, material_id: int) -> dict:
+    def get_purchase_optimization(self, material_id: int, months: int = 12) -> dict:
         try:
             material = RawMaterial.objects.get(id=material_id)
             
             # Анализ поставщиков
-            supplier_analysis = self.analyze_supplier_performance(material_id)
+            supplier_analysis = self.analyze_supplier_performance(material_id, months=months)
             if 'error' in supplier_analysis:
                 return supplier_analysis
 
             recommendations = []
+            all_orders = get_material_order_history(material_id, months=months)
             
             for supplier_id, stats in supplier_analysis['suppliers'].items():
-                # Получаем заказы только для текущего поставщика
-                supplier_orders = get_material_order_history(material_id)
                 supplier_orders = [
-                    order for order in supplier_orders 
+                    order for order in all_orders
                     if order.supplier_name == stats['supplier_name']
                 ]
                 
@@ -357,7 +356,7 @@ class OptimizedPurchaseAnalyzer:
                     continue
 
                 # Используем PurchaseOptimizationCalculator для расчетов
-                calculator = PurchaseOptimizationCalculator(supplier_orders, material_id)
+                calculator = PurchaseOptimizationCalculator(supplier_orders, material_id, consumption_months=months)
                 detailed_calcs = calculator.get_full_recommendations()
 
                 # get_full_recommendations возвращает {} при внутренней ошибке расчёта.
