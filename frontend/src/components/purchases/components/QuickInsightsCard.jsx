@@ -112,12 +112,12 @@ const QuickInsightsCard = ({ analysisData, material, onPeriodChange }) => {
 
             <div className="purchase-kpis">
                 <StatGrid>
-                    <StatCard tone="dark" title="Расход в день" value={dailyConsumption} format={num} suffix={material.uom} note={trendDetected ? 'Пн–пт, за 3 мес' : `Пн–пт, среднее за ${periodMonths} мес`} hint="Сколько уходит в производство за рабочий день: отгрузки товаров × нормы из техкарт, без суббот, воскресений и праздников." />
-                    <StatCard tone="dark" title="Срок поставки" value={leadTime.received ? leadTime.avg : '—'} format={num} suffix={leadTime.received ? 'дн.' : undefined} note={leadTime.received ? `мин ${leadTime.min} · макс ${leadTime.max}` : 'Нет принятых поставок'} hint="Календарных дней от заказа поставщику до приёмки. Учитываются только принятые заказы за период." />
-                    <StatCard tone="dark" title="Точка заказа" value={reorderPoint} format={num} suffix={material.uom} note="Доставка + запас" hint="Остаток, при котором пора заказывать: расход за среднее время поставки плюс страховой запас на случай задержки (не меньше недели расхода)." />
-                    <StatCard tone="dark" title="Партия EOQ" value={optimalOrder} format={num} suffix={material.uom} note="Оптимальная, справочно" hint="Партия, при которой суммарные затраты на заказы и хранение минимальны. Ориентир, а не правило." />
-                    <StatCard tone="dark" title="Заказ на месяц" value={monthlyOrder} format={num} suffix={material.uom} note="Расход за месяц" hint="Потребление в рабочий день × среднее число рабочих дней в месяце. Страховой запас сюда не входит, он заложен в точку заказа." />
-                    <StatCard tone="dark" title="Заказ на квартал" value={quarterlyOrder} format={num} suffix={material.uom} note="Расход за квартал" hint="Месячный расход × 3. Страховой запас сюда не входит, он заложен в точку заказа." />
+                    <StatCard title="Расход в день" value={dailyConsumption} format={num} suffix={material.uom} note={trendDetected ? 'Пн–пт, за 3 мес' : `Пн–пт, среднее за ${periodMonths} мес`} hint="Сколько уходит в производство за рабочий день: отгрузки товаров × нормы из техкарт, без суббот, воскресений и праздников." />
+                    <StatCard title="Срок поставки" value={leadTime.received ? leadTime.avg : '—'} format={num} suffix={leadTime.received ? 'дн.' : undefined} note={leadTime.received ? `мин ${leadTime.min} · макс ${leadTime.max}` : 'Нет принятых поставок'} hint="Календарных дней от заказа поставщику до приёмки. Учитываются только принятые заказы за период." />
+                    <StatCard title="Точка заказа" value={reorderPoint} format={num} suffix={material.uom} note="Доставка + запас" hint="Остаток, при котором пора заказывать: расход за среднее время поставки плюс страховой запас на случай задержки (не меньше недели расхода)." />
+                    <StatCard title="Партия EOQ" value={optimalOrder} format={num} suffix={material.uom} note="Оптимальная, справочно" hint="Партия, при которой суммарные затраты на заказы и хранение минимальны. Ориентир, а не правило." />
+                    <StatCard title="Заказ на месяц" value={monthlyOrder} format={num} suffix={material.uom} note="Расход за месяц" hint="Потребление в рабочий день × среднее число рабочих дней в месяце. Страховой запас сюда не входит, он заложен в точку заказа." />
+                    <StatCard title="Заказ на квартал" value={quarterlyOrder} format={num} suffix={material.uom} note="Расход за квартал" hint="Месячный расход × 3. Страховой запас сюда не входит, он заложен в точку заказа." />
                 </StatGrid>
             </div>
         </div>
