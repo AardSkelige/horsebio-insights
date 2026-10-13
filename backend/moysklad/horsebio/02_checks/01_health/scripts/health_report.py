@@ -491,6 +491,9 @@ class ReportingMixin:
                 # deviation_pct нужен UI: запоминается в исключении при разборе,
                 # чтобы снова флагать позицию, когда отклонение вырастет
                 'deviation_pct': round(it.get('deviation_pct', 0), 1),
+                # Норма есть, но отклонение с тех пор выросло, UI предложит подтвердить заново
+                'stale': (_notes.get(it.get('product_code', ''), {}).get('status') == 'норма'
+                          and not _is_normal(it)),
                 'detail': head + f"{it['store_name']} · FIFO {money(it['current_cost'])} ↔ "
                           f"приёмка {money(it['last_supply_cost'])} · запас {it.get('stock', 0):,.0f} ед",
             }
@@ -650,7 +653,7 @@ class ReportingMixin:
 
         add('supply_jumps', 'Скачки цен в приёмках', 'supply_jumps', None, [
             {
-                'key': it['name'], 'ms_id': '',
+                'key': it.get('code') or it['name'], 'ms_id': '',
                 'object': it['name'], 'severity': 'warning',
                 'last_doc': it.get('last_doc', ''),
                 'detail': _jump_detail(it),

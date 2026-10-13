@@ -37,7 +37,7 @@ export const KIND_MS_TYPE = {
     salesreturns: 'salesreturn',
     enter_zero: 'enter',
     deviations: null,    // товар по коду — без doc-ссылки
-    supply_jumps: null,  // позиция по имени
+    supply_jumps: null,  // товар по коду
 };
 
 // Цвет бейджа категории исключения (приглушённая палитра)

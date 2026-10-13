@@ -1,6 +1,7 @@
 """
 Tests for /api/checks/ endpoints (дашборд проверок).
 """
+import json
 import os
 import tempfile
 from datetime import timedelta
@@ -13,6 +14,7 @@ from django.contrib.auth.models import User
 from api.models import CheckRunResult, HealthCheckException
 from api.services.health_checks import (
     EXPIRE_DAYS, cleanup_expired_exceptions, cleanup_resolved_deviations,
+    export_exceptions_to_json, _item_excepted,
 )
 from api.services import script_runner
 from api.services.scripts_registry import HEALTH_CHECK_SCRIPT_ID
@@ -242,6 +244,32 @@ class LiveSummaryRecomputeTests(TestCase):
         results = self.client.get(reverse('api:checks_results', args=[HEALTH_CHECK_SCRIPT_ID])).json()['results']
         self.assertEqual(len(results['categories'][0]['items']), 1)
         self.assertIn(self.DOC_ID, results['exception_keys']['inventories'])
+
+
+class SupplyJumpExceptionKeyTests(TestCase):
+
+    def setUp(self):
+        HealthCheckException.objects.all().delete()
+        self.item = {'key': '4-104', 'object': 'Банка 600 мл, горло 86 мм', 'last_doc': '00040'}
+
+    def test_matches_by_code(self):
+        idx = {'supply_jumps': {'4-104': {'supply_doc': '00040'}}}
+        self.assertTrue(_item_excepted('supply_jumps', self.item, idx))
+
+    def test_once_exception_ignores_other_supply(self):
+        idx = {'supply_jumps': {'4-104': {'supply_doc': '00039'}}}
+        self.assertFalse(_item_excepted('supply_jumps', self.item, idx))
+
+    def test_export_writes_key_and_name(self):
+        HealthCheckException.objects.create(
+            kind='supply_jumps', key='4-104', label='Банка 600 мл, горло 86 мм',
+            reason='r', extra={'supply_doc': '00040'})
+        with tempfile.TemporaryDirectory() as d:
+            export_exceptions_to_json(d)
+            with open(os.path.join(d, 'supply_jumps_ignore.json'), encoding='utf-8') as f:
+                ignored = json.load(f)['ignored']
+        self.assertEqual(ignored, [{'key': '4-104', 'name': 'Банка 600 мл, горло 86 мм',
+                                    'reason': 'r', 'supply_doc': '00040'}])
 
 
 class ParseProgressTests(TestCase):

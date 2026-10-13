@@ -224,6 +224,7 @@ def checks_results(request, script_id):
             exc_map[kind][key] = {
                 'reason': reason,
                 'supply_doc': (extra or {}).get('supply_doc', ''),
+                'extra': extra if isinstance(extra, dict) else {},
             }
             exc_index[kind][key] = extra if isinstance(extra, dict) else {}
 

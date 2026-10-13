@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
 import PropTypes from 'prop-types';
-import { ExternalLink, Plus, Check, Undo2, Loader2, ShieldCheck, ChevronRight, Trash2 } from 'lucide-react';
+import { ExternalLink, Plus, Check, Undo2, Loader2, ShieldCheck, ChevronRight, Trash2, RefreshCw } from 'lucide-react';
 import { Button } from '../ui';
 import { checksApi, SEV, sevOf, msLink, relTime } from './checksShared';
 import { useConfirmDelete } from '../../hooks/useConfirmDelete';
@@ -204,7 +204,7 @@ function ChecksGrid({ checks, onJump }) {
 }
 ChecksGrid.propTypes = { checks: PropTypes.array.isRequired, onJump: PropTypes.func };
 
-function FindingRow({ cat, item, excepted, prevReason, onAdded, onDeleted }) {
+function FindingRow({ cat, item, excepted, prevReason, prevExtra, onAdded, onDeleted }) {
     const [state, setState] = useState('idle'); // idle | reason | busy | added
     const [reason, setReason] = useState('');
     const [excId, setExcId] = useState(null);
@@ -214,6 +214,8 @@ function FindingRow({ cat, item, excepted, prevReason, onAdded, onDeleted }) {
     const link = item.ms_href || msLink(cat.ms_type, item.ms_id);
     const canExcept = cat.kind && item.key;
     const isJump = cat.kind === 'supply_jumps';
+    // Скрипт пометил норму устаревшей: отклонение выросло с прошлого разбора
+    const stale = excepted && cat.kind === 'deviations' && !!item.stale;
 
     const { deleting, trigger: handleDelete } = useConfirmDelete({
         confirm: item.delete_action?.confirm || `Удалить «${item.object}» из журнала?`,
@@ -225,7 +227,9 @@ function FindingRow({ cat, item, excepted, prevReason, onAdded, onDeleted }) {
         setState('busy');
         try {
             let extra = {};
-            if (cat.kind === 'deviations') {
+            if (stale) {
+                extra = { ...prevExtra, deviation_pct: item.deviation_pct ?? null };
+            } else if (cat.kind === 'deviations') {
                 // deviation_pct — размер отклонения на момент разбора: вырастет заметно — снова флаг
                 extra = { status: 'норма', ms_id: item.ms_id || '', ms_href: item.ms_href || '', deviation_pct: item.deviation_pct ?? null };
             }
@@ -241,7 +245,14 @@ function FindingRow({ cat, item, excepted, prevReason, onAdded, onDeleted }) {
 
     const undo = async () => {
         if (!excId) return;
-        try { await checksApi.removeException(excId); setState('idle'); setExcId(null); onAdded?.(); }
+        try {
+            if (stale) {
+                await checksApi.addException({ kind: cat.kind, key: item.key, label: item.object, reason: prevReason, extra: prevExtra });
+            } else {
+                await checksApi.removeException(excId);
+            }
+            setState('idle'); setExcId(null); onAdded?.();
+        }
         catch (e) { alert(e.message); }
     };
 
@@ -249,7 +260,7 @@ function FindingRow({ cat, item, excepted, prevReason, onAdded, onDeleted }) {
         return (
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10, padding: '9px 14px', background: SEV.ok.bg }}>
                 <span style={{ display: 'inline-flex', alignItems: 'center', gap: 7, fontSize: 13, color: 'var(--success)', fontWeight: 600 }}>
-                    <Check size={15} /> Добавлено в исключения — {item.object}
+                    <Check size={15} /> {stale ? 'Подтверждено заново' : 'Добавлено в исключения'} — {item.object}
                     {reason.trim() && <span style={{ color: 'var(--muted)', fontWeight: 400 }}>({reason.trim()})</span>}
                 </span>
                 <Button variant="subtle" size="sm" icon={Undo2} onClick={undo}>Отменить</Button>
@@ -261,7 +272,7 @@ function FindingRow({ cat, item, excepted, prevReason, onAdded, onDeleted }) {
         return (
             <div style={{ padding: '10px 14px', borderTop: '1px solid var(--hairline-soft)', background: 'var(--surface-soft)' }}>
                 <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--ink)', marginBottom: 7 }}>
-                    В исключения: {item.object}
+                    {stale ? 'Подтвердить заново' : 'В исключения'}: {item.object}
                 </div>
                 {isJump && (
                     <div style={{ display: 'flex', gap: 14, marginBottom: 8, fontSize: 12.5, color: 'var(--body)', flexWrap: 'wrap' }}>
@@ -289,8 +300,8 @@ function FindingRow({ cat, item, excepted, prevReason, onAdded, onDeleted }) {
                         }}
                     />
                     <div style={{ display: 'flex', gap: 6 }}>
-                        <Button variant="primary" size="sm" icon={Plus} loading={state === 'busy'} onClick={add}>
-                            Добавить
+                        <Button variant="primary" size="sm" icon={stale ? Check : Plus} loading={state === 'busy'} onClick={add}>
+                            {stale ? 'Сохранить' : 'Добавить'}
                         </Button>
                         <Button variant="subtle" size="sm" disabled={state === 'busy'} onClick={() => { setState('idle'); setReason(''); }}>
                             Отмена
@@ -331,7 +342,13 @@ function FindingRow({ cat, item, excepted, prevReason, onAdded, onDeleted }) {
                         {l.label}
                     </Button>
                 ))}
-                {excepted ? (
+                {stale ? (
+                    <Button variant="subtle" tone="accent" size="sm" icon={RefreshCw}
+                        title="Отклонение выросло с прошлого разбора"
+                        onClick={() => { setReason(prevReason); setState('reason'); }}>
+                        подтвердить
+                    </Button>
+                ) : excepted ? (
                     <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5, fontSize: 12, color: 'var(--success)', fontWeight: 600 }}>
                         <ShieldCheck size={13} /> в исключениях
                     </span>
@@ -352,7 +369,7 @@ function FindingRow({ cat, item, excepted, prevReason, onAdded, onDeleted }) {
 }
 FindingRow.propTypes = {
     cat: PropTypes.object, item: PropTypes.object, excepted: PropTypes.bool,
-    prevReason: PropTypes.string, onAdded: PropTypes.func, onDeleted: PropTypes.func,
+    prevReason: PropTypes.string, prevExtra: PropTypes.object, onAdded: PropTypes.func, onDeleted: PropTypes.func,
 };
 
 /** Секция находок одной проверки: проблемные развёрнуты, «норма» — свёрнута до строки. */
@@ -421,6 +438,7 @@ function Category({ cat, excKeys, excMap, onChanged }) {
                         && (excKeys[cat.kind] || []).includes(it.key);
                     // Прошлый разбор этого товара: причина исключения прямо в находке
                     const prevReason = excFor(it)?.reason || '';
+                    const prevExtra = excFor(it)?.extra || {};
                     return (
                         <FindingRow
                             key={ekey}
@@ -428,6 +446,7 @@ function Category({ cat, excKeys, excMap, onChanged }) {
                             item={it}
                             excepted={excepted}
                             prevReason={prevReason}
+                            prevExtra={prevExtra}
                             onAdded={() => {
                                 // ack-типы исчезают при следующем запуске — прячем сразу;
                                 // deviations остаются (помечаются), не прячем

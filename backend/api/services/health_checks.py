@@ -134,11 +134,12 @@ def export_exceptions_to_json(data_dir=None):
         'notes': notes,
     })
 
-    # Скачки цен (ignored-list по name). supply_doc в extra — разовое исключение:
+    # Скачки цен (ignored-list). supply_doc в extra — разовое исключение:
     # глушит только скачок этой приёмки; без него — вечное («у товара всегда так»)
+    # Ключ скачка это код товара, у товара без кода название
     ignored = []
     for r in by_kind.get('supply_jumps', []):
-        entry = {'name': r.key, 'reason': r.reason}
+        entry = {'key': r.key, 'name': r.label or r.key, 'reason': r.reason}
         supply_doc = (r.extra or {}).get('supply_doc')
         if supply_doc:
             entry['supply_doc'] = supply_doc
@@ -191,12 +192,12 @@ def import_exceptions_from_files(model_cls, data_dir=None):
 
     data = _read_json(os.path.join(data_dir, SUPPLY_JUMPS_FILE))
     for entry in data.get('ignored', []):
-        name = entry.get('name')
-        if not name:
+        key = entry.get('key') or entry.get('name')
+        if not key:
             continue
         _, was_created = model_cls.objects.get_or_create(
-            kind='supply_jumps', key=name,
-            defaults={'label': name, 'reason': entry.get('reason', '') or ''},
+            kind='supply_jumps', key=key,
+            defaults={'label': entry.get('name') or key, 'reason': entry.get('reason', '') or ''},
         )
         created += int(was_created)
 
