@@ -84,7 +84,7 @@ def _failed_orders():
             title=f'Доставка Ozon не создана — {_order_label(quote)}',
             body=(
                 f'Попыток: {quote.attempts}. Ozon отказал: '
-                f'{(quote.error or "без объяснения")[:200]}. '
+                f'{(quote.error_summary or "без объяснения")[:200]}. '
                 'Покупатель оплатил, но отправления нет.'
             ),
             action='Оформите доставку другой службой или верните оплату',

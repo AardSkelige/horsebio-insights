@@ -1,3 +1,4 @@
+import re
 import uuid
 
 from django.db import models
@@ -149,6 +150,13 @@ class OzonPickupPoint(models.Model):
         )[:limit]
 
 
+ROUTE_GONE = 'DELIVERY_NO_ROUTE'
+
+ERROR_SUMMARIES = {
+    ROUTE_GONE: 'Ozon отозвал маршрут доставки с нашего склада',
+}
+
+
 class OzonDeliveryQuote(models.Model):
     """Рассчитанный вариант доставки, выбранный покупателем в корзине.
 
@@ -228,6 +236,19 @@ class OzonDeliveryQuote(models.Model):
         if self.status in (self.STATUS_ORDERED, self.STATUS_UNKNOWN):
             return False
         return self.attempts < self.MAX_ATTEMPTS
+
+    @property
+    def error_summary(self):
+        if not self.error.startswith('/'):
+            return self.error or 'причина не указана'
+        for code, text in ERROR_SUMMARIES.items():
+            if f'"{code}"' in self.error:
+                return text
+        found = re.search(r'"code"\s*:\s*"([A-Z_]+)"(?:\s*,\s*"message"\s*:\s*"([^"]*)")?', self.error)
+        if not found:
+            return self.error
+        details = f': {found.group(2)}' if found.group(2) else ''
+        return f'Ozon не принял заказ, код {found.group(1)}{details}'
 
     @property
     def splits(self):

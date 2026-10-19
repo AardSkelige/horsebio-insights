@@ -198,7 +198,7 @@ def _ozon_block(quote, postings):
         'status_label': quote.get_status_display(),
         'order_number': quote.order_number or None,
         'delivery_cost': float(quote.delivery_cost or 0),
-        'error': (quote.error or '')[:300] or None,
+        'error': (quote.error_summary or '')[:300] or None,
         'posting_number': shown.posting_number if shown else None,
         'posting_status': shown.status if shown else None,
         # Ссылка в кабинет продавца — на то же отправление, что показано в чипе.

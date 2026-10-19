@@ -10,7 +10,7 @@ from decimal import Decimal
 
 from django.utils import timezone
 
-from ozon_logistics.models import OzonDeliveryQuote
+from ozon_logistics.models import ROUTE_GONE, OzonDeliveryQuote
 from ozon_logistics.services.client import (
     OzonLogisticsClient, OzonLogisticsError, OzonLogisticsTimeout, normalize_phone,
 )
@@ -168,7 +168,9 @@ def create_order(quote, *, buyer, recipient=None, prices, client=None):
     client = client or OzonLogisticsClient()
     quote.attempts += 1
     try:
-        response = client.order_create(payload)
+        response = _order_create(
+            quote, payload, buyer=buyer, recipient=recipient, prices=prices, client=client,
+        )
     except OzonLogisticsTimeout as exc:
         # Ответ потерян, но заказ мог создаться. Повтор дал бы вторую посылку,
         # поэтому останавливаемся и зовём человека.
@@ -180,7 +182,7 @@ def create_order(quote, *, buyer, recipient=None, prices, client=None):
             quote.id, exc,
         )
         raise OzonOrderError(quote.error) from exc
-    except OzonLogisticsError as exc:
+    except (OzonLogisticsError, OzonOrderError) as exc:
         quote.status = OzonDeliveryQuote.STATUS_FAILED
         quote.error = str(exc)[:2000]
         quote.save(update_fields=['status', 'error', 'attempts'])
@@ -205,6 +207,38 @@ def create_order(quote, *, buyer, recipient=None, prices, client=None):
 
     logger.info('Ozon Доставка: создан заказ %s по расчёту %s', order_number, quote.id)
     return quote
+
+
+def _order_create(quote, payload, *, buyer, recipient, prices, client):
+    try:
+        return client.order_create(payload)
+    except OzonLogisticsTimeout:
+        raise
+    except OzonLogisticsError as exc:
+        if ROUTE_GONE not in str(exc) or not quote.map_point_id:
+            raise
+        logger.warning('Ozon Доставка: по расчёту %s маршрут отозван, пересчитываю: %s', quote.id, exc)
+
+    try:
+        response = client.checkout(
+            phone=quote.phone, items=quote.items, map_point_id=quote.map_point_id,
+        )
+    except OzonLogisticsError as exc:
+        raise OzonOrderError(f'Ozon отозвал маршрут, а пересчитать не удалось: {exc}') from exc
+
+    fresh = OzonDeliveryQuote(checkout_response=response)
+    if not fresh.is_deliverable:
+        reasons = ', '.join(fresh.unavailable_reasons()) or 'причина не указана'
+        raise OzonOrderError(f'Ozon отозвал маршрут, а по новому расчёту доставки нет: {reasons}')
+
+    cost = _total_commission(fresh.splits)
+    logger.info('Ozon Доставка: расчёт %s обновлён, логистика была %s ₽, стала %s ₽', quote.id, quote.delivery_cost, cost)
+    quote.checkout_response = response
+    quote.delivery_cost = cost
+    quote.save(update_fields=['checkout_response', 'delivery_cost'])
+
+    payload = build_order_payload(quote, buyer=buyer, recipient=recipient, prices=prices)
+    return client.order_create(payload)
 
 
 def purge_stale_quotes():

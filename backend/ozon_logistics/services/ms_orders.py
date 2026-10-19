@@ -71,6 +71,8 @@ ORDER_LINE_PREFIX = 'Заказ Ozon Доставки:'
 POSTING_LINE_PREFIX = 'Отправление '
 RETURN_LINE_PREFIX = 'Возврат от Озона:'
 CABINET_PREFIX = 'https://seller.ozon.ru/app/postings/'
+NOT_CREATED_LINE_PREFIX = 'Доставка Ozon не создана:'
+UNKNOWN_LINE_PREFIX = 'Доставка Ozon под вопросом:'
 
 # Статусы отправления по-русски: в комментарий заказа смотрит человек, а не робот.
 STATUS_NAMES = {
@@ -108,7 +110,9 @@ def is_managed_line(line):
     return (text.startswith(ORDER_LINE_PREFIX)
             or text.startswith(POSTING_LINE_PREFIX)
             or text.startswith(RETURN_LINE_PREFIX)
-            or text.startswith(CABINET_PREFIX))
+            or text.startswith(CABINET_PREFIX)
+            or text.startswith(NOT_CREATED_LINE_PREFIX)
+            or text.startswith(UNKNOWN_LINE_PREFIX))
 
 
 def build_block(quote, postings):
@@ -117,6 +121,12 @@ def build_block(quote, postings):
     Отправления появляются не сразу — сначала в заказе будет одна строка с
     номером, остальные допишутся, когда их увидит робот статусов.
     """
+    if quote.status == OzonDeliveryQuote.STATUS_UNKNOWN:
+        return [f'{UNKNOWN_LINE_PREFIX} Ozon не ответил, заказ мог не создаться. '
+                'Проверьте в кабинете Ozon до отправки']
+    if quote.status == OzonDeliveryQuote.STATUS_FAILED:
+        return [f'{NOT_CREATED_LINE_PREFIX} {quote.error_summary[:200]}. '
+                'Не отправлять, пока не появится номер заказа Ozon']
     if not quote.order_number:
         return []
 
@@ -146,11 +156,14 @@ def merge_description(description, block):
 
 
 def _quotes_to_sync():
-    """Заказы Ozon, у которых есть куда писать: создан заказ и известен заказ сайта."""
+    """Заказы Ozon, о которых есть что написать и известен заказ сайта."""
+    created = Q(status=OzonDeliveryQuote.STATUS_ORDERED) & ~Q(order_number='')
+    gave_up = Q(status=OzonDeliveryQuote.STATUS_FAILED,
+                attempts__gte=OzonDeliveryQuote.MAX_ATTEMPTS)
+    unknown = Q(status=OzonDeliveryQuote.STATUS_UNKNOWN)
     return (
         OzonDeliveryQuote.objects
-        .filter(status=OzonDeliveryQuote.STATUS_ORDERED)
-        .exclude(order_number='')
+        .filter(created | gave_up | unknown)
         .exclude(site_order_id='')
         .prefetch_related('postings_tracked')
         .order_by('created_at')

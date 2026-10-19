@@ -1642,6 +1642,79 @@ class OrderRetryPolicyTests(TestCase):
         self.assertEqual(quote.attempts, OzonDeliveryQuote.MAX_ATTEMPTS)
         self.assertFalse(quote.needs_order)
 
+    def test_withdrawn_route_is_recalculated_once(self):
+        quote = self._quote()
+        fresh = _checkout_response(warehouse_id=42)
+
+        class RouteGoneOnceClient(FakeOrderClient):
+            def order_create(self, payload):
+                self.order_payloads.append(payload)
+                if len(self.order_payloads) == 1:
+                    raise client_module.OzonLogisticsError(
+                        'HTTP 400: {"code":"DELIVERY_NO_ROUTE"}'
+                    )
+                return self._order
+
+        client = RouteGoneOnceClient(checkout=fresh)
+        orders.create_order(quote, buyer=BUYER, prices={758646053: Decimal('100')}, client=client)
+
+        quote.refresh_from_db()
+        self.assertEqual(quote.status, OzonDeliveryQuote.STATUS_ORDERED)
+        self.assertEqual(quote.attempts, 1)
+        self.assertEqual(client.checkout_kwargs['map_point_id'], 378617)
+        self.assertEqual(client.order_payloads[1]['splits'][0]['warehouse_id'], 42)
+
+    def test_withdrawn_route_twice_is_a_failure(self):
+        quote = self._quote()
+        client = FakeOrderClient(order_error='/v2/order/create HTTP 400: {"code":"DELIVERY_NO_ROUTE"}')
+
+        with self.assertRaises(orders.OzonOrderError):
+            orders.create_order(
+                quote, buyer=BUYER, prices={758646053: Decimal('100')}, client=client
+            )
+
+        quote.refresh_from_db()
+        self.assertEqual(len(client.order_payloads), 2)
+        self.assertEqual(quote.status, OzonDeliveryQuote.STATUS_FAILED)
+        self.assertEqual(quote.error_summary, 'Ozon отозвал маршрут доставки с нашего склада')
+
+    def test_recalculated_route_without_delivery_is_a_failure(self):
+        quote = self._quote()
+
+        class RouteGoneClient(FakeOrderClient):
+            def order_create(self, payload):
+                self.order_payloads.append(payload)
+                raise client_module.OzonLogisticsError('HTTP 400: {"code":"DELIVERY_NO_ROUTE"}')
+
+        client = RouteGoneClient(checkout=_checkout_response(available=False))
+        with self.assertRaises(orders.OzonOrderError):
+            orders.create_order(
+                quote, buyer=BUYER, prices={758646053: Decimal('100')}, client=client
+            )
+
+        quote.refresh_from_db()
+        self.assertEqual(len(client.order_payloads), 1)
+        self.assertEqual(quote.status, OzonDeliveryQuote.STATUS_FAILED)
+        self.assertEqual(
+            quote.error_summary, 'Ozon отозвал маршрут, а по новому расчёту доставки нет: OUT_OF_STOCK'
+        )
+        self.assertEqual(quote.checkout_response, _checkout_response())
+
+    def test_other_refusal_is_not_recalculated(self):
+        quote = self._quote()
+        client = FakeOrderClient(
+            order_error='/v2/order/create HTTP 400: {"code":"SOMETHING_ELSE", "message":"phone is invalid"}'
+        )
+
+        with self.assertRaises(orders.OzonOrderError):
+            orders.create_order(
+                quote, buyer=BUYER, prices={758646053: Decimal('100')}, client=client
+            )
+
+        quote.refresh_from_db()
+        self.assertFalse(hasattr(client, 'checkout_kwargs'))
+        self.assertEqual(quote.error_summary, 'Ozon не принял заказ, код SOMETHING_ELSE: phone is invalid')
+
     def test_successful_order_still_needs_no_retry(self):
         quote = self._quote()
         orders.create_order(
@@ -2939,6 +3012,50 @@ class MoyskladOrderNoteTests(TestCase):
         self.assertEqual(stats['errors'], [])
         self.quote.refresh_from_db()
         self.assertEqual(self.quote.ms_note, '')
+
+    def test_failed_order_warns_the_warehouse(self):
+        self.quote.status = OzonDeliveryQuote.STATUS_FAILED
+        self.quote.order_number = ''
+        self.quote.attempts = OzonDeliveryQuote.MAX_ATTEMPTS
+        self.quote.error = '/v2/order/create HTTP 400: {"code":"DELIVERY_NO_ROUTE"}'
+        self.quote.save()
+        fake_get, fake_put, written = self._moysklad()
+
+        with patch('msapi.http.get', side_effect=fake_get), \
+             patch('msapi.http.put', side_effect=fake_put):
+            ms_orders.sync_orders()
+
+        description = written[0][1]['description']
+        self.assertIn('Доставка Ozon не создана: Ozon отозвал маршрут', description)
+        self.assertIn('Не отправлять', description)
+        self.assertNotIn('HTTP 400', description)
+
+    def test_failed_order_with_attempts_left_is_not_reported_yet(self):
+        self.quote.status = OzonDeliveryQuote.STATUS_FAILED
+        self.quote.order_number = ''
+        self.quote.attempts = 1
+        self.quote.save()
+
+        with patch('msapi.http.get', side_effect=AssertionError('лишний запрос в МойСклад')):
+            stats = ms_orders.sync_orders()
+
+        self.assertEqual(stats['checked'], 0)
+
+    def test_warning_is_replaced_once_order_is_created(self):
+        stale = dict(self.order, description=(
+            'Статус оплаты: Оплачен\n'
+            'Доставка Ozon не создана: Ozon отозвал маршрут доставки с нашего склада. '
+            'Не отправлять, пока не появится номер заказа Ozon'
+        ))
+        fake_get, fake_put, written = self._moysklad(order=stale)
+
+        with patch('msapi.http.get', side_effect=fake_get), \
+             patch('msapi.http.put', side_effect=fake_put):
+            ms_orders.sync_orders()
+
+        description = written[0][1]['description']
+        self.assertIn('Заказ Ozon Доставки: 57279866-0143', description)
+        self.assertNotIn('Не отправлять', description)
 
     def test_order_without_postings_gets_at_least_the_number(self):
         fake_get, fake_put, written = self._moysklad()
