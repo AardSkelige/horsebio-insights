@@ -6,7 +6,7 @@ import requests
 from django.test import TestCase
 
 from core.models import RawMaterial
-from raw_materials.models import Batch, BatchMovement, MaterialStock, Slot
+from raw_materials.models import Batch, BatchMovement, MaterialStock, Slot, SlotStock
 from raw_materials.services.sync import sync_from_moysklad
 from raw_materials.tests.factories import batch, material
 
@@ -19,7 +19,7 @@ class SyncTests(TestCase):
         with patch(f'{MS}.store_id', return_value='store'), \
                 patch(f'{MS}.slots', return_value={'s-a5': 'A5', 's-b7': 'B7'}), \
                 patch(f'{MS}.stock', return_value=(stock, set(recalculating))), \
-                patch(f'{MS}.main_slots', return_value=placed or {}), \
+                patch(f'{MS}.slot_stock', return_value={k: {v: 1} for k, v in (placed or {}).items()}), \
                 patch(f'{MS}.product', **product_patch) as fetch:
             result = sync_from_moysklad(**kwargs)
         return result, fetch
@@ -76,3 +76,36 @@ class SyncTests(TestCase):
         batch(chondroitin, '100', series='A')
         self.run_sync({chondroitin.external_id: 60}, kind=BatchMovement.IMPORT)
         self.assertEqual(BatchMovement.objects.get().kind, BatchMovement.IMPORT)
+
+    def test_every_slot_is_kept_and_the_fullest_becomes_home(self):
+        chondroitin = material()
+        with patch(f'{MS}.store_id', return_value='store'), \
+                patch(f'{MS}.slots', return_value={'s-a5': 'A5', 's-b7': 'B7'}), \
+                patch(f'{MS}.stock', return_value=({chondroitin.external_id: 180}, set())), \
+                patch(f'{MS}.slot_stock', return_value={chondroitin.external_id: {'s-a5': 80, 's-b7': 100}}):
+            sync_from_moysklad()
+        stock = MaterialStock.objects.get(material=chondroitin)
+        self.assertEqual(stock.slot.name, 'B7')
+        self.assertEqual(
+            sorted((s.slot.name, s.quantity) for s in SlotStock.objects.all()),
+            [('A5', Decimal('80')), ('B7', Decimal('100'))],
+        )
+
+    def test_material_issued_during_the_read_waits_for_the_next_sync(self):
+        chondroitin = material()
+        series = batch(chondroitin, '100', series='A')
+        self.run_sync({chondroitin.external_id: 100})
+
+        def issued_meanwhile(store):
+            BatchMovement.objects.create(batch=series, kind=BatchMovement.ISSUE, quantity=Decimal('-40'))
+            Batch.objects.filter(pk=series.pk).update(quantity=Decimal('60'))
+            return {chondroitin.external_id: 100}, set()
+
+        with patch(f'{MS}.store_id', return_value='store'), \
+                patch(f'{MS}.slots', return_value={}), \
+                patch(f'{MS}.stock', side_effect=issued_meanwhile), \
+                patch(f'{MS}.slot_stock', return_value={}):
+            result = sync_from_moysklad()
+
+        self.assertEqual(Batch.objects.get(pk=series.pk).quantity, Decimal('60'))
+        self.assertEqual(result['skipped'], 1)

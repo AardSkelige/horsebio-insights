@@ -40,3 +40,5 @@ export function groupBySlot(items) {
         .sort(([a], [b]) => (!a) - (!b) || bySlot(a, b))
         .map(([slot, slotItems]) => ({ slot, items: slotItems }));
 }
+
+export const round3 = (value) => Math.round(value * 1000) / 1000;

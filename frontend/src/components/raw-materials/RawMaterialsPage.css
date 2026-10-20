@@ -109,3 +109,21 @@
         columns: 1;
     }
 }
+
+.raw-materials__slot-link {
+    display: inline-flex;
+    align-items: center;
+    gap: 2px;
+    color: inherit;
+    text-decoration: none;
+}
+
+.raw-materials__slot-link svg {
+    opacity: 0.5;
+    transition: opacity 0.15s ease-out, translate 0.15s ease-out;
+}
+
+.raw-materials__slot-link:hover svg {
+    opacity: 1;
+    translate: 2px 0;
+}

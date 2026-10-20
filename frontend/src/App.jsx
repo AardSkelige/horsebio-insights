@@ -41,6 +41,9 @@ const SiteOrdersPage = lazy(() => import('./components/site-orders/SiteOrdersPag
 const DiscountedPage = lazy(() => import('./components/discounted/DiscountedPage'));
 const DeliveryCalculatorPage = lazy(() => import('./components/delivery/DeliveryCalculatorPage'));
 const RawMaterialsPage = lazy(() => import('./components/raw-materials/RawMaterialsPage'));
+const SlotPage = lazy(() => import('./components/raw-materials/issue/SlotPage'));
+const IssuesPage = lazy(() => import('./components/raw-materials/issue/IssuesPage'));
+const SlotLabels = lazy(() => import('./components/raw-materials/issue/SlotLabels'));
 const ProtocolsPage = lazy(() => import('./components/protocols/ProtocolsPage'));
 
 const RouteFallback = () => (
@@ -293,6 +296,36 @@ function AppRoutes() {
             <LayoutWrapper>
               <LazyPage>
                 <RawMaterialsPage />
+              </LazyPage>
+            </LayoutWrapper>
+          </ProtectedRoute>
+        } />
+
+        <Route path="/raw-materials/slot/:slot" element={
+          <ProtectedRoute>
+            <LayoutWrapper>
+              <LazyPage>
+                <SlotPage />
+              </LazyPage>
+            </LayoutWrapper>
+          </ProtectedRoute>
+        } />
+
+        <Route path="/raw-materials/issues" element={
+          <ProtectedRoute>
+            <LayoutWrapper>
+              <LazyPage>
+                <IssuesPage />
+              </LazyPage>
+            </LayoutWrapper>
+          </ProtectedRoute>
+        } />
+
+        <Route path="/raw-materials/qr" element={
+          <ProtectedRoute>
+            <LayoutWrapper>
+              <LazyPage>
+                <SlotLabels />
               </LazyPage>
             </LayoutWrapper>
           </ProtectedRoute>

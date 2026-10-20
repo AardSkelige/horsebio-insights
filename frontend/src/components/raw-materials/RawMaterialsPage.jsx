@@ -1,9 +1,11 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
-import { EmptyState, ErrorState, Page, PageHeader, SearchInput, Segmented, Select, Skeleton, Toolbar } from '../ui';
+import { useMemo, useState } from 'react';
+import { useNavigate } from 'react-router-dom';
+import { History, QrCode } from 'lucide-react';
+import { Button, EmptyState, ErrorState, Page, PageHeader, SearchInput, Segmented, Select, Skeleton, Toolbar } from '../ui';
 import { FadeRise } from '../ui/motion';
-import { rawMaterialsApi } from '../../api/rawMaterialsApi';
 import { formatDateTimeShort } from '../../utils/formatters';
 import SlotCard from './SlotCard';
+import useStock from './useStock';
 import { TARA_GROUP, groupBySlot, matches } from './format';
 
 const KINDS = [
@@ -16,31 +18,11 @@ const ofKind = (item, kind) => kind === 'all' || (kind === 'tara') === (item.gro
 import './RawMaterialsPage.css';
 
 export default function RawMaterialsPage() {
-    const [data, setData] = useState(null);
-    const [loading, setLoading] = useState(true);
-    const [refreshing, setRefreshing] = useState(false);
-    const [error, setError] = useState(null);
+    const navigate = useNavigate();
+    const { data, loading, refreshing, error, refresh } = useStock();
     const [search, setSearch] = useState('');
     const [slot, setSlot] = useState('');
     const [kind, setKind] = useState('all');
-
-    useEffect(() => {
-        const controller = new AbortController();
-        rawMaterialsApi.list(controller.signal)
-            .then(setData)
-            .catch((err) => { if (err.name !== 'AbortError') setError(err.message || 'Не удалось загрузить склад'); })
-            .finally(() => { if (!controller.signal.aborted) setLoading(false); });
-        return () => controller.abort();
-    }, []);
-
-    const refresh = useCallback(() => {
-        setRefreshing(true);
-        setError(null);
-        rawMaterialsApi.refresh()
-            .then(setData)
-            .catch((err) => setError(err.message || 'Не удалось сверить с МойСклад'))
-            .finally(() => setRefreshing(false));
-    }, []);
 
     const items = useMemo(() => data?.items || [], [data]);
     const slots = useMemo(() => [...new Set(items.map((i) => i.slot).filter(Boolean))].sort(), [items]);
@@ -58,6 +40,12 @@ export default function RawMaterialsPage() {
                 updatedAt={data?.synced_at ? formatDateTimeShort(data.synced_at) : undefined}
                 onRefresh={refresh}
                 refreshing={refreshing || loading}
+                actions={(
+                    <>
+                        <Button variant="link" icon={History} onClick={() => navigate('/raw-materials/issues')}>Журнал выдач</Button>
+                        <Button variant="link" icon={QrCode} onClick={() => navigate('/raw-materials/qr')}>QR ячеек</Button>
+                    </>
+                )}
             />
 
             <Toolbar>

@@ -32,7 +32,7 @@ BatchLine.propTypes = {
     showQuantity: PropTypes.bool,
 };
 
-export default function MaterialRow({ item }) {
+export default function MaterialRow({ item, action = null }) {
     const batches = item.group === TARA_GROUP ? item.batches.filter((b) => b.series) : item.batches;
     const showQuantity = batches.length > 1 || batches.some((b) => b.quantity !== item.quantity);
     return (
@@ -40,6 +40,7 @@ export default function MaterialRow({ item }) {
             <div className="raw-materials__head">
                 <span className="raw-materials__name">{item.name}</span>
                 <span className="raw-materials__total">{formatQuantity(item.quantity, item.uom)}</span>
+                {action}
             </div>
             {batches.length > 0 && (
                 <ul className="raw-materials__batches">
@@ -60,4 +61,5 @@ MaterialRow.propTypes = {
         quantity: PropTypes.number.isRequired,
         batches: PropTypes.arrayOf(PropTypes.object).isRequired,
     }).isRequired,
+    action: PropTypes.node,
 };

@@ -1,6 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { render, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
+import { MemoryRouter } from 'react-router-dom';
 import RawMaterialsPage from './RawMaterialsPage';
 
 vi.mock('../../api/rawMaterialsApi', () => ({
@@ -26,6 +27,8 @@ const PAYLOAD = {
     ],
 };
 
+const renderPage = () => render(<MemoryRouter><RawMaterialsPage /></MemoryRouter>);
+
 const cardOf = (name) => screen.getByText(name).closest('.raw-materials__item');
 
 describe('Склад сырья', () => {
@@ -35,7 +38,7 @@ describe('Склад сырья', () => {
     });
 
     it('группирует по ячейкам и показывает остаток и серии', async () => {
-        render(<RawMaterialsPage />);
+        renderPage();
         await screen.findByText('Хондроитин сульфат');
         const card = within(cardOf('Хондроитин сульфат'));
         expect(screen.getByRole('heading', { name: 'A6' })).toBeInTheDocument();
@@ -46,20 +49,20 @@ describe('Склад сырья', () => {
     });
 
     it('у тары не показывает пустую строку «без серии»', async () => {
-        render(<RawMaterialsPage />);
+        renderPage();
         await screen.findByText('Ведро 2 литра');
         expect(within(cardOf('Ведро 2 литра')).queryByText('Без серии')).not.toBeInTheDocument();
     });
 
     it('переключается на тару', async () => {
-        render(<RawMaterialsPage />);
+        renderPage();
         await screen.findByText('Ведро 2 литра');
         await userEvent.click(screen.getByRole('tab', { name: 'Тара' }));
         expect(screen.queryByText('Хондроитин сульфат')).not.toBeInTheDocument();
     });
 
     it('фильтрует по ячейке', async () => {
-        render(<RawMaterialsPage />);
+        renderPage();
         await screen.findByText('Ведро 2 литра');
         await userEvent.selectOptions(screen.getByRole('combobox'), 'C2');
         expect(screen.queryByText('Хондроитин сульфат')).not.toBeInTheDocument();
@@ -67,7 +70,7 @@ describe('Склад сырья', () => {
     });
 
     it('по кнопке обновления сверяется с МойСклад', async () => {
-        render(<RawMaterialsPage />);
+        renderPage();
         await screen.findByText('Ведро 2 литра');
         await userEvent.click(screen.getByRole('button', { name: /Обновить/ }));
         expect(rawMaterialsApi.refresh).toHaveBeenCalled();

@@ -1,24 +1,39 @@
+import hashlib
+import logging
 from collections import defaultdict
 
+import requests
 from django.core.cache import cache
 
 from api.exceptions import ExternalServiceError
-from msapi.client import get_json
+from msapi.client import BASE_URL, delete, get_json, post_json
 
 STORE_NAME = 'Шатл - склад сырья + тары'
-STORE_CACHE_KEY = 'raw_materials_store_id'
-STORE_CACHE_TTL = 24 * 60 * 60
+PRODUCTION_STORE_NAME = 'Склад производства + обклейки'
+ORGANIZATION_NAME = 'ООО "ФАРМПРОТЕКТ"'
+CACHE_TTL = 24 * 60 * 60
+
+logger = logging.getLogger(__name__)
+
+
+def _id_by_name(entity, name):
+    key = f'raw_materials_{entity}_id:{hashlib.md5(name.encode()).hexdigest()}'
+    cached = cache.get(key)
+    if cached:
+        return cached
+    rows = get_json(f'/entity/{entity}', {'filter': f'name={name}', 'limit': 1}).get('rows', [])
+    if not rows:
+        raise ExternalServiceError(f'«{name}» не найден в МойСклад')
+    cache.set(key, rows[0]['id'], CACHE_TTL)
+    return rows[0]['id']
 
 
 def store_id():
-    cached = cache.get(STORE_CACHE_KEY)
-    if cached:
-        return cached
-    rows = get_json('/entity/store', {'filter': f'name={STORE_NAME}', 'limit': 1}).get('rows', [])
-    if not rows:
-        raise ExternalServiceError(f'Склад «{STORE_NAME}» не найден в МойСклад')
-    cache.set(STORE_CACHE_KEY, rows[0]['id'], STORE_CACHE_TTL)
-    return rows[0]['id']
+    return _id_by_name('store', STORE_NAME)
+
+
+def _meta(path, kind):
+    return {'meta': {'href': f'{BASE_URL}{path}', 'type': kind, 'mediaType': 'application/json'}}
 
 
 def slots(store):
@@ -32,13 +47,58 @@ def stock(store):
     return totals, recalculating
 
 
-def main_slots(store):
-    best = defaultdict(lambda: (None, 0))
+def slot_stock(store):
+    placed = defaultdict(dict)
     for row in get_json('/report/stock/byslot/current', {'filter': f'storeId={store}'}):
-        if row['stock'] > best[row['assortmentId']][1]:
-            best[row['assortmentId']] = (row['slotId'], row['stock'])
-    return {assortment: slot for assortment, (slot, _) in best.items()}
+        if row['stock'] > 0:
+            placed[row['assortmentId']][row['slotId']] = row['stock']
+    return dict(placed)
 
 
 def product(assortment_id):
     return get_json(f'/entity/product/{assortment_id}', {'expand': 'uom'})
+
+
+def create_move(external_code, description, positions):
+    source = store_id()
+    rows = [
+        {
+            'quantity': float(quantity),
+            'assortment': _meta(f'/entity/product/{product}', 'product'),
+            **({'sourceSlot': _meta(f'/entity/store/{source}/slots/{slot}', 'slot')} if slot else {}),
+        }
+        for product, slot, quantity in positions
+    ]
+    try:
+        move = post_json('/entity/move', {
+            'organization': _meta(f"/entity/organization/{_id_by_name('organization', ORGANIZATION_NAME)}", 'organization'),
+            'sourceStore': _meta(f'/entity/store/{source}', 'store'),
+            'targetStore': _meta(f"/entity/store/{_id_by_name('store', PRODUCTION_STORE_NAME)}", 'store'),
+            'externalCode': external_code,
+            'description': description,
+            'applicable': True,
+            'positions': rows,
+        })
+    except requests.RequestException:
+        _drop_moves(external_code)
+        raise
+    _drop_moves(external_code, keep=move['id'])
+    return move
+
+
+def discard_move(move_id):
+    try:
+        delete(f'/entity/move/{move_id}')
+    except requests.RequestException:
+        logger.exception('Не удалось удалить перемещение %s в МойСклад', move_id)
+
+
+def _drop_moves(external_code, keep=None):
+    try:
+        rows = get_json('/entity/move', {'filter': f'externalCode={external_code}'}).get('rows', [])
+    except requests.RequestException:
+        logger.exception('Не удалось проверить повторы перемещения %s', external_code)
+        return
+    for row in rows:
+        if row['id'] != keep:
+            discard_move(row['id'])

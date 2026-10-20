@@ -5,7 +5,7 @@ from django.db import connection, transaction
 from django.utils import timezone
 
 from core.models import RawMaterial
-from raw_materials.models import BatchMovement, MaterialStock, Slot
+from raw_materials.models import BatchMovement, MaterialStock, Slot, SlotStock
 from raw_materials.services import moysklad
 from raw_materials.services.reconcile import reconcile
 from sync.utils import get_group_from_pathname
@@ -44,20 +44,33 @@ def _material(assortment_id, known):
     return material
 
 
-def _lock():
+def lock_stock():
     if connection.vendor == 'postgresql':
         with connection.cursor() as cursor:
             cursor.execute('SELECT pg_advisory_xact_lock(%s)', [LOCK_KEY])
 
 
+def _save_slots(stock, placed, slots):
+    SlotStock.objects.filter(material=stock.material).delete()
+    SlotStock.objects.bulk_create(
+        SlotStock(material=stock.material, slot=slots[slot], quantity=Decimal(str(quantity)))
+        for slot, quantity in placed.items() if slot in slots
+    )
+
+
 def sync_from_moysklad(kind=BatchMovement.RECONCILE):
+    started = timezone.now()
     store = moysklad.store_id()
     slot_names = moysklad.slots(store)
     totals, recalculating = moysklad.stock(store)
-    placed = moysklad.main_slots(store)
+    by_slot = moysklad.slot_stock(store)
 
     with transaction.atomic():
-        _lock()
+        lock_stock()
+        issued = set(
+            BatchMovement.objects.filter(kind=BatchMovement.ISSUE, created_at__gte=started)
+            .values_list('batch__material__external_id', flat=True)
+        )
         slots = {}
         for external_id, name in slot_names.items():
             slots[external_id], _ = Slot.objects.update_or_create(external_id=external_id, defaults={'name': name})
@@ -67,19 +80,22 @@ def sync_from_moysklad(kind=BatchMovement.RECONCILE):
         now = timezone.now()
         seen = corrected = 0
 
-        for external_id in (set(totals) | set(stocks)) - recalculating:
+        for external_id in (set(totals) | set(stocks)) - recalculating - issued:
             stock = stocks.get(external_id)
             if stock is None:
                 material = _material(external_id, known)
                 if material is None:
                     continue
                 stock = MaterialStock(material=material)
+            placed = by_slot.get(external_id, {})
+            main = max(placed, key=placed.get) if placed else None
             stock.quantity = Decimal(str(totals.get(external_id, 0)))
-            stock.slot = slots.get(placed.get(external_id)) or stock.slot
+            stock.slot = slots.get(main) or stock.slot
             stock.synced_at = now
             stock.save()
+            _save_slots(stock, placed, slots)
             seen += 1
             if reconcile(stock, kind):
                 corrected += 1
 
-    return {'materials': seen, 'corrected': corrected, 'skipped': len(recalculating)}
+    return {'materials': seen, 'corrected': corrected, 'skipped': len(recalculating | issued)}

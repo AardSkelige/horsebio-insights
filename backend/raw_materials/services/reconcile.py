@@ -13,7 +13,7 @@ def _trim_order(batch):
     return (not batch.series, batch.expiry_date or date.max, batch.received_at)
 
 
-def _move(batch, delta, kind):
+def move_batch(batch, delta, kind):
     batch.quantity += delta
     batch.save(update_fields=['quantity'])
     BatchMovement.objects.create(batch=batch, kind=kind, quantity=delta)
@@ -31,13 +31,13 @@ def reconcile(stock, kind=BatchMovement.RECONCILE):
         batch = next((b for b in batches if not b.series), None)
         if batch is None:
             batch = Batch.objects.create(material=stock.material, received_at=timezone.now())
-        _move(batch, diff, kind)
+        move_batch(batch, diff, kind)
         return diff
 
     left = -diff
     for batch in sorted(batches, key=_trim_order):
         cut = min(left, batch.quantity)
-        _move(batch, -cut, kind)
+        move_batch(batch, -cut, kind)
         left -= cut
         if left <= 0:
             break

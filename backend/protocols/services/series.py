@@ -18,7 +18,7 @@ def options(material):
 
 def default(material):
     issued = (
-        BatchMovement.objects.filter(batch__material=material, kind=BatchMovement.RECONCILE, quantity__lt=0)
+        BatchMovement.objects.filter(batch__material=material, kind__in=[BatchMovement.ISSUE, BatchMovement.RECONCILE], quantity__lt=0)
         .exclude(batch__series='').select_related('batch').order_by('-created_at').first()
     )
     if issued:
