@@ -7,6 +7,7 @@ import MaterialRow from '../MaterialRow';
 import useStock from '../useStock';
 import BackLink from './BackLink';
 import IssueCart from './IssueCart';
+import ScanButton from './ScanButton';
 import TakeSheet from './TakeSheet';
 import useIssueCart from './useIssueCart';
 import '../RawMaterialsPage.css';
@@ -24,7 +25,11 @@ export default function SlotPage() {
     return (
         <Page className="slot-page">
             <BackLink />
-            <PageHeader title={`Ячейка ${slot}`} subtitle="Шатл · выдача на производство" />
+            <PageHeader
+                title={`Ячейка ${slot}`}
+                subtitle="Шатл · выдача на производство"
+                actions={<ScanButton slots={data?.slots || []} variant="soft" />}
+            />
 
             {error && <ErrorState hint={error} onRetry={() => reload()} />}
             {!error && loading && (

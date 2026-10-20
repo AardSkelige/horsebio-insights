@@ -266,6 +266,61 @@
     color: var(--muted);
 }
 
+.scanner {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-3);
+    padding-top: var(--space-3);
+}
+
+.scanner__view {
+    position: relative;
+    overflow: hidden;
+    aspect-ratio: 3 / 4;
+    max-height: 62vh;
+    border-radius: var(--radius-lg);
+    background: #111;
+}
+
+.scanner__video {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+}
+
+.scanner__frame {
+    position: absolute;
+    inset: 50% auto auto 50%;
+    width: 62%;
+    aspect-ratio: 1;
+    translate: -50% -50%;
+    border-radius: var(--radius-md);
+    box-shadow: 0 0 0 100vmax rgb(0 0 0 / 0.35);
+    background:
+        linear-gradient(#fff, #fff) top left / 28px 3px no-repeat,
+        linear-gradient(#fff, #fff) top left / 3px 28px no-repeat,
+        linear-gradient(#fff, #fff) top right / 28px 3px no-repeat,
+        linear-gradient(#fff, #fff) top right / 3px 28px no-repeat,
+        linear-gradient(#fff, #fff) bottom left / 28px 3px no-repeat,
+        linear-gradient(#fff, #fff) bottom left / 3px 28px no-repeat,
+        linear-gradient(#fff, #fff) bottom right / 28px 3px no-repeat,
+        linear-gradient(#fff, #fff) bottom right / 3px 28px no-repeat;
+}
+
+.scanner__hint {
+    position: absolute;
+    inset: auto 0 16px;
+    text-align: center;
+    font-size: var(--size-sm);
+    color: #fff;
+}
+
+.scanner__slots {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(64px, 1fr));
+    gap: 6px;
+}
+
 .slot-labels {
     display: grid;
     grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));

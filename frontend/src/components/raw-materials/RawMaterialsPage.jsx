@@ -6,6 +6,7 @@ import { FadeRise } from '../ui/motion';
 import { formatDateTimeShort } from '../../utils/formatters';
 import SlotCard from './SlotCard';
 import useStock from './useStock';
+import ScanButton from './issue/ScanButton';
 import { TARA_GROUP, groupBySlot, matches } from './format';
 
 const KINDS = [
@@ -42,6 +43,7 @@ export default function RawMaterialsPage() {
                 refreshing={refreshing || loading}
                 actions={(
                     <>
+                        <ScanButton slots={data?.slots || []} />
                         <Button variant="link" icon={History} onClick={() => navigate('/raw-materials/issues')}>Журнал выдач</Button>
                         <Button variant="link" icon={QrCode} onClick={() => navigate('/raw-materials/qr')}>QR ячеек</Button>
                     </>
