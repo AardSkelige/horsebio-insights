@@ -20,14 +20,14 @@ export function expiryState(isoDate, today = new Date()) {
 
 export function matches(item, query) {
     const words = query.toLowerCase().replace(/ё/g, 'е').split(/\s+/).filter(Boolean);
-    const haystack = [item.name, item.slot, ...item.batches.map((b) => b.series)]
+    const haystack = [item.name, item.slot, ...(item.slots || []), ...item.batches.map((b) => b.series)]
         .join(' ').toLowerCase().replace(/ё/g, 'е');
     return words.every((word) => haystack.includes(word));
 }
 
 export const TARA_GROUP = 'Тара';
 
-const bySlot = (a, b) => a.localeCompare(b, 'ru', { numeric: true });
+const bySlot = (a, b) => (!a) - (!b) || String(a).localeCompare(String(b), 'ru', { numeric: true });
 
 export function groupBySlot(items) {
     const groups = new Map();
@@ -37,8 +37,8 @@ export function groupBySlot(items) {
         groups.get(key).push(item);
     });
     return [...groups.entries()]
-        .sort(([a], [b]) => (!a) - (!b) || bySlot(a, b))
-        .map(([slot, slotItems]) => ({ slot, items: slotItems }));
+        .sort(([a], [b]) => bySlot(a, b))
+        .map(([slot, slotItems]) => ({ slot, items: [...slotItems].sort((x, y) => x.name.localeCompare(y.name, 'ru')) }));
 }
 
 export const round3 = (value) => Math.round(value * 1000) / 1000;

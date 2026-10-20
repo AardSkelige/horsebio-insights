@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useState } from 'react';
 import { rawMaterialsApi } from '../../api/rawMaterialsApi';
+import { useNotifications } from '../../contexts/NotificationsContext';
 
 export default function useStock() {
     const [data, setData] = useState(null);
@@ -20,14 +21,19 @@ export default function useStock() {
         return () => controller.abort();
     }, [reload]);
 
+    const { reload: reloadNotifications } = useNotifications();
+
     const refresh = useCallback(() => {
         setRefreshing(true);
         setError(null);
         rawMaterialsApi.refresh()
-            .then(setData)
+            .then((fresh) => {
+                setData(fresh);
+                reloadNotifications();
+            })
             .catch((err) => setError(err.message || 'Не удалось сверить с МойСклад'))
             .finally(() => setRefreshing(false));
-    }, []);
+    }, [reloadNotifications]);
 
     return { data, loading, refreshing, error, refresh, reload };
 }

@@ -4,6 +4,7 @@ import requests
 from django.db import connection, transaction
 from django.utils import timezone
 
+from api.notifications import invalidate
 from core.models import RawMaterial
 from raw_materials.models import BatchMovement, MaterialStock, Slot, SlotStock
 from raw_materials.services import moysklad
@@ -98,4 +99,5 @@ def sync_from_moysklad(kind=BatchMovement.RECONCILE):
             if reconcile(stock, kind):
                 corrected += 1
 
+    invalidate('raw-materials')
     return {'materials': seen, 'corrected': corrected, 'skipped': len(recalculating | issued)}

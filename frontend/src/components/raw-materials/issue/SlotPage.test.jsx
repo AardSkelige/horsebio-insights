@@ -56,9 +56,9 @@ describe('Выдача из ячейки', () => {
     it('предлагает непросроченную серию, не даёт взять больше остатка и выдаёт одним перемещением', async () => {
         const user = userEvent.setup();
         renderSlot('А1');
-        await user.click(await screen.findByRole('button', { name: 'Взять Хондроитин сульфат' }));
+        await user.click(await screen.findByText('Хондроитин сульфат'));
 
-        const sheet = within(screen.getByRole('dialog', { name: 'Взять со склада' }));
+        const sheet = within(screen.getByRole('dialog', { name: 'Карточка сырья' }));
         expect(sheet.getByRole('radio', { name: /GN2508029/ })).toHaveAttribute('aria-checked', 'true');
 
         const amount = sheet.getByRole('textbox');
@@ -70,13 +70,15 @@ describe('Выдача из ячейки', () => {
         await user.type(amount, '250,5');
         await user.click(sheet.getByRole('button', { name: 'В корзину' }));
 
-        await user.click(await screen.findByRole('button', { name: 'Выдать' }));
+        await user.click(await screen.findByRole('button', { name: 'Открыть' }));
         const cart = within(screen.getByRole('dialog', { name: 'Выдача на производство' }));
+        await user.type(cart.getByRole('textbox', { name: 'Кто получил' }), 'Рома');
         await user.click(cart.getByRole('button', { name: /Выдать 1 позицию/ }));
 
         const body = rawMaterialsApi.issue.mock.calls[0][0];
         expect(body.lines).toEqual([{ batch: 12, quantity: 250.5, slot: 'А1' }]);
         expect(body.key).toMatch(/^[0-9a-f-]{36}$/);
+        expect(body.receiver).toBe('Рома');
         expect(await cart.findByText('Перемещение 00285 проведено')).toBeInTheDocument();
     });
 
@@ -84,13 +86,15 @@ describe('Выдача из ячейки', () => {
         rawMaterialsApi.issue.mockRejectedValueOnce(new Error('МойСклад не принял перемещение: нет в ячейке'));
         const user = userEvent.setup();
         renderSlot('C2');
-        await user.click(await screen.findByRole('button', { name: 'Взять Ведро 2 литра' }));
-        const sheet = within(screen.getByRole('dialog', { name: 'Взять со склада' }));
+        await user.click(await screen.findByText('Ведро 2 литра'));
+        const sheet = within(screen.getByRole('dialog', { name: 'Карточка сырья' }));
         await user.type(sheet.getByRole('textbox'), '10');
         await user.click(sheet.getByRole('button', { name: 'В корзину' }));
-        await user.click(await screen.findByRole('button', { name: 'Выдать' }));
+        await user.click(await screen.findByRole('button', { name: 'Открыть' }));
 
         const cart = within(screen.getByRole('dialog', { name: 'Выдача на производство' }));
+
+        await user.type(cart.getByRole('textbox', { name: 'Кто получил' }), 'Рома');
         await user.click(cart.getByRole('button', { name: /Выдать 1 позицию/ }));
         expect(await cart.findByText(/нет в ячейке/)).toBeInTheDocument();
 
@@ -102,16 +106,17 @@ describe('Выдача из ячейки', () => {
     it('сырьё видно и во второй ячейке, и выдаётся оттуда', async () => {
         const user = userEvent.setup();
         renderSlot('A6');
-        await user.click(await screen.findByRole('button', { name: 'Взять Хондроитин сульфат' }));
-        const sheet = within(screen.getByRole('dialog', { name: 'Взять со склада' }));
+        await user.click(await screen.findByText('Хондроитин сульфат'));
+        const sheet = within(screen.getByRole('dialog', { name: 'Карточка сырья' }));
         await user.type(sheet.getByRole('textbox'), '0,1');
         await user.click(sheet.getByRole('button', { name: 'В корзину' }));
-        await user.click(screen.getByRole('button', { name: 'Взять Хондроитин сульфат' }));
-        await user.type(within(screen.getByRole('dialog', { name: 'Взять со склада' })).getByRole('textbox'), '0,2');
-        await user.click(within(screen.getByRole('dialog', { name: 'Взять со склада' })).getByRole('button', { name: 'В корзину' }));
+        await user.click(screen.getByText('Хондроитин сульфат'));
+        await user.type(within(screen.getByRole('dialog', { name: 'Карточка сырья' })).getByRole('textbox'), '0,2');
+        await user.click(within(screen.getByRole('dialog', { name: 'Карточка сырья' })).getByRole('button', { name: 'В корзину' }));
 
-        await user.click(await screen.findByRole('button', { name: 'Выдать' }));
+        await user.click(await screen.findByRole('button', { name: 'Открыть' }));
         const cart = within(screen.getByRole('dialog', { name: 'Выдача на производство' }));
+        await user.type(cart.getByRole('textbox', { name: 'Кто получил' }), 'Рома');
         await user.click(cart.getByRole('button', { name: /Выдать 1 позицию/ }));
         expect(rawMaterialsApi.issue.mock.calls[0][0].lines).toEqual([{ batch: 12, quantity: 0.3, slot: 'A6' }]);
     });
@@ -130,8 +135,9 @@ describe('Выдача из ячейки', () => {
         });
         const user = userEvent.setup();
         renderSlot('А1');
-        await user.click(await screen.findByRole('button', { name: 'Выдать' }));
+        await user.click(await screen.findByRole('button', { name: 'Открыть' }));
         const cart = within(screen.getByRole('dialog', { name: 'Выдача на производство' }));
+        await user.type(cart.getByRole('textbox', { name: 'Кто получил' }), 'Рома');
         await user.click(cart.getByRole('button', { name: /Выдать 2 позиции/ }));
 
         expect(await cart.findByText(/В корзине осталось 1 позиция/)).toBeInTheDocument();
@@ -142,6 +148,6 @@ describe('Выдача из ячейки', () => {
 
     it('на неизвестную ячейку говорит, что её нет', async () => {
         renderSlot('Z9');
-        expect(await screen.findByText('Такой ячейки нет')).toBeInTheDocument();
+        expect(await screen.findByText(/Такой ячейки нет/)).toBeInTheDocument();
     });
 });

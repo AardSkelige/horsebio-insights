@@ -86,6 +86,7 @@ class Issue(models.Model):
     moysklad_id = models.CharField(max_length=64, verbose_name='Перемещение в МойСклад')
     moysklad_name = models.CharField(max_length=32, verbose_name='Номер перемещения')
     description = models.CharField(max_length=255, verbose_name='Комментарий')
+    receiver = models.CharField(max_length=100, blank=True, verbose_name='Кто получил')
 
     class Meta:
         ordering = ['-created_at']

@@ -29,7 +29,7 @@ class IssueTests(TestCase):
 
     def run_issue(self, lines, key=None):
         with patch(CREATE_MOVE, return_value=MOVE) as create:
-            record = issue(self.user, key or uuid.uuid4(), lines)
+            record = issue(self.user, key or uuid.uuid4(), lines, 'Рома')
         return record, create
 
     def test_writes_one_move_and_takes_quantity_from_the_chosen_series(self):
@@ -37,7 +37,7 @@ class IssueTests(TestCase):
 
         code, description, positions = create.call_args.args
         self.assertEqual(code, str(record.key))
-        self.assertEqual(description, 'Иван Петров, выдача сырья')
+        self.assertEqual(description, 'Иван Петров, выдача сырья. Получил: Рома')
         self.assertEqual(positions, [(self.chondroitin.external_id, 'slot-a6', Decimal('35'))])
 
         self.fresh.refresh_from_db()
@@ -61,6 +61,12 @@ class IssueTests(TestCase):
             self.run_issue([{'batch': self.fresh.id, 'quantity': 60}, {'batch': self.fresh.id, 'quantity': 60}])
         self.assertFalse(Issue.objects.exists())
 
+    def test_without_receiver_is_refused(self):
+        for receiver in ('', '   ', None):
+            with self.subTest(receiver=receiver), self.assertRaisesMessage(ValidationError, 'Укажите, кто получил'):
+                with patch(CREATE_MOVE, return_value=MOVE):
+                    issue(self.user, uuid.uuid4(), [{'batch': self.fresh.id, 'quantity': 1}], receiver)
+
     def test_zero_or_garbage_is_refused(self):
         for lines in ([], [{'batch': self.fresh.id, 'quantity': 0}], [{'batch': 'x', 'quantity': 1}]):
             with self.subTest(lines=lines), self.assertRaises(ValidationError):
@@ -71,7 +77,7 @@ class IssueTests(TestCase):
         response.json.return_value = {'errors': [{'error': 'Нельзя переместить больше, чем есть в ячейке'}]}
         with patch(CREATE_MOVE, side_effect=requests.HTTPError(response=response)):
             with self.assertRaisesMessage(ExternalServiceError, 'Нельзя переместить больше'):
-                issue(self.user, uuid.uuid4(), [{'batch': self.fresh.id, 'quantity': 10}])
+                issue(self.user, uuid.uuid4(), [{'batch': self.fresh.id, 'quantity': 10}], 'Рома')
 
         self.assertFalse(Issue.objects.exists())
         self.assertEqual(Batch.objects.get(pk=self.fresh.pk).quantity, Decimal('100'))
@@ -120,7 +126,7 @@ class IssueTests(TestCase):
                 patch('raw_materials.services.issue._record', side_effect=RuntimeError), \
                 patch('raw_materials.services.moysklad.discard_move') as discard:
             with self.assertRaises(RuntimeError):
-                issue(self.user, uuid.uuid4(), [{'batch': self.fresh.id, 'quantity': 10}])
+                issue(self.user, uuid.uuid4(), [{'batch': self.fresh.id, 'quantity': 10}], 'Рома')
         discard.assert_called_once_with('move-1')
         self.assertFalse(Issue.objects.exists())
 
@@ -142,10 +148,10 @@ class DescribeTests(TestCase):
         vanya = User(first_name='Иван', last_name='Петров')
         raw, tara = material(), material('Ведро 2 литра', 'шт')
         tara.group = 'Тара'
-        self.assertEqual(describe(vanya, {raw}), 'Иван Петров, выдача сырья')
-        self.assertEqual(describe(vanya, {tara}), 'Иван Петров, выдача тары')
-        self.assertEqual(describe(vanya, {raw, tara}), 'Иван Петров, выдача сырья и тары')
-        self.assertEqual(describe(User(username='vapan1'), {raw}), 'vapan1, выдача сырья')
+        self.assertEqual(describe(vanya, {raw}, 'Рома'), 'Иван Петров, выдача сырья. Получил: Рома')
+        self.assertEqual(describe(vanya, {tara}, 'Рома'), 'Иван Петров, выдача тары. Получил: Рома')
+        self.assertEqual(describe(vanya, {raw, tara}, 'Рома'), 'Иван Петров, выдача сырья и тары. Получил: Рома')
+        self.assertEqual(describe(User(username='vapan1'), {raw}, 'Рома'), 'vapan1, выдача сырья. Получил: Рома')
 
 
 class CreateMoveTests(TestCase):
@@ -180,7 +186,7 @@ class IssuesApiTests(TestCase):
 
     def test_issue_then_see_it_in_the_journal(self):
         UserPageAccess.objects.create(user=self.user, page_key='raw-materials')
-        body = {'key': str(uuid.uuid4()), 'lines': [{'batch': self.batch.id, 'quantity': 25}]}
+        body = {'key': str(uuid.uuid4()), 'receiver': 'Рома', 'lines': [{'batch': self.batch.id, 'quantity': 25}]}
         with patch(CREATE_MOVE, return_value=MOVE):
             created = self.client.post(self.URL, body, content_type='application/json')
 

@@ -1,13 +1,19 @@
 import { useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { History, QrCode } from 'lucide-react';
-import { Button, EmptyState, ErrorState, Page, PageHeader, SearchInput, Segmented, Select, Skeleton, Toolbar } from '../ui';
+import { Button, ErrorState, Page, PageHeader, SearchInput, Segmented } from '../ui';
 import { FadeRise } from '../ui/motion';
+import { SectionNotifications } from '../notifications';
+import { useIsMobile } from '../../hooks/useIsMobile';
 import { formatDateTimeShort } from '../../utils/formatters';
-import SlotCard from './SlotCard';
+import StockList from './StockList';
 import useStock from './useStock';
+import IssueCart from './issue/IssueCart';
+import MaterialSheet from './issue/MaterialSheet';
 import ScanButton from './issue/ScanButton';
-import { TARA_GROUP, groupBySlot, matches } from './format';
+import useIssueCart from './issue/useIssueCart';
+import { TARA_GROUP, matches } from './format';
+import './RawMaterialsPage.css';
 
 const KINDS = [
     { value: 'all', label: 'Все' },
@@ -16,68 +22,72 @@ const KINDS = [
 ];
 
 const ofKind = (item, kind) => kind === 'all' || (kind === 'tara') === (item.group === TARA_GROUP);
-import './RawMaterialsPage.css';
 
 export default function RawMaterialsPage() {
     const navigate = useNavigate();
-    const { data, loading, refreshing, error, refresh } = useStock();
+    const isMobile = useIsMobile();
+    const { data, loading, refreshing, error, refresh, reload } = useStock();
+    const cart = useIssueCart();
     const [search, setSearch] = useState('');
-    const [slot, setSlot] = useState('');
     const [kind, setKind] = useState('all');
+    const [opened, setOpened] = useState(null);
 
-    const items = useMemo(() => data?.items || [], [data]);
-    const slots = useMemo(() => [...new Set(items.map((i) => i.slot).filter(Boolean))].sort(), [items]);
     const visible = useMemo(
-        () => items.filter((i) => ofKind(i, kind) && (!slot || i.slot === slot) && matches(i, search)),
-        [items, kind, slot, search],
+        () => (data?.items || []).filter((i) => ofKind(i, kind) && matches(i, search)),
+        [data, kind, search],
     );
-    const groups = useMemo(() => groupBySlot(visible), [visible]);
+
+    const links = (
+        <>
+            <Button variant="ghost" size="sm" icon={History} onClick={() => navigate('/raw-materials/issues')}>Журнал выдач</Button>
+            <Button variant="ghost" size="sm" icon={QrCode} onClick={() => navigate('/raw-materials/qr')}>QR ячеек</Button>
+        </>
+    );
 
     return (
-        <Page>
+        <Page className="stock-page">
             <PageHeader
                 title="Склад сырья"
                 subtitle="Шатл: остатки и ячейки из МойСклад, серии и сроки годности"
                 updatedAt={data?.synced_at ? formatDateTimeShort(data.synced_at) : undefined}
                 onRefresh={refresh}
                 refreshing={refreshing || loading}
-                actions={(
+                actions={isMobile ? undefined : (
                     <>
                         <ScanButton slots={data?.slots || []} />
-                        <Button variant="link" icon={History} onClick={() => navigate('/raw-materials/issues')}>Журнал выдач</Button>
-                        <Button variant="link" icon={QrCode} onClick={() => navigate('/raw-materials/qr')}>QR ячеек</Button>
+                        {links}
                     </>
                 )}
             />
 
-            <Toolbar>
-                <SearchInput value={search} onChange={setSearch} placeholder="Сырьё, серия или ячейка" />
-                <div className="raw-materials__filters">
-                    <Select value={slot} onChange={(e) => setSlot(e.target.value)} placeholder="Все ячейки" options={slots} />
-                    <Segmented options={KINDS} value={kind} onChange={setKind} layoutId="raw-materials-kind" />
+            {isMobile && (
+                <div className="stock-page__mobile-actions">
+                    <ScanButton slots={data?.slots || []} block />
+                    <div className="stock-page__links">{links}</div>
                 </div>
-            </Toolbar>
+            )}
+
+            <SectionNotifications source="raw-materials" />
+
+            <div className="stock-page__filters">
+                <SearchInput value={search} onChange={setSearch} placeholder="Сырьё, серия или ячейка" />
+                <Segmented options={KINDS} value={kind} onChange={setKind} layoutId="raw-materials-kind" />
+            </div>
 
             {error && <ErrorState hint={error} onRetry={refresh} />}
-            {!error && loading && (
-                <div className="raw-materials__shelves" aria-busy="true">
-                    {[...Array(6)].map((_, i) => <Skeleton key={i} height={140} style={{ borderRadius: 12, marginBottom: 12 }} />)}
-                </div>
-            )}
-
-            {!error && !loading && (
+            {!error && (
                 <FadeRise>
-                    <div className="raw-materials__shelves">
-                        {groups.map((group) => <SlotCard key={group.slot} slot={group.slot} items={group.items} />)}
-                    </div>
-                    {visible.length === 0 && (
-                        <EmptyState
-                            title={items.length ? 'Ничего не найдено' : 'Склад пуст'}
-                            hint={items.length ? 'Ищет по названию, серии и ячейке' : 'Нажмите «Обновить», чтобы сверить с МойСклад'}
-                        />
-                    )}
+                    <StockList
+                        items={visible}
+                        loading={loading}
+                        onOpen={setOpened}
+                        emptyText={data?.items?.length ? 'Ничего не найдено: поиск идёт по названию, серии и ячейке' : 'Склад пуст. Нажмите «Обновить», чтобы сверить с МойСклад'}
+                    />
                 </FadeRise>
             )}
+
+            <MaterialSheet item={opened} onClose={() => setOpened(null)} onAdd={cart.add} taken={cart.taken} />
+            <IssueCart cart={cart} onIssued={() => reload()} />
         </Page>
     );
 }

@@ -6,7 +6,7 @@ import { Button } from '../../ui';
 import Scanner from './Scanner';
 import './issue.css';
 
-export default function ScanButton({ slots, variant = 'primary' }) {
+export default function ScanButton({ slots, variant = 'primary', block = false }) {
     const [open, setOpen] = useState(false);
     const navigate = useNavigate();
 
@@ -18,7 +18,7 @@ export default function ScanButton({ slots, variant = 'primary' }) {
 
     return (
         <>
-            <Button variant={variant} icon={ScanLine} onClick={() => setOpen(true)}>Сканировать</Button>
+            <Button variant={variant} block={block} icon={ScanLine} onClick={() => setOpen(true)}>Сканировать</Button>
             <Scanner open={open} onClose={close} onFound={found} slots={slots} />
         </>
     );
@@ -27,4 +27,5 @@ export default function ScanButton({ slots, variant = 'primary' }) {
 ScanButton.propTypes = {
     slots: PropTypes.arrayOf(PropTypes.string).isRequired,
     variant: PropTypes.oneOf(['primary', 'soft']),
+    block: PropTypes.bool,
 };

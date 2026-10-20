@@ -1,11 +1,9 @@
 import { useEffect, useRef, useState } from 'react';
 import PropTypes from 'prop-types';
-import { Badge, Button, CloseButton, Input, SectionLabel } from '../../ui';
+import { Button, CloseButton, Input, SectionLabel } from '../../ui';
 import { DrawerShell } from '../../ui/motion';
-import { formatDate } from '../../../utils/formatters';
+import Expiry from '../Expiry';
 import { expiryState, formatQuantity, round3 } from '../format';
-
-const EXPIRY_TONE = { expired: 'error', soon: 'warning', ok: 'neutral' };
 
 const parse = (text) => round3(Number(String(text).replace(',', '.').replace(/\s/g, '')));
 
@@ -15,24 +13,24 @@ function firstChoice(item, taken) {
 }
 
 function SeriesOption({ batch, uom, left, selected, onSelect }) {
-    const state = expiryState(batch.expiry_date);
     return (
         <button
             type="button"
             role="radio"
             aria-checked={selected}
-            className={`take-sheet__series${selected ? ' is-selected' : ''}`}
+            className={`take-sheet__series no-tap-scale${selected ? ' is-selected' : ''}`}
             onClick={onSelect}
             disabled={left <= 0}
         >
-            <span className={batch.series ? 'take-sheet__series-name' : 'take-sheet__series-name is-none'}>
-                {batch.series || 'Без серии'}
+            <span className="take-sheet__dot" aria-hidden="true" />
+            <span className="take-sheet__series-main">
+                <span className={batch.series ? 'take-sheet__series-name' : 'take-sheet__series-name is-none'}>
+                    {batch.series || 'Без серии'}
+                </span>
+                <span className="take-sheet__series-expiry">
+                    {batch.expiry_date ? <Expiry date={batch.expiry_date} prefix="годен до " /> : 'срок не указан'}
+                </span>
             </span>
-            {state && (
-                <Badge tone={EXPIRY_TONE[state]}>
-                    {state === 'expired' ? 'Просрочена ' : 'до '}{formatDate(batch.expiry_date)}
-                </Badge>
-            )}
             <span className="take-sheet__series-left">{formatQuantity(left, uom)}</span>
         </button>
     );
@@ -46,7 +44,7 @@ SeriesOption.propTypes = {
     onSelect: PropTypes.func.isRequired,
 };
 
-export default function TakeSheet({ item, onClose, onAdd, taken }) {
+export default function MaterialSheet({ item, onClose, onAdd, taken }) {
     const shown = useRef(item);
     if (item) shown.current = item;
     const current = shown.current;
@@ -82,16 +80,27 @@ export default function TakeSheet({ item, onClose, onAdd, taken }) {
     };
 
     return (
-        <DrawerShell open={Boolean(item)} onClose={onClose} label="Взять со склада" width={440}>
+        <DrawerShell open={Boolean(item)} onClose={onClose} label="Карточка сырья" width={460}>
             <div className="ui-drawer__head">
                 <h2 className="ui-drawer__title">{current?.name}</h2>
                 <CloseButton onClick={onClose} />
             </div>
             {current && (
                 <form className="ui-drawer__body take-sheet" onSubmit={submit}>
-                    {current.batches.length > 1 && (
+                    <div className="take-sheet__facts">
+                        <span className="take-sheet__fact">
+                            <span className="stock__label">Ячейка</span>
+                            <span className="take-sheet__slot">{current.slot || '—'}</span>
+                        </span>
+                        <span className="take-sheet__fact">
+                            <span className="stock__label">Остаток</span>
+                            <span>{formatQuantity(current.quantity, current.uom)}</span>
+                        </span>
+                    </div>
+
+                    {current.batches.length > 0 && (
                         <section>
-                            <SectionLabel>Серия</SectionLabel>
+                            <SectionLabel>{current.batches.length > 1 ? 'Серии · выберите, из какой брать' : 'Серия'}</SectionLabel>
                             <div className="take-sheet__options" role="radiogroup" aria-label="Серия">
                                 {current.batches.map((b) => (
                                     <SeriesOption
@@ -136,7 +145,7 @@ export default function TakeSheet({ item, onClose, onAdd, taken }) {
     );
 }
 
-TakeSheet.propTypes = {
+MaterialSheet.propTypes = {
     item: PropTypes.object,
     onClose: PropTypes.func.isRequired,
     onAdd: PropTypes.func.isRequired,

@@ -28,7 +28,11 @@ describe('склад сырья: форматирование', () => {
     });
 
     it('сортирует ячейки как на полке, без ячейки — в конце', () => {
-        const items = ['A10', '', 'B1', 'A2'].map((slot, id) => ({ id, slot }));
+        const items = ['A10', '', 'B1', 'A2'].map((slot, id) => ({ id, slot, name: 'x', batches: [] }));
         expect(groupBySlot(items).map((g) => g.slot)).toEqual(['A2', 'A10', 'B1', '']);
+    });
+    it('находит сырьё по любой ячейке, где оно лежит', () => {
+        const item = { name: 'Хондроитин', slot: 'A6', slots: ['A6', 'C2'], batches: [] };
+        expect(matches(item, 'c2')).toBe(true);
     });
 });

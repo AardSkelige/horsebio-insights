@@ -1,78 +1,63 @@
 import { useMemo, useState } from 'react';
 import { useParams } from 'react-router-dom';
-import { Plus } from 'lucide-react';
-import { Button, Card, EmptyState, ErrorState, Page, PageHeader, Skeleton } from '../../ui';
+import { ErrorState, Page, PageHeader } from '../../ui';
 import { FadeRise } from '../../ui/motion';
-import MaterialRow from '../MaterialRow';
+import { useIsMobile } from '../../../hooks/useIsMobile';
+import StockList from '../StockList';
 import useStock from '../useStock';
 import BackLink from './BackLink';
 import IssueCart from './IssueCart';
+import MaterialSheet from './MaterialSheet';
 import ScanButton from './ScanButton';
-import TakeSheet from './TakeSheet';
 import useIssueCart from './useIssueCart';
 import '../RawMaterialsPage.css';
 import './issue.css';
 
 export default function SlotPage() {
     const { slot } = useParams();
+    const isMobile = useIsMobile();
     const { data, loading, error, reload } = useStock();
     const cart = useIssueCart();
-    const [taking, setTaking] = useState(null);
+    const [opened, setOpened] = useState(null);
 
-    const items = useMemo(() => (data?.items || []).filter((i) => i.slot === slot || i.slots?.includes(slot)), [data, slot]);
+    const items = useMemo(
+        () => (data?.items || [])
+            .filter((i) => i.slot === slot || i.slots?.includes(slot))
+            .sort((a, b) => a.name.localeCompare(b.name, 'ru')),
+        [data, slot],
+    );
     const known = data?.slots?.includes(slot);
+    const scan = <ScanButton slots={data?.slots || []} variant={isMobile ? 'primary' : 'soft'} block={isMobile} />;
 
     return (
-        <Page className="slot-page">
+        <Page className="stock-page slot-page">
             <BackLink />
             <PageHeader
                 title={`Ячейка ${slot}`}
-                subtitle="Шатл · выдача на производство"
-                actions={<ScanButton slots={data?.slots || []} variant="soft" />}
+                subtitle="Шатл · нажмите на сырьё, чтобы взять"
+                actions={isMobile ? undefined : scan}
             />
+            {isMobile && scan}
 
             {error && <ErrorState hint={error} onRetry={() => reload()} />}
-            {!error && loading && (
-                <div aria-busy="true">
-                    {[...Array(3)].map((_, i) => <Skeleton key={i} height={72} style={{ borderRadius: 12, marginBottom: 10 }} />)}
-                </div>
-            )}
-
-            {!error && !loading && (
-                items.length > 0 ? (
-                    <FadeRise>
-                        <Card className="slot-page__card">
-                            <ul className="raw-materials__items">
-                                {items.map((item) => (
-                                    <MaterialRow
-                                        key={item.id}
-                                        item={item}
-                                        action={(
-                                            <Button
-                                                variant="subtle"
-                                                tone="accent"
-                                                size="sm"
-                                                icon={Plus}
-                                                aria-label={`Взять ${item.name}`}
-                                                onClick={() => setTaking(item)}
-                                            >
-                                                Взять
-                                            </Button>
-                                        )}
-                                    />
-                                ))}
-                            </ul>
-                        </Card>
-                    </FadeRise>
-                ) : (
-                    <EmptyState
-                        title={known ? 'Ячейка пуста' : 'Такой ячейки нет'}
-                        hint={known ? 'По МойСклад здесь ничего не лежит' : 'Проверьте QR или выберите ячейку на странице склада'}
+            {!error && (
+                <FadeRise>
+                    <StockList
+                        items={items}
+                        loading={loading}
+                        single
+                        onOpen={setOpened}
+                        emptyText={known ? 'Ячейка пуста: по МойСклад здесь ничего не лежит' : 'Такой ячейки нет: проверьте QR или найдите сырьё на странице склада'}
                     />
-                )
+                </FadeRise>
             )}
 
-            <TakeSheet item={taking} onClose={() => setTaking(null)} onAdd={(line) => cart.add({ ...line, slot })} taken={cart.taken} />
+            <MaterialSheet
+                item={opened}
+                onClose={() => setOpened(null)}
+                onAdd={(line) => cart.add({ ...line, slot })}
+                taken={cart.taken}
+            />
             <IssueCart cart={cart} onIssued={() => reload()} />
         </Page>
     );

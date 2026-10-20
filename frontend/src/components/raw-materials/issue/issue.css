@@ -1,7 +1,3 @@
-.slot-page {
-    padding-bottom: 96px;
-}
-
 .slot-page__back {
     display: inline-flex;
     align-items: center;
@@ -14,14 +10,6 @@
 
 .slot-page__back:hover {
     color: var(--primary);
-}
-
-.slot-page__card {
-    padding: 4px 14px;
-}
-
-.slot-page__card .raw-materials__head {
-    align-items: center;
 }
 
 .take-sheet {
@@ -37,19 +25,32 @@
     gap: 8px;
 }
 
+.take-sheet__facts {
+    display: flex;
+    gap: 24px;
+}
+
+.take-sheet__fact {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    font-size: var(--size-md);
+    color: var(--ink);
+    font-variant-numeric: tabular-nums;
+}
+
 .take-sheet__series {
     display: flex;
     align-items: center;
-    gap: 8px;
+    gap: 10px;
     width: 100%;
-    min-height: 48px;
-    padding: 10px 12px;
+    padding: 9px 12px;
     border: 1px solid var(--hairline);
     border-radius: var(--radius-md);
-    background: var(--surface-card);
+    background: var(--canvas);
     color: var(--body);
     font: inherit;
-    font-size: var(--size-sm);
+    font-size: var(--size-md);
     text-align: left;
     cursor: pointer;
     transition: border-color 0.15s ease-out, background-color 0.15s ease-out;
@@ -62,7 +63,6 @@
 .take-sheet__series.is-selected {
     border-color: var(--primary);
     background: var(--accent-wash);
-    box-shadow: inset 0 0 0 1px var(--primary);
 }
 
 .take-sheet__series:disabled {
@@ -70,23 +70,50 @@
     cursor: not-allowed;
 }
 
-.take-sheet__series-name {
+.take-sheet__dot {
+    box-sizing: border-box;
+    flex: 0 0 auto;
+    width: 16px;
+    height: 16px;
+    border: 1.5px solid var(--muted-soft);
+    border-radius: 50%;
+    background: radial-gradient(circle, var(--primary) 0 3.5px, transparent 4px) center / 0 0 no-repeat;
+    transition: border-color 0.15s ease-out, background-size 0.15s ease-out;
+}
+
+.take-sheet__series.is-selected .take-sheet__dot {
+    border-color: var(--primary);
+    background-size: 100% 100%;
+}
+
+.take-sheet__series-main {
+    display: flex;
     flex: 1;
     min-width: 0;
-    color: var(--ink);
-    font-weight: 500;
-    overflow-wrap: anywhere;
+    flex-direction: column;
+    gap: 1px;
+}
+
+.take-sheet__series-name {
+    font-size: var(--size-md);
     font-variant-numeric: tabular-nums;
+    color: var(--ink);
+    overflow-wrap: anywhere;
 }
 
 .take-sheet__series-name.is-none {
+    font-family: var(--sans);
     color: var(--muted);
-    font-weight: 400;
-    font-style: italic;
+}
+
+.take-sheet__series-expiry {
+    font-size: var(--size-sm);
+    color: var(--muted);
 }
 
 .take-sheet__series-left {
     white-space: nowrap;
+    color: var(--ink);
     font-variant-numeric: tabular-nums;
 }
 
@@ -98,8 +125,8 @@
 
 .take-sheet__amount .ui-input {
     min-width: 0;
-    height: 48px;
-    font-size: 20px;
+    height: 44px;
+    font-size: 17px;
     font-variant-numeric: tabular-nums;
 }
 
@@ -120,26 +147,77 @@
 
 .issue-cart__bar {
     position: fixed;
-    left: 50%;
+    left: 16px;
+    right: 16px;
     bottom: calc(16px + env(safe-area-inset-bottom, 0px));
-    z-index: 50;
+    z-index: 30;
     display: flex;
     align-items: center;
     gap: 12px;
-    width: min(520px, calc(100vw - 32px));
-    padding: 10px 10px 10px 16px;
-    translate: -50% 0;
+    padding: 10px 10px 10px 12px;
     border: 1px solid var(--hairline);
-    border-radius: var(--radius-lg);
+    border-radius: 14px;
     background: var(--canvas);
     box-shadow: var(--shadow-float);
     color: var(--ink);
 }
 
-.issue-cart__bar-text {
+.issue-cart__bar.is-corner {
+    left: auto;
+    right: 24px;
+    bottom: 24px;
+    width: 420px;
+}
+
+.issue-cart__icon {
+    position: relative;
+    display: flex;
+    flex: 0 0 auto;
+    align-items: center;
+    justify-content: center;
+    width: 38px;
+    height: 38px;
+    border-radius: 10px;
+    background: var(--accent-bg);
+    color: var(--primary);
+}
+
+.issue-cart__count {
+    position: absolute;
+    top: -5px;
+    right: -6px;
+    min-width: 18px;
+    height: 18px;
+    padding: 0 5px;
+    border-radius: 9px;
+    background: var(--primary);
+    color: var(--on-primary);
+    font-size: 11px;
+    font-weight: 600;
+    line-height: 18px;
+    text-align: center;
+    font-variant-numeric: tabular-nums;
+}
+
+.issue-cart__summary {
+    display: flex;
     flex: 1;
     min-width: 0;
-    font-weight: 500;
+    flex-direction: column;
+    gap: 1px;
+}
+
+.issue-cart__title {
+    font-size: 14px;
+    font-weight: 600;
+}
+
+.issue-cart__preview {
+    overflow: hidden;
+    font-size: var(--size-sm);
+    color: var(--muted);
+    white-space: nowrap;
+    text-overflow: ellipsis;
 }
 
 .issue-cart {
@@ -407,4 +485,14 @@
         width: 40mm;
         height: 40mm;
     }
+}
+
+.take-sheet__slot {
+    font-weight: 600;
+}
+
+.issue-cart__field {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
 }

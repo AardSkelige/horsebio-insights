@@ -6,6 +6,7 @@ from django.db import transaction
 from django.db.models import F, Prefetch, prefetch_related_objects
 
 from api.exceptions import ExternalServiceError, ValidationError
+from api.notifications import invalidate
 from raw_materials.models import Batch, BatchMovement, Issue, IssueLine, MaterialStock, SlotStock
 from raw_materials.services import moysklad
 from raw_materials.services.reconcile import move_batch
@@ -19,10 +20,10 @@ def display_name(user):
     return user.get_full_name() or user.username
 
 
-def describe(user, materials):
+def describe(user, materials, receiver):
     kinds = {material.group == TARA_GROUP for material in materials}
     what = 'сырья и тары' if len(kinds) == 2 else 'тары' if True in kinds else 'сырья'
-    return f'{display_name(user)}, выдача {what}'
+    return f'{display_name(user)}, выдача {what}. Получил: {receiver}'
 
 
 def _quantity(value):
@@ -114,9 +115,9 @@ def _moysklad_error(error):
         return str(error)
 
 
-def _record(user, key, description, move, batches, requested, slots, positions):
+def _record(user, key, description, receiver, move, batches, requested, slots, positions):
     record = Issue.objects.create(
-        key=key, created_by=user, description=description,
+        key=key, created_by=user, description=description, receiver=receiver,
         moysklad_id=move['id'], moysklad_name=move['name'],
     )
     taken = defaultdict(Decimal)
@@ -135,7 +136,12 @@ def _record(user, key, description, move, batches, requested, slots, positions):
     return record
 
 
-def issue(user, key, lines):
+def issue(user, key, lines, receiver):
+    receiver = (receiver or '').strip()
+    if not receiver:
+        raise ValidationError('Укажите, кто получил')
+    if len(receiver) > 100:
+        raise ValidationError('Слишком длинное имя получателя')
     requested, wanted_slots = _requested(lines)
     with transaction.atomic():
         lock_stock()
@@ -152,7 +158,7 @@ def issue(user, key, lines):
             batch_id: (_source_slot(batch, wanted_slots[batch_id]) or batch.material.stock).slot
             for batch_id, batch in batches.items()
         }
-        description = describe(user, {batch.material for batch in batches.values()})
+        description = describe(user, {batch.material for batch in batches.values()}, receiver)
         positions = _positions(batches, requested, slots)
         try:
             move = moysklad.create_move(str(key), description, positions)
@@ -163,7 +169,9 @@ def issue(user, key, lines):
 
         try:
             with transaction.atomic():
-                return _record(user, key, description, move, batches, requested, slots, positions)
+                record = _record(user, key, description, receiver, move, batches, requested, slots, positions)
         except Exception:
             moysklad.discard_move(move['id'])
             raise
+    invalidate('raw-materials')
+    return record

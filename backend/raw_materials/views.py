@@ -71,6 +71,7 @@ def _issue(record):
         'created_at': record.created_at,
         'created_by': display_name(record.created_by),
         'description': record.description,
+        'receiver': record.receiver,
         'moysklad_name': record.moysklad_name,
         'moysklad_url': MOVE_URL.format(record.moysklad_id),
         'lines': [
@@ -108,5 +109,5 @@ def issues(request):
     lines = body.get('lines')
     if not isinstance(lines, list) or not all(isinstance(line, dict) for line in lines):
         raise ValidationError('Нет строк выдачи')
-    record = issue(request.user, key, lines)
+    record = issue(request.user, key, lines, body.get('receiver'))
     return Response(_issue(_issues().get(pk=record.pk)), status=201)

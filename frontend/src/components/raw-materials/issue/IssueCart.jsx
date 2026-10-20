@@ -1,11 +1,15 @@
 import { useState } from 'react';
 import PropTypes from 'prop-types';
+import { createPortal } from 'react-dom';
 import { AnimatePresence, m } from 'motion/react';
-import { ExternalLink, PackageCheck, ShoppingBasket } from 'lucide-react';
-import { Button, CloseButton, Notice } from '../../ui';
+import { ChevronRight, ExternalLink, PackageCheck, ShoppingBasket } from 'lucide-react';
+import { Button, CloseButton, Input, Notice } from '../../ui';
 import { DrawerShell } from '../../ui/motion';
 import { rawMaterialsApi } from '../../../api/rawMaterialsApi';
+import { useIsMobile } from '../../../hooks/useIsMobile';
+import { useNotifications } from '../../../contexts/NotificationsContext';
 import { pluralWith } from '../../../utils/formatters';
+import { formatQuantity } from '../format';
 import IssueLine from './IssueLine';
 
 export default function IssueCart({ cart, onIssued }) {
@@ -13,6 +17,9 @@ export default function IssueCart({ cart, onIssued }) {
     const [sending, setSending] = useState(false);
     const [error, setError] = useState(null);
     const [done, setDone] = useState(null);
+    const [receiver, setReceiver] = useState('');
+    const isMobile = useIsMobile();
+    const { reload: reloadNotifications } = useNotifications();
 
     const count = cart.lines.length;
 
@@ -25,11 +32,17 @@ export default function IssueCart({ cart, onIssued }) {
     const send = () => {
         setSending(true);
         setError(null);
-        rawMaterialsApi.issue({ key: cart.key, lines: cart.lines.map((l) => ({ batch: l.batch, quantity: l.quantity, slot: l.slot })) })
+        rawMaterialsApi.issue({
+            key: cart.key,
+            receiver: receiver.trim(),
+            lines: cart.lines.map((l) => ({ batch: l.batch, quantity: l.quantity, slot: l.slot })),
+        })
             .then((issue) => {
                 setDone(issue);
+                setReceiver('');
                 cart.settle(issue.lines);
                 onIssued();
+                reloadNotifications();
             })
             .catch((err) => setError(err.message || 'Не удалось выдать'))
             .finally(() => setSending(false));
@@ -37,21 +50,35 @@ export default function IssueCart({ cart, onIssued }) {
 
     return (
         <>
-            <AnimatePresence>
-                {count > 0 && !open && (
-                    <m.div
-                        className="issue-cart__bar"
-                        initial={{ y: 80, opacity: 0 }}
-                        animate={{ y: 0, opacity: 1 }}
-                        exit={{ y: 80, opacity: 0 }}
-                        transition={{ duration: 0.3, ease: 'easeOut' }}
-                    >
-                        <ShoppingBasket size={18} aria-hidden="true" />
-                        <span className="issue-cart__bar-text">В корзине {pluralWith(count, 'позиция', 'позиции', 'позиций')}</span>
-                        <Button variant="primary" onClick={() => setOpen(true)}>Выдать</Button>
-                    </m.div>
-                )}
-            </AnimatePresence>
+            {createPortal(
+                <AnimatePresence>
+                    {count > 0 && !open && (
+                        <m.div
+                            className={isMobile ? 'issue-cart__bar' : 'issue-cart__bar is-corner'}
+                            initial={{ y: 80, opacity: 0 }}
+                            animate={{ y: 0, opacity: 1 }}
+                            exit={{ y: 80, opacity: 0 }}
+                            transition={{ duration: 0.3, ease: 'easeOut' }}
+                        >
+                            <span className="issue-cart__icon">
+                                <ShoppingBasket size={18} aria-hidden="true" />
+                                <span className="issue-cart__count">{count}</span>
+                            </span>
+                            <span className="issue-cart__summary">
+                                <span className="issue-cart__title">Корзина · {pluralWith(count, 'позиция', 'позиции', 'позиций')}</span>
+                                <span className="issue-cart__preview">
+                                    {cart.lines.map((l) => `${l.name} ${formatQuantity(l.quantity, l.uom)}`).join(', ')}
+                                </span>
+                            </span>
+                            <Button variant="primary" onClick={() => setOpen(true)}>
+                                Открыть
+                                <ChevronRight size={15} aria-hidden="true" />
+                            </Button>
+                        </m.div>
+                    )}
+                </AnimatePresence>,
+                document.body,
+            )}
 
             <DrawerShell open={open} onClose={close} label="Выдача на производство" width={460}>
                 <div className="ui-drawer__head">
@@ -90,8 +117,19 @@ export default function IssueCart({ cart, onIssued }) {
                                 ))}
                             </ul>
                             {count === 0 && <p className="issue-cart__lead">Корзина пуста</p>}
+                            <label className="issue-cart__field">
+                                <span className="stock__label">Кто получил</span>
+                                <Input
+                                    block
+                                    placeholder="Например, Рома"
+                                    autoComplete="off"
+                                    maxLength={100}
+                                    value={receiver}
+                                    onChange={(e) => setReceiver(e.target.value)}
+                                />
+                            </label>
                             {error && <Notice tone="error">{error}</Notice>}
-                            <Button variant="primary" block loading={sending} loadingLabel="Выдаём…" disabled={count === 0} onClick={send}>
+                            <Button variant="primary" block loading={sending} loadingLabel="Выдаём…" disabled={count === 0 || !receiver.trim()} onClick={send}>
                                 Выдать {count > 0 && pluralWith(count, 'позицию', 'позиции', 'позиций')}
                             </Button>
                         </>

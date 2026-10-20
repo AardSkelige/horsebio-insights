@@ -40,7 +40,10 @@ export default function IssuesPage() {
                                 <div className="issues__head">
                                     <div className="issues__title">
                                         <span className="issues__number">№ {issue.moysklad_name}</span>
-                                        <span className="issues__meta">{formatDateTimeShort(issue.created_at)} · {issue.created_by}</span>
+                                        <span className="issues__meta">
+                                            {formatDateTimeShort(issue.created_at)} · выдал {issue.created_by}
+                                            {issue.receiver && ` · получил ${issue.receiver}`}
+                                        </span>
                                     </div>
                                     <Button as="a" variant="link" size="sm" icon={ExternalLink} href={issue.moysklad_url} target="_blank" rel="noreferrer">
                                         МойСклад

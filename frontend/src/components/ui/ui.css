@@ -469,6 +469,7 @@
 .ui-page-header__title {
     font-family: var(--serif);
     font-size: var(--size-display);
+    font-variant-numeric: lining-nums;
     font-weight: 400;
     letter-spacing: -0.025em;
     line-height: 1.1;
@@ -500,6 +501,16 @@
 @media (max-width: 600px) {
     .ui-page-header__title {
         font-size: var(--size-xl);
+    }
+}
+
+@media (max-width: 767px) {
+    .ui-page-header__actions {
+        width: 100%;
+    }
+
+    .ui-page-header__actions > .ui-btn--link:last-child {
+        margin-left: auto;
     }
 }
 
