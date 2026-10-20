@@ -245,119 +245,14 @@ class PurchaseAnalysisTests(TestCase):
                 shipped_quantity=Decimal("10.00"),
             )
 
-        url = reverse('api:related_materials_analysis', args=[self.material.id])
+        url = reverse('api:material_purchase_analysis', args=[self.material.id])
         response = self.client.get(url)
 
         self.assertEqual(response.status_code, status.HTTP_200_OK)
-        data = response.data['data']
+        data = response.data['data']['related_materials']
         self.assertNotIn('error', data)
         # Имя поставщика доехало целиком, а не обрезанным по подчёркиванию.
         self.assertIn("ООО Ромашка_2", data['supplier_materials'])
-
-    def test_related_materials_analysis(self):
-        """Тестирование endpoint'а анализа связанных материалов"""
-        # Сначала создадим реальные связанные данные
-        order = PurchaseOrder.objects.create(
-            external_id="PO_TEST",
-            number="ORDER-TEST",
-            date=timezone.now(),
-            created=timezone.now(),
-            counterparty=self.supplier,
-            status="completed",
-            sum=Decimal("2000.00")
-        )
-        
-        # Создаем связанный материал
-        related_material = RawMaterial.objects.create(
-            name="Related Material",
-            external_id="RM1",
-            uom_name="шт",
-            group="Материалы для производства"
-        )
-        
-        # Добавляем обе позиции в один заказ
-        PurchaseOrderItem.objects.create(
-            purchase_order=order,
-            raw_material=self.material,
-            quantity=Decimal("10.00"),
-            price=Decimal("100.00"),
-            total=Decimal("1000.00"),
-            shipped_quantity=Decimal("10.00")
-        )
-        
-        PurchaseOrderItem.objects.create(
-            purchase_order=order,
-            raw_material=related_material,
-            quantity=Decimal("10.00"),
-            price=Decimal("100.00"),
-            total=Decimal("1000.00"),
-            shipped_quantity=Decimal("10.00")
-        )
-
-        url = reverse('api:related_materials_analysis', args=[self.material.id])
-        response = self.client.get(url)
-        
-        self.assertEqual(response.status_code, status.HTTP_200_OK)
-        self.assertEqual(response.data['status'], 'success')
-        
-        data = response.data['data']
-        
-        # Проверяем базовую структуру ответа
-        self.assertIn('material_id', data)
-        self.assertIn('period', data)
-        self.assertIn('total_orders', data)
-        self.assertIn('supplier_materials', data)
-        
-        # Проверяем информацию о периоде
-        period = data['period']
-        self.assertIn('start_date', period)
-        self.assertIn('end_date', period)
-        self.assertIn('months', period)
-        
-        # Проверяем данные поставщиков
-        supplier_materials = data['supplier_materials']
-        self.assertIn(self.supplier.name, supplier_materials)
-        
-        supplier_data = supplier_materials[self.supplier.name]
-        self.assertIn('related', supplier_data)
-        self.assertIn('skipped', supplier_data)
-        self.assertIn('total_orders', supplier_data)
-        
-        # Проверяем наличие связанного материала
-        related_items = supplier_data['related']
-        self.assertTrue(len(related_items) > 0)
-        self.assertEqual(related_items[0]['name'], "Related Material")
-
-    def test_related_materials_analysis_invalid_id(self):
-        """Тестирование анализа связанных материалов с несуществующим ID"""
-        invalid_id = 99999
-        url = reverse('api:related_materials_analysis', args=[invalid_id])
-        response = self.client.get(url)
-
-        self.assertEqual(response.status_code, status.HTTP_404_NOT_FOUND)
-
-    def test_related_materials_analysis_with_period(self):
-        """Тестирование анализа связанных материалов с указанием периода"""
-        url = reverse('api:related_materials_analysis', args=[self.material.id])
-        end_date = timezone.now().strftime('%Y-%m-%d')
-        
-        response = self.client.get(url, {
-            'end_date': end_date,
-            'period_months': 2
-        })
-        
-        self.assertEqual(response.status_code, status.HTTP_200_OK)
-        self.assertEqual(response.data['status'], 'success')
-        
-        data = response.data['data']
-        
-        # Проверяем период
-        self.assertEqual(data['period']['months'], 2)
-        
-        # Проверяем, что данные ограничены периодом
-        # Количество заказов должно быть не больше 2 (за 2 месяца)
-        supplier_data = data['supplier_materials'].get(self.supplier.name, {})
-        self.assertLessEqual(supplier_data.get('total_orders', 0), 2)
 
     def test_related_materials_extended(self):
         """Расширенное тестирование анализа связанных материалов с дополнительными материалами"""
@@ -399,13 +294,13 @@ class PurchaseAnalysisTests(TestCase):
             shipped_quantity=Decimal("10.00")
         )
         
-        url = reverse('api:related_materials_analysis', args=[self.material.id])
+        url = reverse('api:material_purchase_analysis', args=[self.material.id])
         response = self.client.get(url)
         
         self.assertEqual(response.status_code, status.HTTP_200_OK)
         self.assertEqual(response.data['status'], 'success')
         
-        data = response.data['data']
+        data = response.data['data']['related_materials']
         supplier_materials = data['supplier_materials']
         
         # Проверяем, что связанный материал появился в результатах
@@ -417,7 +312,7 @@ class PurchaseAnalysisTests(TestCase):
             if material['name'] == "Related Material":
                 found_related = True
                 self.assertIn('frequency', material)
-                self.assertIn('joint_count', material)
+                self.assertIn('total_joint_orders', material)
                 break
                 
         self.assertTrue(found_related, "Related material should be found in the analysis")

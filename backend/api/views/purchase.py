@@ -16,7 +16,6 @@ from core.models import (
 from api.models import MaterialPeriodPreference
 from forecasting.services.analysis.optimized_purchase_analyzer import OptimizedPurchaseAnalyzer
 from api.exceptions import APIException, NotFoundError, DataProcessingError, ValidationError
-from api.utils import to_float_safe as safe_float, get_period_dates
 
 import logging
 logger = logging.getLogger(__name__)
@@ -253,101 +252,6 @@ def material_purchase_analysis(request, material_id):
    except Exception as e:
        logger.error(f"Error in material_purchase_analysis: {str(e)}", exc_info=True)
        raise DataProcessingError("Ошибка анализа закупок материала")
-
-@api_view(['GET'])
-def related_materials_analysis(request, material_id):
-    """
-    API endpoint для получения анализа связанных материалов.
-    """
-    try:
-        # Проверяем существование материала
-        try:
-            material = RawMaterial.objects.get(id=material_id)
-        except RawMaterial.DoesNotExist:
-            raise NotFoundError("Материал не найден")
-
-        # Получаем параметры периода
-        end_date = request.GET.get('end_date')
-        period_months = int(request.GET.get('period_months', 12))
-        
-        if end_date:
-            try:
-                end_date = datetime.strptime(end_date, '%Y-%m-%d')
-                end_date = timezone.make_aware(end_date)
-            except ValueError:
-                end_date = timezone.now()
-        else:
-            end_date = timezone.now()
-            
-        start_date = end_date - timedelta(days=period_months * 30)
-        
-        # Создаем анализатор
-        analyzer = OptimizedPurchaseAnalyzer(start_date, end_date)
-        
-        # Получаем анализ связанных материалов
-        related_analysis = analyzer.find_related_materials(material_id)
-        
-        if 'error' in related_analysis:
-            return Response({
-                'status': 'error',
-                'message': related_analysis['error']
-            }, status=status.HTTP_400_BAD_REQUEST)
-
-        # Добавляем безопасную обработку значений
-        supplier_materials = {}
-        for supplier_name, data in related_analysis.get('supplier_materials', {}).items():
-            related_items = data.get('related', [])
-            skipped_items = data.get('skipped', [])
-            
-            # Очищаем значения от NaN и None
-            cleaned_related = []
-            for item in related_items:
-                cleaned_item = {
-                    'name': item.get('name', ''),
-                    'code': item.get('code', ''),
-                    'uom': item.get('uom', ''),
-                    'joint_count': safe_float(item.get('joint_count')),
-                    'frequency': safe_float(item.get('frequency'))
-                }
-                cleaned_related.append(cleaned_item)
-
-            cleaned_skipped = []
-            for item in skipped_items:
-                cleaned_item = {
-                    'name': item.get('name', ''),
-                    'code': item.get('code', ''),
-                    'uom': item.get('uom', ''),
-                    'joint_count': safe_float(item.get('joint_count')),
-                    'frequency': safe_float(item.get('frequency')),
-                    'skip_reason': item.get('skip_reason', '')
-                }
-                cleaned_skipped.append(cleaned_item)
-
-            supplier_materials[supplier_name] = {
-                'related': cleaned_related,
-                'skipped': cleaned_skipped,
-                'total_orders': data.get('total_orders', 0)
-            }
-
-        return Response({
-            'status': 'success',
-            'data': {
-                'material_id': material_id,
-                'period': {
-                    'start_date': start_date.isoformat(),
-                    'end_date': end_date.isoformat(),
-                    'months': period_months
-                },
-                'total_orders': related_analysis.get('total_orders', 0),
-                'supplier_materials': supplier_materials
-            }
-        })
-
-    except APIException:
-        raise  # Re-raise API exceptions (NotFoundError, etc.)
-    except Exception as e:
-        logger.error(f"Error in related_materials_analysis: {str(e)}", exc_info=True)
-        raise DataProcessingError("Ошибка анализа связанных материалов")
 
 @api_view(['PATCH'])
 def update_material_period(request, material_id):
