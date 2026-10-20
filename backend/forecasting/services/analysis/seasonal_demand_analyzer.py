@@ -9,7 +9,6 @@ from django.db import models
 import logging
 from datetime import datetime, timedelta
 from django.utils import timezone
-import matplotlib.pyplot as plt
 
 from core.models import (
     Product, 
@@ -79,51 +78,6 @@ class SeasonalDemandAnalyzer:
             logger.error(f"Error getting sales history for product {product_id}: {str(e)}")
             logger.exception("Full traceback:")
             return pd.DataFrame()
-    def visualize_sales(self, sales_history: pd.Series, title: str = '') -> plt.Figure:
-        """
-        Создает визуализацию продаж с трендом и сезонностью
-        """
-        try:
-            # Создаем фигуру большего размера для лучшей читаемости
-            fig, (ax1, ax2) = plt.subplots(2, 1, figsize=(15, 10))
-            
-            # График продаж
-            ax1.plot(sales_history.index, sales_history.values, 
-                    marker='o', linestyle='-', linewidth=2, markersize=6)
-            ax1.set_title(f'Динамика продаж: {title}')
-            ax1.set_xlabel('Период')
-            ax1.set_ylabel('Количество')
-            ax1.grid(True)
-            
-            # Поворачиваем метки дат для лучшей читаемости
-            ax1.tick_params(axis='x', rotation=45)
-            
-            # График сезонности (относительно среднего)
-            monthly_avg = sales_history.groupby(sales_history.index.month).mean()
-            overall_avg = sales_history.mean()
-            seasonal_factors = monthly_avg / overall_avg
-            
-            ax2.bar(range(1, 13), [seasonal_factors.get(m, 0) for m in range(1, 13)])
-            ax2.axhline(y=1, color='r', linestyle='--', alpha=0.5)
-            ax2.set_title('Сезонные коэффициенты по месяцам')
-            ax2.set_xlabel('Месяц')
-            ax2.set_ylabel('Отношение к среднему')
-            ax2.grid(True, axis='y')
-            
-            # Добавляем метки месяцев
-            month_labels = ['Янв', 'Фев', 'Март', 'Апр', 'Май', 'Июнь', 
-                        'Июль', 'Авг', 'Сент', 'Окт', 'Ноя', 'Дек']
-            ax2.set_xticks(range(1, 13))
-            ax2.set_xticklabels(month_labels, rotation=45)
-            
-            plt.tight_layout()
-            return fig
-            
-        except Exception as e:
-            logger.error(f"Error creating visualization: {str(e)}")
-            logger.exception("Full traceback:")
-            return None
-        
     def analyze_seasonality_pattern(self, sales_history: pd.Series) -> Dict:
         """
         Анализирует паттерн сезонности на основе исторических данных
