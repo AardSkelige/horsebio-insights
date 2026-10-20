@@ -5,7 +5,7 @@
 # одно ядро), и переезд на manage.py — не повод их пересматривать.
 #
 # Устанавливается вручную: crontab -l > /tmp/c && cat horsebio.cron >> /tmp/c && crontab /tmp/c
-# Проверить: crontab -l | grep -c '^[^#].*horsebio-check'   → должно быть 26
+# Проверить: crontab -l | grep -c '^[^#].*horsebio-check'   → должно быть 27
 # (счёт только по рабочим строкам: этот комментарий тоже попадёт в crontab)
 
 # ─── Себестоимость ───────────────────────────────────────────────────────────
@@ -58,6 +58,9 @@
 */30 * * * * sleep 240 && /root/horsebio/deploy/cron/horsebio-check.sh horsebio_discounted_snapshot
 */30 * * * * sleep 270 && /root/horsebio/deploy/cron/horsebio-check.sh horsebio_fbo_stock_snapshot
 */30 * * * * sleep 330 && /root/horsebio/deploy/cron/horsebio-check.sh horsebio_fbo_snapshot
+# Склад сырья: остатки из МойСклада, серии подгоняются под них. Сдвиг 240 секунд
+# уводит его с пятиминутных задач почты и Ozon, они стартуют в ту же минуту.
+55 * * * * sleep 240 && /root/horsebio/deploy/cron/horsebio-check.sh horsebio_raw_materials_sync
 25 9 * * * /root/horsebio/deploy/cron/horsebio-check.sh horsebio_inventory_check
 0 11 * * * /root/horsebio/deploy/cron/horsebio-check.sh horsebio_data_sync
 

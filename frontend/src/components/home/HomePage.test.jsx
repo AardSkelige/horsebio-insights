@@ -65,7 +65,7 @@ describe('HomePage', () => {
         expect(screen.getByRole('heading', { level: 2, name: 'Сайт' })).toBeInTheDocument();
         expect(screen.getByRole('heading', { level: 2, name: 'Аналитика' })).toBeInTheDocument();
         expect(await screen.findByRole('heading', { level: 1, name: /Лиля/ })).toBeInTheDocument();
-        expect(screen.getAllByRole('link')).toHaveLength(24);
+        expect(screen.getAllByRole('link')).toHaveLength(26);
         expect(screen.getAllByRole('link', { name: /Товары/ })[0]).toHaveAttribute('href', '/shipments/products');
         expect(screen.getAllByRole('link', { name: /ABC Анализ/ })[0]).toHaveAttribute('href', '/analysis/abc');
         expect(await screen.findByText('Поставщики')).toBeInTheDocument();
@@ -78,7 +78,7 @@ describe('HomePage', () => {
 
         expect((await screen.findAllByRole('link', { name: /Проверки/ }))[0]).toHaveAttribute('href', '/checks');
         expect(screen.getByRole('link', { name: /Активность/ })).toHaveAttribute('href', '/system/analytics');
-        expect(screen.getAllByRole('link')).toHaveLength(27);
+        expect(screen.getAllByRole('link')).toHaveLength(29);
     });
 
     it('не падает, когда у пользователя нет страниц «Аналитики»', async () => {

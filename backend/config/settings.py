@@ -41,6 +41,9 @@ INSTALLED_APPS = [
 
     # Мониторинг инвентаризации
     'inventory_tracking',
+
+    'raw_materials',
+    'protocols',
 ]
 
 MIDDLEWARE = [

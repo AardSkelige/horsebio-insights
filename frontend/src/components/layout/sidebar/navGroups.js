@@ -1,7 +1,7 @@
 import {
     Home, Package, Users, Layers, Archive, Truck,
     BarChart2, TrendingUp, PackageCheck, Boxes, PieChart, ShoppingCart, ShoppingBag,
-    DollarSign, Factory, FileSpreadsheet, ClipboardList, Activity, Clock, ShieldCheck, Mail, KeyRound, Tag,
+    DollarSign, Factory, FileSpreadsheet, ClipboardList, Activity, Clock, ShieldCheck, Mail, KeyRound, Tag, Warehouse, FileText,
 } from 'lucide-react';
 
 // pageKey — ключ страницы из бэкенд-реестра (api/access.py). По нему фильтруется
@@ -23,6 +23,8 @@ const NAV_GROUPS = [
             { path: '/supplies/suppliers',        label: 'Поставщики',              icon: Truck, description: 'Контрагенты-поставщики', pageKey: 'supplies-suppliers' },
             { path: '/production/calculator',     label: 'Расчёт производства', icon: Factory, description: 'Расчёт сырья для производства', pageKey: 'production' },
             { path: '/inventory',                 label: 'Инвентаризация',          icon: ClipboardList, description: 'Контроль позиций с 1-го числа месяца', pageKey: 'inventory' },
+            { path: '/raw-materials',             label: 'Склад сырья',             icon: Warehouse, description: 'Ячейки, серии и сроки годности на Шатле', pageKey: 'raw-materials' },
+            { path: '/protocols',                 label: 'Протоколы',               icon: FileText, description: 'Технологические протоколы по заданиям', pageKey: 'protocols' },
         ],
     },
     {

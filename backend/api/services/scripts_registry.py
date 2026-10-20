@@ -213,6 +213,16 @@ SCRIPTS_CONFIG = [
         'args': ['sync_ozon_products'],
     },
     {
+        'id': 'horsebio_raw_materials_sync',
+        'topic': 'Обновление данных',
+        'name': 'Склад сырья',
+        'account': 'HorseBio',
+        'schedule': 'Ежечасно в :55',
+        'description': 'Остатки и ячейки склада сырья из МойСклад, серии подгоняются под остаток (Django-команда sync_raw_materials)',
+        'script': '/app/manage.py',
+        'args': ['sync_raw_materials'],
+    },
+    {
         'id': 'horsebio_ozon_points',
         'topic': 'Обновление данных',
         'name': 'Пункты выдачи Ozon',

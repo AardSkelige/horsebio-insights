@@ -40,6 +40,8 @@ const PaymentDeadlinesPage = lazy(() => import('./components/payment-deadlines/P
 const SiteOrdersPage = lazy(() => import('./components/site-orders/SiteOrdersPage'));
 const DiscountedPage = lazy(() => import('./components/discounted/DiscountedPage'));
 const DeliveryCalculatorPage = lazy(() => import('./components/delivery/DeliveryCalculatorPage'));
+const RawMaterialsPage = lazy(() => import('./components/raw-materials/RawMaterialsPage'));
+const ProtocolsPage = lazy(() => import('./components/protocols/ProtocolsPage'));
 
 const RouteFallback = () => (
   <div aria-busy="true" aria-label="Загрузка раздела" style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
@@ -281,6 +283,36 @@ function AppRoutes() {
             <LayoutWrapper>
               <LazyPage>
                 <InventoryTracking />
+              </LazyPage>
+            </LayoutWrapper>
+          </ProtectedRoute>
+        } />
+
+        <Route path="/raw-materials" element={
+          <ProtectedRoute>
+            <LayoutWrapper>
+              <LazyPage>
+                <RawMaterialsPage />
+              </LazyPage>
+            </LayoutWrapper>
+          </ProtectedRoute>
+        } />
+
+        <Route path="/protocols" element={
+          <ProtectedRoute>
+            <LayoutWrapper>
+              <LazyPage>
+                <ProtocolsPage />
+              </LazyPage>
+            </LayoutWrapper>
+          </ProtectedRoute>
+        } />
+
+        <Route path="/protocols/:taskId" element={
+          <ProtectedRoute>
+            <LayoutWrapper>
+              <LazyPage>
+                <ProtocolsPage />
               </LazyPage>
             </LayoutWrapper>
           </ProtectedRoute>

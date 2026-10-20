@@ -17,6 +17,10 @@ urlpatterns = [
         # Ozon Доставка — отдельный контур с OAuth-авторизацией
         path('ozon-logistics/', include('ozon_logistics.urls', namespace='ozon_logistics')),
 
+        path('raw-materials/', include('raw_materials.urls', namespace='raw_materials')),
+
+        path('protocols/', include('protocols.urls', namespace='protocols')),
+
     ])),
 
     # Endpoints для синхронизации МойСклад
