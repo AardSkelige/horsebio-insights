@@ -4,7 +4,6 @@ API для расчёта компонентов производства.
 Endpoints:
 - POST /api/production/calculate/ - расчёт компонентов из Excel файла
 - POST /api/production/calculate-json/ - расчёт компонентов из JSON
-- POST /api/production/calculate-single/ - расчёт для одного товара
 - POST /api/production/export/ - экспорт результатов в Excel
 - GET /api/production/products/search/ - поиск товаров с техкартами
 """
@@ -150,66 +149,6 @@ def calculate_components_json(request):
     try:
         calculator = ComponentCalculator()
         result = calculator.calculate(items)
-        return JsonResponse(result)
-    except Exception as e:
-        return JsonResponse({
-            'success': False,
-            'error': f'Ошибка расчёта: {str(e)}'
-        }, status=500)
-
-
-@require_http_methods(["POST"])
-def calculate_single_product(request):
-    """
-    Расчёт компонентов для одного товара.
-
-    Request:
-        POST application/json
-        {
-            "article": str,
-            "quantity": int
-        }
-
-    Response:
-        {
-            "article": str,
-            "name": str,
-            "quantity": int,
-            "found": bool,
-            "has_processing_plan": bool,
-            "processing_plan_name": str | null,
-            "components": [...],
-            "error": str | null
-        }
-    """
-    try:
-        data = json.loads(request.body)
-    except json.JSONDecodeError:
-        return JsonResponse({
-            'success': False,
-            'error': 'Неверный формат JSON'
-        }, status=400)
-
-    article = data.get('article')
-    quantity = data.get('quantity')
-
-    if not article:
-        return JsonResponse({
-            'success': False,
-            'error': 'Отсутствует поле "article"'
-        }, status=400)
-
-    try:
-        quantity = int(quantity or 1)
-    except (ValueError, TypeError):
-        return JsonResponse({
-            'success': False,
-            'error': '"quantity" должно быть числом'
-        }, status=400)
-
-    try:
-        calculator = ComponentCalculator()
-        result = calculator.calculate_for_product(article, quantity)
         return JsonResponse(result)
     except Exception as e:
         return JsonResponse({

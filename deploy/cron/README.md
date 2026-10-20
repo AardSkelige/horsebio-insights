@@ -32,7 +32,7 @@ pid-файл в `scripts_logs` — второму прогону внутри к
 > руками через несколько дней.
 >
 > Проверять командой, а не наличием файла:
-> `crontab -l | grep -c '^[^#].*horsebio-check'` — должно быть 21, а не 0.
+> `crontab -l | grep -c '^[^#].*horsebio-check'` — должно быть 26, а не 0.
 > И `crontab -l | grep -c 'api/scripts'` — должно быть 0: одного счётчика мало,
 > он не видит оставшиеся старые строки.
 
@@ -57,7 +57,7 @@ crontab -l | grep -v '^CRON_SECRET=' | grep -v '^API=' | crontab -
 Проверка после переноса — обе строки обязательны:
 
 ```bash
-crontab -l | grep -c '^[^#].*horsebio-check'   # 21 — новые строки на месте
+crontab -l | grep -c '^[^#].*horsebio-check'   # 26 — новые строки на месте
 crontab -l | grep -c 'api/scripts'             # 0  — старых не осталось
 ```
 

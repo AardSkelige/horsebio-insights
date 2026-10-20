@@ -136,7 +136,6 @@ urlpatterns = [
     # Расчёт компонентов производства
     path('production/calculate/', production.calculate_components_excel, name='calculate_components_excel'),
     path('production/calculate-json/', production.calculate_components_json, name='calculate_components_json'),
-    path('production/calculate-single/', production.calculate_single_product, name='calculate_single_product'),
     path('production/export/', production.export_components_excel, name='export_components_excel'),
     path('production/products/search/', production.search_products_with_recipes, name='search_products_with_recipes'),
 

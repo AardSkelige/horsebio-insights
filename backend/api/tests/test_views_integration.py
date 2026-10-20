@@ -404,31 +404,6 @@ class ProductionTests(BaseViewTestCase):
         )
         self.assertEqual(response.status_code, 400)
 
-    def test_calculate_single_product(self):
-        """Test POST /api/production/calculate-single/ endpoint."""
-        response = self.client.post(
-            '/api/production/calculate-single/',
-            data=json.dumps({
-                'article': 'PROD-001',
-                'quantity': 5
-            }),
-            content_type='application/json'
-        )
-        self.assertEqual(response.status_code, 200)
-
-        data = json.loads(response.content)
-        # Product may or may not be found depending on test data
-        self.assertIn('found', data)
-
-    def test_calculate_single_product_missing_article(self):
-        """Test production calculation with missing article."""
-        response = self.client.post(
-            '/api/production/calculate-single/',
-            data=json.dumps({'quantity': 5}),
-            content_type='application/json'
-        )
-        self.assertEqual(response.status_code, 400)
-
 
 class FBOTests(BaseViewTestCase):
     """Tests for FBO analysis endpoints."""

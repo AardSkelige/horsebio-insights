@@ -293,6 +293,16 @@ SCRIPTS_CONFIG = [
         'args': [],
         'structured': True,
     },
+    {
+        'id': 'horsebio_prune_check_runs',
+        'topic': 'Сохранность',
+        'name': 'Чистка журнала проверок',
+        'account': 'HorseBio',
+        'schedule': 'Ежедн. в 04:10',
+        'description': 'Оставляет по 100 последних прогонов на каждую проверку, чтобы журнал не разрастался (Django-команда prune_check_runs)',
+        'script': '/app/manage.py',
+        'args': ['prune_check_runs'],
+    },
 ]
 
 SCRIPTS_BY_ID = {s['id']: s for s in SCRIPTS_CONFIG}
