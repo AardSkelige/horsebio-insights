@@ -6,8 +6,6 @@ from api.exceptions import (
     APIException,
     ValidationError,
     NotFoundError,
-    AuthenticationError,
-    PermissionDeniedError,
     ExternalServiceError,
     DataProcessingError,
 )
@@ -85,28 +83,6 @@ class NotFoundErrorTests(TestCase):
         """Test with custom message."""
         exc = NotFoundError(message="Материал не найден")
         self.assertEqual(exc.message, "Материал не найден")
-
-
-class AuthenticationErrorTests(TestCase):
-    """Tests for AuthenticationError."""
-
-    def test_defaults(self):
-        """Test default values."""
-        exc = AuthenticationError()
-        self.assertEqual(exc.message, "Ошибка аутентификации")
-        self.assertEqual(exc.status_code, 401)
-        self.assertEqual(exc.error_code, "AUTHENTICATION_ERROR")
-
-
-class PermissionDeniedErrorTests(TestCase):
-    """Tests for PermissionDeniedError."""
-
-    def test_defaults(self):
-        """Test default values."""
-        exc = PermissionDeniedError()
-        self.assertEqual(exc.message, "Доступ запрещен")
-        self.assertEqual(exc.status_code, 403)
-        self.assertEqual(exc.error_code, "PERMISSION_DENIED")
 
 
 class ExternalServiceErrorTests(TestCase):

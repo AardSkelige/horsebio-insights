@@ -9,7 +9,6 @@ from django.http import HttpResponse
 from openpyxl import Workbook
 from openpyxl.styles import Alignment, Border, Font, PatternFill, Side
 from openpyxl.utils import get_column_letter
-from openpyxl.worksheet.worksheet import Worksheet
 
 
 # Default styles for Excel exports
@@ -269,27 +268,3 @@ def create_excel_response(
         builder.set_column_widths(widths)
 
     return builder.to_http_response(filename)
-
-
-def auto_adjust_column_widths(worksheet: Worksheet, max_width: int = 50) -> None:
-    """
-    Auto-adjust column widths based on content.
-
-    Args:
-        worksheet: Worksheet to adjust
-        max_width: Maximum column width
-    """
-    for column_cells in worksheet.columns:
-        max_length = 0
-        column = column_cells[0].column_letter
-
-        for cell in column_cells:
-            try:
-                cell_length = len(str(cell.value or ''))
-                if cell_length > max_length:
-                    max_length = cell_length
-            except (TypeError, AttributeError):
-                pass
-
-        adjusted_width = min(max_length + 2, max_width)
-        worksheet.column_dimensions[column].width = adjusted_width

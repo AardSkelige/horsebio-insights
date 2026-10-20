@@ -3,8 +3,6 @@
 
 import logging
 import sys
-import json
-from queue import Queue
 from datetime import datetime
 from typing import Optional, Dict, Any
 
@@ -166,59 +164,6 @@ class StructuredLogger:
         self.logger.handle(record)
 
 
-class LoggingStream:
-    """Класс для хранения и управления потоком логов загрузки"""
-    _instance = None
-
-    def __new__(cls):
-        if cls._instance is None:
-            cls._instance = super().__new__(cls)
-            cls._instance.log_queue = Queue()
-            cls._instance.current_status = {
-                'status': 'idle',
-                'progress': 0,
-                'total': 0
-            }
-        return cls._instance
-
-    def clear(self):
-        """Очистка очереди логов"""
-        while not self.log_queue.empty():
-            self.log_queue.get()
-        self.current_status = {
-            'status': 'idle',
-            'progress': 0,
-            'total': 0
-        }
-
-    def add_log(self, message, level='info'):
-        """Добавление сообщения в лог"""
-        log_entry = {
-            'level': level,
-            'message': message
-        }
-        self.log_queue.put(json.dumps(log_entry))
-
-    def update_status(self, status, progress=None, total=None):
-        """Обновление статуса загрузки"""
-        if progress is not None:
-            self.current_status['progress'] = progress
-        if total is not None:
-            self.current_status['total'] = total
-        self.current_status['status'] = status
-
-    def get_status(self):
-        """Получение текущего статуса"""
-        return self.current_status
-
-    def get_logs(self):
-        """Получение всех новых логов"""
-        logs = []
-        while not self.log_queue.empty():
-            logs.append(self.log_queue.get())
-        return logs
-
-
 def setup_logger(name=None):
     """Централизованная настройка логгера"""
     logger_name = name if name else 'sync'
@@ -239,12 +184,6 @@ def setup_logger(name=None):
     base_logger.propagate = False
 
     return base_logger
-
-
-def get_structured_logger(name=None):
-    """Получить структурированный логгер"""
-    base_logger = setup_logger(name)
-    return StructuredLogger(base_logger)
 
 
 # Создаем единственный экземпляр логгера по умолчанию

@@ -19,7 +19,6 @@ import sys
 from pathlib import Path
 from typing import Dict, List, Optional, Any, Tuple
 from datetime import datetime
-from dataclasses import dataclass
 from dotenv import load_dotenv
 
 _BACKEND_DIR = Path(__file__).resolve().parents[3]
@@ -37,33 +36,6 @@ MOYSKLAD_TOKEN = os.getenv('MOYSKLAD_TOKEN')
 if not MOYSKLAD_TOKEN:
     raise ValueError("MOYSKLAD_TOKEN environment variable is required")
 BASE_URL = "https://api.moysklad.ru/api/remap/1.2"
-
-
-@dataclass
-class MaterialRequirement:
-    """Требуемый материал для производства"""
-    product_id: str
-    product_name: str
-    product_meta: Dict
-    quantity_needed: float
-    slot_id: Optional[str] = None
-    slot_name: Optional[str] = None
-    slot_meta: Optional[Dict] = None
-    available_in_slot: float = 0.0
-
-
-@dataclass
-class StockInSlot:
-    """Остаток товара в ячейке"""
-    product_id: str
-    product_name: str
-    product_meta: Dict
-    slot_id: str
-    slot_name: str
-    slot_meta: Dict
-    quantity: float
-    store_id: str
-    store_name: str
 
 
 class ProductionHelper:

@@ -496,34 +496,6 @@ def generate_moysklad_no_group_link(date_from, date_to, all_tags):
     return _moysklad_finance_link(date_from, date_to, f"[{joined}],notequals")
 
 
-def get_earliest_operation_date():
-    """
-    Получить дату самой ранней операции в МойСклад
-    """
-    headers = get_headers()
-    operations = ['cashin', 'cashout', 'paymentin', 'paymentout']
-    earliest_date = None
-
-    for operation in operations:
-        url = f"{BASE_URL}/entity/{operation}?limit=1&order=moment,asc"
-
-        try:
-            response = ms_http.get(url, headers=headers, timeout=TIMEOUT)
-            if response.status_code == 200:
-                data = response.json()
-                rows = data.get('rows', [])
-                if rows:
-                    moment = rows[0].get('moment')
-                    if moment:
-                        operation_date = datetime.fromisoformat(moment.replace('T', ' ').replace('.000', ''))
-                        if earliest_date is None or operation_date < earliest_date:
-                            earliest_date = operation_date
-        except Exception as e:
-            logger.error(f"Ошибка получения ранней операции {operation}: {e}")
-
-    return earliest_date
-
-
 def calculate_initial_balance(start_date):
     """
     Рассчитать начальный остаток на определенную дату
