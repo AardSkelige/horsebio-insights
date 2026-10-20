@@ -6,12 +6,9 @@ ENV PYTHONUNBUFFERED=1
 
 WORKDIR /app
 
-# Устанавливаем необходимые системные зависимости и dev-tools
 RUN apt-get update && \
     apt-get install -y \
     netcat-openbsd \
-    python3-dev \
-    build-essential \
     && rm -rf /var/lib/apt/lists/*
 
 COPY requirements.txt .
