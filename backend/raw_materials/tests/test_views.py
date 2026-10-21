@@ -39,7 +39,8 @@ class RawMaterialsPageApiTests(TestCase):
 
     def test_refresh_syncs_with_moysklad(self):
         self.grant()
-        with patch('raw_materials.views.sync_from_moysklad') as sync:
+        with patch('raw_materials.views.sync_from_moysklad') as sync, patch('raw_materials.views.pull_supplies') as pull:
             response = self.client.post(f'{URL}refresh/')
         sync.assert_called_once()
+        pull.assert_called_once()
         self.assertEqual(response.status_code, 200)

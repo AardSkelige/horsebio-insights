@@ -1,0 +1,121 @@
+.receipts {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+}
+
+.receipts__card {
+    display: flex;
+    flex-direction: column;
+    gap: 3px;
+    padding: 12px 14px;
+    border: 1px solid var(--hairline);
+    border-radius: 12px;
+    background: var(--surface-soft);
+    color: var(--ink);
+    text-decoration: none;
+    transition: border-color 0.15s ease-out;
+}
+
+.receipts__card:hover {
+    border-color: var(--accent-border);
+}
+
+.receipts__card:hover .shelf__chevron {
+    color: var(--primary);
+}
+
+.receipts__head {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+}
+
+.receipts__number {
+    font-size: 14px;
+    font-weight: 600;
+    font-variant-numeric: tabular-nums;
+}
+
+.receipts__date {
+    flex: 1;
+    font-size: var(--size-sm);
+    color: var(--muted);
+}
+
+.receipts__agent {
+    font-size: 13px;
+}
+
+.receipts__items {
+    font-size: var(--size-sm);
+    line-height: 1.45;
+    color: var(--muted);
+}
+
+.receipt {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    max-width: 640px;
+}
+
+.receipt__line {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    padding: 12px 14px;
+    border: 1px solid var(--hairline);
+    border-radius: 12px;
+    background: var(--surface-soft);
+}
+
+.receipt__fields {
+    display: grid;
+    grid-template-columns: minmax(0, 1.2fr) minmax(0, 1fr);
+    gap: 8px;
+}
+
+.receipt__field {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    min-width: 0;
+}
+
+.receipt__field--wide {
+    grid-column: 1 / -1;
+}
+
+.receipt__done {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    font-size: var(--size-sm);
+    color: var(--success-ink);
+}
+
+.receipt__tara {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    padding: 4px 2px;
+}
+
+.receipt__tara-line {
+    display: flex;
+    justify-content: space-between;
+    gap: 10px;
+    padding: 6px 0;
+    border-bottom: 1px solid var(--hairline-soft);
+    font-size: 13px;
+    color: var(--muted);
+    font-variant-numeric: tabular-nums;
+}
+
+.receipt__save {
+    position: sticky;
+    bottom: calc(16px + env(safe-area-inset-bottom, 0px));
+    z-index: 5;
+    padding-top: 6px;
+}

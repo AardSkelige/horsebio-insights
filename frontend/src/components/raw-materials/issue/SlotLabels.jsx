@@ -6,6 +6,7 @@ import { Printer } from 'lucide-react';
 import { Button, EmptyState, ErrorState, Page, PageHeader, Skeleton } from '../../ui';
 import { FadeRise } from '../../ui/motion';
 import useStock from '../useStock';
+import StockTabs from '../StockTabs';
 import BackLink from './BackLink';
 import './issue.css';
 
@@ -58,12 +59,13 @@ export default function SlotLabels() {
 
     return (
         <Page>
-            <BackLink />
+            <BackLink mobileOnly />
             <PageHeader
                 title="QR ячеек"
                 subtitle="Наклейки на полки Шатла: QR открывает ячейку для выдачи"
                 actions={<Button variant="primary" icon={Printer} onClick={() => window.print()} disabled={!slots.length}>Печать</Button>}
             />
+            <StockTabs />
 
             {error && <ErrorState hint={error} onRetry={refresh} />}
             {!error && loading && <Skeleton height={240} style={{ borderRadius: 12 }} />}

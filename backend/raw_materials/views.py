@@ -7,6 +7,7 @@ from rest_framework.response import Response
 from api.exceptions import ValidationError
 from raw_materials.models import Batch, Issue, IssueLine, MaterialStock, Slot, SlotStock
 from raw_materials.services.issue import display_name, issue
+from raw_materials.services.receipts import pull_supplies, waiting_lines
 from raw_materials.services.sync import sync_from_moysklad
 
 ARCHIVE_PREFIX = '[АРХИВ]'
@@ -37,6 +38,7 @@ def _payload():
     )
     return {
         'synced_at': MaterialStock.objects.aggregate(last=Max('synced_at'))['last'],
+        'receipts_waiting': waiting_lines().values('supply').distinct().count(),
         'slots': list(Slot.objects.exclude(name__startswith=ARCHIVE_PREFIX).values_list('name', flat=True)),
         'items': [
             {
@@ -62,6 +64,7 @@ def stock_list(request):
 @api_view(['POST'])
 def refresh(request):
     sync_from_moysklad()
+    pull_supplies()
     return Response(_payload())
 
 

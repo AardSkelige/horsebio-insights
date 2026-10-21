@@ -1,12 +1,13 @@
 import { useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { History, QrCode } from 'lucide-react';
-import { Button, ErrorState, Page, PageHeader, SearchInput, Segmented } from '../ui';
+import { History, PackagePlus, QrCode } from 'lucide-react';
+import { ErrorState, Page, PageHeader, SearchInput, Segmented } from '../ui';
 import { FadeRise } from '../ui/motion';
 import { SectionNotifications } from '../notifications';
 import { useIsMobile } from '../../hooks/useIsMobile';
 import { formatDateTimeShort } from '../../utils/formatters';
 import StockList from './StockList';
+import StockTabs from './StockTabs';
 import useStock from './useStock';
 import IssueCart from './issue/IssueCart';
 import MaterialSheet from './issue/MaterialSheet';
@@ -37,12 +38,12 @@ export default function RawMaterialsPage() {
         [data, kind, search],
     );
 
-    const links = (
-        <>
-            <Button variant="ghost" size="sm" icon={History} onClick={() => navigate('/raw-materials/issues')}>Журнал выдач</Button>
-            <Button variant="ghost" size="sm" icon={QrCode} onClick={() => navigate('/raw-materials/qr')}>QR ячеек</Button>
-        </>
-    );
+    const waiting = data?.receipts_waiting || 0;
+    const tiles = [
+        { label: 'Приёмка', icon: PackagePlus, to: '/raw-materials/receipts', badge: waiting },
+        { label: 'Выдачи', icon: History, to: '/raw-materials/issues' },
+        { label: 'QR ячеек', icon: QrCode, to: '/raw-materials/qr' },
+    ];
 
     return (
         <Page className="stock-page">
@@ -52,18 +53,22 @@ export default function RawMaterialsPage() {
                 updatedAt={data?.synced_at ? formatDateTimeShort(data.synced_at) : undefined}
                 onRefresh={refresh}
                 refreshing={refreshing || loading}
-                actions={isMobile ? undefined : (
-                    <>
-                        <ScanButton slots={data?.slots || []} />
-                        {links}
-                    </>
-                )}
+                actions={isMobile ? undefined : <ScanButton slots={data?.slots || []} />}
             />
+            <StockTabs />
 
             {isMobile && (
                 <div className="stock-page__mobile-actions">
                     <ScanButton slots={data?.slots || []} block />
-                    <div className="stock-page__links">{links}</div>
+                    <div className="stock-page__tiles">
+                        {tiles.map(({ label, icon: Icon, to, badge }) => (
+                            <button key={to} type="button" className="stock-page__tile" onClick={() => navigate(to)}>
+                                <Icon size={20} aria-hidden="true" />
+                                {label}
+                                {badge > 0 && <span className="stock-page__badge">{badge}</span>}
+                            </button>
+                        ))}
+                    </div>
                 </div>
             )}
 

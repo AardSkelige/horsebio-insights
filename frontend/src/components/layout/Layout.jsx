@@ -11,11 +11,18 @@ import { NotificationsBarButton, NotificationsPanel } from '../notifications';
 import Sidebar from './Sidebar';
 import { usePageTracking } from '../../hooks/usePageTracking';
 import { useSuperuser } from '../../hooks/useAuthStatus';
+import { navSection } from './sidebar/navGroups';
 
 const MOBILE_BP = 768;
 
 const Layout = ({ children }) => {
     const location = useLocation();
+    const section = navSection(location.pathname);
+    const visited = useRef({ path: location.pathname, section, same: false });
+    if (visited.current.path !== location.pathname) {
+        visited.current = { path: location.pathname, section, same: visited.current.section === section };
+    }
+    const sameSection = visited.current.same;
     const { open, close } = useDataPanel();
     const panelRef = useRef(null);
     const dataPanelTriggerRef = useRef(null);
@@ -200,7 +207,7 @@ const Layout = ({ children }) => {
 
                 <main
                     key={location.pathname}
-                    className="route-transition"
+                    className={sameSection ? undefined : 'route-transition'}
                     style={{ padding: '24px', flex: 1, boxSizing: 'border-box' }}
                 >
                     {children}

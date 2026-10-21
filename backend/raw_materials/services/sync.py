@@ -23,7 +23,7 @@ def _product(assortment_id):
         raise
 
 
-def _material(assortment_id, known):
+def material_for(assortment_id, known):
     if assortment_id in known:
         return known[assortment_id]
     details = _product(assortment_id)
@@ -84,7 +84,7 @@ def sync_from_moysklad(kind=BatchMovement.RECONCILE):
         for external_id in (set(totals) | set(stocks)) - recalculating - issued:
             stock = stocks.get(external_id)
             if stock is None:
-                material = _material(external_id, known)
+                material = material_for(external_id, known)
                 if material is None:
                     continue
                 stock = MaterialStock(material=material)

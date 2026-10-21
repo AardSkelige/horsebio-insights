@@ -66,7 +66,11 @@ class BatchMovement(models.Model):
     IMPORT = 'import'
     RECONCILE = 'reconcile'
     ISSUE = 'issue'
-    KINDS = [(IMPORT, 'Перенос с сайта склада'), (RECONCILE, 'Сверка с МойСклад'), (ISSUE, 'Выдача на производство')]
+    RECEIPT = 'receipt'
+    KINDS = [
+        (IMPORT, 'Перенос с сайта склада'), (RECONCILE, 'Сверка с МойСклад'),
+        (ISSUE, 'Выдача на производство'), (RECEIPT, 'Серия из приёмки'),
+    ]
 
     batch = models.ForeignKey(Batch, on_delete=models.CASCADE, related_name='movements', verbose_name='Серия')
     kind = models.CharField(max_length=20, choices=KINDS, verbose_name='Что произошло')
@@ -106,3 +110,34 @@ class IssueLine(models.Model):
     class Meta:
         verbose_name = 'Строка выдачи'
         verbose_name_plural = 'Строки выдачи'
+
+
+class Supply(models.Model):
+    external_id = models.CharField(max_length=64, unique=True, verbose_name='Приёмка в МойСклад')
+    name = models.CharField(max_length=32, verbose_name='Номер')
+    moment = models.DateTimeField(verbose_name='Дата приёмки')
+    agent = models.CharField(max_length=255, blank=True, verbose_name='Поставщик')
+
+    class Meta:
+        ordering = ['-moment']
+        verbose_name = 'Приёмка'
+        verbose_name_plural = 'Приёмки'
+
+    def __str__(self):
+        return f'Приёмка {self.name}'
+
+
+class SupplyLine(models.Model):
+    supply = models.ForeignKey(Supply, on_delete=models.CASCADE, related_name='lines', verbose_name='Приёмка')
+    external_id = models.CharField(max_length=64, unique=True, verbose_name='Позиция в МойСклад')
+    material = models.ForeignKey(RawMaterial, on_delete=models.CASCADE, related_name='supply_lines', verbose_name='Сырьё')
+    slot = models.ForeignKey(Slot, null=True, blank=True, on_delete=models.SET_NULL, related_name='+', verbose_name='Ячейка')
+    quantity = models.DecimalField(verbose_name='Количество', **QUANTITY)
+    batch = models.ForeignKey(Batch, null=True, blank=True, on_delete=models.SET_NULL, related_name='supply_lines', verbose_name='Серия')
+    filled_by = models.ForeignKey(settings.AUTH_USER_MODEL, null=True, blank=True, on_delete=models.SET_NULL, related_name='+', verbose_name='Кто вписал')
+    filled_at = models.DateTimeField(null=True, blank=True, verbose_name='Когда вписал')
+
+    class Meta:
+        ordering = ['id']
+        verbose_name = 'Строка приёмки'
+        verbose_name_plural = 'Строки приёмки'

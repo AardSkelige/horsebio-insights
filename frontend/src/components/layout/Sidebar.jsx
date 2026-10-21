@@ -11,7 +11,7 @@ import NotificationsBell from '../notifications/NotificationsBell';
 import NavItem from './sidebar/NavItem';
 import UtilBtn from './sidebar/UtilBtn';
 import UserMenu from './sidebar/UserMenu';
-import NAV_GROUPS, { NAV_PATHS } from './sidebar/navGroups';
+import NAV_GROUPS, { NAV_PATHS, navSection } from './sidebar/navGroups';
 import {
     HOME_PREFERENCES_EVENT,
     MAX_PINNED_SECTIONS,
@@ -67,7 +67,8 @@ export const Sidebar = ({ expanded, onToggle, isMobile, mobileOpen, onMobileClos
         };
     }, []);
 
-    const isActive = (path) => location.pathname === path;
+    const activePath = navSection(location.pathname);
+    const isActive = (path) => path === activePath;
     const showExpanded = isMobile ? true : expanded;
 
     // На мобильном сначала закрываем шторку и только потом навигируем:

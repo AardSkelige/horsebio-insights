@@ -4,6 +4,7 @@ import { Button, Card, EmptyState, ErrorState, Page, PageHeader, Skeleton } from
 import { Stagger, StaggerItem } from '../../ui/motion';
 import { rawMaterialsApi } from '../../../api/rawMaterialsApi';
 import { formatDateTimeShort } from '../../../utils/formatters';
+import StockTabs from '../StockTabs';
 import BackLink from './BackLink';
 import IssueLine from './IssueLine';
 import './issue.css';
@@ -22,8 +23,9 @@ export default function IssuesPage() {
 
     return (
         <Page>
-            <BackLink />
+            <BackLink mobileOnly />
             <PageHeader title="Журнал выдач" subtitle="Перемещения с Шатла на производство, созданные из Insights" />
+            <StockTabs />
 
             {error && <ErrorState hint={error} />}
             {!error && !items && (

@@ -44,6 +44,8 @@ const RawMaterialsPage = lazy(() => import('./components/raw-materials/RawMateri
 const SlotPage = lazy(() => import('./components/raw-materials/issue/SlotPage'));
 const IssuesPage = lazy(() => import('./components/raw-materials/issue/IssuesPage'));
 const SlotLabels = lazy(() => import('./components/raw-materials/issue/SlotLabels'));
+const ReceiptsPage = lazy(() => import('./components/raw-materials/receipt/ReceiptsPage'));
+const ReceiptPage = lazy(() => import('./components/raw-materials/receipt/ReceiptPage'));
 const ProtocolsPage = lazy(() => import('./components/protocols/ProtocolsPage'));
 
 const RouteFallback = () => (
@@ -326,6 +328,26 @@ function AppRoutes() {
             <LayoutWrapper>
               <LazyPage>
                 <SlotLabels />
+              </LazyPage>
+            </LayoutWrapper>
+          </ProtectedRoute>
+        } />
+
+        <Route path="/raw-materials/receipts" element={
+          <ProtectedRoute>
+            <LayoutWrapper>
+              <LazyPage>
+                <ReceiptsPage />
+              </LazyPage>
+            </LayoutWrapper>
+          </ProtectedRoute>
+        } />
+
+        <Route path="/raw-materials/receipts/:id" element={
+          <ProtectedRoute>
+            <LayoutWrapper>
+              <LazyPage>
+                <ReceiptPage />
               </LazyPage>
             </LayoutWrapper>
           </ProtectedRoute>

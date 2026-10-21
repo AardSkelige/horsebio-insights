@@ -2,6 +2,20 @@
     padding-bottom: 96px;
 }
 
+.slot-page__back {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    margin-bottom: var(--space-2);
+    font-size: var(--size-sm);
+    color: var(--muted);
+    text-decoration: none;
+}
+
+.slot-page__back:hover {
+    color: var(--primary);
+}
+
 .stock-page__filters {
     display: flex;
     align-items: center;
@@ -203,13 +217,104 @@
 .stock-page__mobile-actions {
     display: flex;
     flex-direction: column;
-    gap: 8px;
+    gap: 10px;
 }
 
-.stock-page__links {
-    display: grid;
-    grid-template-columns: 1fr 1fr;
+.stock-page__mobile-actions > .ui-btn {
+    height: 52px;
+    font-size: 16px;
+}
+
+.ui-page-header:has(+ .stock-tabs) {
+    padding-bottom: 0;
+    border-bottom: none;
+}
+
+.stock-tabs {
+    display: flex;
+    gap: 4px;
+    border-bottom: 1px solid var(--hairline);
+}
+
+.stock-tabs__tab {
+    display: inline-flex;
+    align-items: center;
     gap: 8px;
+    margin-bottom: -1px;
+    padding: 10px 16px;
+    border-bottom: 2px solid transparent;
+    font-size: 14px;
+    color: var(--muted);
+    text-decoration: none;
+    transition: color 0.15s ease-out, border-color 0.15s ease-out;
+}
+
+.stock-tabs__tab:hover {
+    color: var(--ink);
+}
+
+.stock-tabs__tab.is-active {
+    border-bottom-color: var(--primary);
+    color: var(--ink);
+    font-weight: 500;
+}
+
+.stock-tabs__badge {
+    min-width: 18px;
+    height: 18px;
+    padding: 0 5px;
+    border-radius: 9px;
+    background: var(--warning);
+    color: #fff;
+    font-size: 11px;
+    font-weight: 600;
+    line-height: 18px;
+    text-align: center;
+}
+
+.stock-page__tiles {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 10px;
+}
+
+.stock-page__tile {
+    position: relative;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 5px;
+    height: 64px;
+    border: 1px solid var(--hairline);
+    border-radius: 12px;
+    background: var(--surface-soft);
+    color: var(--body);
+    font: inherit;
+    font-size: 13px;
+    font-weight: 500;
+    cursor: pointer;
+}
+
+.stock-page__tile svg {
+    color: var(--primary);
+}
+
+.stock-page__badge {
+    position: absolute;
+    top: -7px;
+    right: -6px;
+    min-width: 18px;
+    height: 18px;
+    padding: 0 5px;
+    border-radius: 9px;
+    background: var(--warning);
+    color: #fff;
+    font-size: 11px;
+    font-weight: 600;
+    line-height: 18px;
+    text-align: center;
+    font-variant-numeric: tabular-nums;
 }
 
 .stock-page__links > .ui-btn {

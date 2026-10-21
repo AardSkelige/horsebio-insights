@@ -6,9 +6,9 @@ from protocols.models import TemplateLink
 from protocols.services import series
 from protocols.services.docx.matching import attach_task_packaging_hints, extract_volume
 from protocols.services.render import template_rows
+from raw_materials.constants import TARA_GROUP
 
 LABEL = re.compile(r'наклейк|этикетк', re.I)
-TARA_GROUP = 'Тара'
 
 
 def group_rows(task):

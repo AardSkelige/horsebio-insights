@@ -12,6 +12,7 @@ STORE_NAME = 'Шатл - склад сырья + тары'
 PRODUCTION_STORE_NAME = 'Склад производства + обклейки'
 ORGANIZATION_NAME = 'ООО "ФАРМПРОТЕКТ"'
 CACHE_TTL = 24 * 60 * 60
+PAGE = 100
 
 logger = logging.getLogger(__name__)
 
@@ -53,6 +54,22 @@ def slot_stock(store):
         if row['stock'] > 0:
             placed[row['assortmentId']][row['slotId']] = row['stock']
     return dict(placed)
+
+
+def supplies(store, since):
+    rows, offset = [], 0
+    while True:
+        page = get_json('/entity/supply', {
+            'filter': f'store={BASE_URL}/entity/store/{store};moment>={since:%Y-%m-%d %H:%M:%S}',
+            'expand': 'agent,positions',
+            'order': 'moment,desc',
+            'limit': PAGE,
+            'offset': offset,
+        }).get('rows', [])
+        rows.extend(page)
+        if len(page) < PAGE:
+            return rows
+        offset += PAGE
 
 
 def product(assortment_id):

@@ -7,12 +7,12 @@ from django.db.models import F, Prefetch, prefetch_related_objects
 
 from api.exceptions import ExternalServiceError, ValidationError
 from api.notifications import invalidate
+from raw_materials.constants import TARA_GROUP
 from raw_materials.models import Batch, BatchMovement, Issue, IssueLine, MaterialStock, SlotStock
 from raw_materials.services import moysklad
 from raw_materials.services.reconcile import move_batch
 from raw_materials.services.sync import lock_stock
 
-TARA_GROUP = 'Тара'
 STEP = Decimal('0.001')
 
 

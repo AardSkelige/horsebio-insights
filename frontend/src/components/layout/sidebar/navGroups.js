@@ -65,4 +65,8 @@ const NAV_GROUPS = [
 // (например, после переименования маршрута), чтобы они не занимали слоты избранного.
 export const NAV_PATHS = new Set(NAV_GROUPS.flatMap((g) => g.items).map((i) => i.path));
 
+export const navSection = (pathname) => [...NAV_PATHS]
+    .filter((path) => pathname === path || (path !== '/' && pathname.startsWith(`${path}/`)))
+    .sort((a, b) => b.length - a.length)[0] || pathname;
+
 export default NAV_GROUPS;
