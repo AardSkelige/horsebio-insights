@@ -76,11 +76,17 @@ def product(assortment_id):
     return get_json(f'/entity/product/{assortment_id}', {'expand': 'uom'})
 
 
+def _buy_price(product_id):
+    return (product(product_id).get('buyPrice') or {}).get('value', 0)
+
+
 def create_move(external_code, description, positions):
     source = store_id()
+    prices = {product: _buy_price(product) for product, _, _ in positions}
     rows = [
         {
             'quantity': float(quantity),
+            'price': prices[product],
             'assortment': _meta(f'/entity/product/{product}', 'product'),
             **({'sourceSlot': _meta(f'/entity/store/{source}/slots/{slot}', 'slot')} if slot else {}),
         }

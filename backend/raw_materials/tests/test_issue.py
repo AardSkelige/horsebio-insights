@@ -157,6 +157,7 @@ class DescribeTests(TestCase):
 class CreateMoveTests(TestCase):
     def test_repeat_left_by_a_retried_request_is_deleted(self):
         with patch.object(moysklad, 'store_id', return_value='shuttle'), \
+                patch.object(moysklad, '_buy_price', return_value=786), \
                 patch.object(moysklad, '_id_by_name', return_value='target'), \
                 patch.object(moysklad, 'post_json', return_value=MOVE) as post, \
                 patch.object(moysklad, 'get_json', return_value={'rows': [{'id': 'move-1'}, {'id': 'move-2'}]}), \
@@ -166,6 +167,7 @@ class CreateMoveTests(TestCase):
         body = post.call_args.args[1]
         self.assertEqual((body['externalCode'], body['applicable']), ('key-1', True))
         self.assertEqual(body['positions'][0]['quantity'], 1.5)
+        self.assertEqual(body['positions'][0]['price'], 786)
         self.assertTrue(body['positions'][0]['sourceSlot']['meta']['href'].endswith('/store/shuttle/slots/slot'))
         delete.assert_called_once_with('/entity/move/move-2')
 
@@ -206,6 +208,7 @@ class IssuesApiTests(TestCase):
 class CreateMoveFailureTests(TestCase):
     def test_timed_out_post_cleans_up_whatever_reached_moysklad(self):
         with patch.object(moysklad, 'store_id', return_value='shuttle'), \
+                patch.object(moysklad, '_buy_price', return_value=0), \
                 patch.object(moysklad, '_id_by_name', return_value='target'), \
                 patch.object(moysklad, 'post_json', side_effect=requests.Timeout), \
                 patch.object(moysklad, 'get_json', return_value={'rows': [{'id': 'late'}]}), \
@@ -213,3 +216,11 @@ class CreateMoveFailureTests(TestCase):
             with self.assertRaises(requests.Timeout):
                 moysklad.create_move('key-1', 'Иван Петров, выдача сырья', [('product', None, Decimal('1'))])
         delete.assert_called_once_with('/entity/move/late')
+
+
+class BuyPriceTests(TestCase):
+    def test_price_is_the_buy_price_from_the_card(self):
+        with patch.object(moysklad, 'product', return_value={'buyPrice': {'value': 786.0}}):
+            self.assertEqual(moysklad._buy_price('p'), 786.0)
+        with patch.object(moysklad, 'product', return_value={}):
+            self.assertEqual(moysklad._buy_price('p'), 0)
