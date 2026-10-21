@@ -32,7 +32,7 @@ class ProductionPlanApiTests(TestCase):
     def test_plan(self):
         rows = self.client.get('/api/production-plan/').json()['rows']
         self.assertEqual([(r['article'], r['produce'], r['status']) for r in rows], [
-            ('08-10EP5000', 8, 'urgent'), ('11-36AP0100', 500, 'produce'),
+            ('08-10EP5000', 8, 'urgent'), ('11-36AP0100', 500, 'urgent'),
         ])
 
     def test_exclusion_hides_and_returns(self):

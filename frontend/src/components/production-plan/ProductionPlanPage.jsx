@@ -61,10 +61,10 @@ export default function ProductionPlanPage() {
             {error && <ErrorState hint={error} onRetry={() => reload()} />}
 
             <StatGrid loading={loading} count={4}>
-                <StatCard title="К производству" value={`${toProduce.length} позиций`} />
-                <StatCard title="Всего произвести" value={`${qty(toProduce.reduce((sum, row) => sum + row.produce, 0))} шт`} />
-                <StatCard title="Срочно — на складе 0" value={allRows.filter((row) => row.status === 'urgent').length} />
-                <StatCard title="Всего в плане" value={allRows.length} />
+                <StatCard title="К производству" hint="Сколько товаров нужно произвести, чтобы хватило на 2 месяца" value={`${toProduce.length} позиций`} />
+                <StatCard title="Всего произвести" hint="Сумма колонки «Произвести» по всем товарам" value={`${qty(toProduce.reduce((sum, row) => sum + row.produce, 0))} шт`} />
+                <StatCard title="Срочно — меньше месяца" hint="Товары, которых на складе хватит меньше чем на 30 дней" value={allRows.filter((row) => row.status === 'urgent').length} />
+                <StatCard title="Всего в плане" hint="Товары с продажами за 3 месяца, кроме исключений" value={allRows.length} />
             </StatGrid>
 
             <Toolbar className="plan-toolbar">

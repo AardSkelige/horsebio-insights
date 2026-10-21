@@ -15,6 +15,7 @@ from production_plan.services.articles import normalize
 
 MONTHS = 3
 RESERVE_MONTHS = 2
+DAYS_IN_MONTH = 30
 SPIKE_RATIO = 2
 SPIKE_MIN = 20
 
@@ -72,7 +73,8 @@ def build(months, sales, stock, rules, green):
         in_production = max(item['in_transit'], 0)
         need = math.ceil(usual * RESERVE_MONTHS)
         produce = max(math.ceil(need - available - in_production), 0)
-        if produce and not available:
+        days = math.floor(available / usual * DAYS_IN_MONTH) if usual else None
+        if produce and days < DAYS_IN_MONTH:
             status = 'urgent'
         elif produce:
             status = 'produce'
@@ -91,13 +93,14 @@ def build(months, sales, stock, rules, green):
             ],
             'usual': usual,
             'need': need,
+            'days': days,
             'available': available,
             'in_production': in_production,
             'produce': produce,
             'status': status,
             'green': article in green,
         })
-    rows.sort(key=lambda row: (STATUS_ORDER.index(row['status']), -row['produce'], -row['usual'], row['name']))
+    rows.sort(key=lambda row: (STATUS_ORDER.index(row['status']), row['days'] if row['days'] is not None else math.inf, -row['produce'], row['name']))
     return rows
 
 

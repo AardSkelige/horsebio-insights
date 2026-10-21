@@ -43,13 +43,13 @@ def export(request):
     data = plan(timezone.localdate())
     months = [MONTH_NAMES[month.month - 1] for month in data['months']]
     builder = ExcelReportBuilder('Производственный план')
-    builder.add_headers(['Артикул', 'Название', *months, 'Обычно в месяц', 'Нужно на 2 мес', 'Можно взять', 'В производстве', 'Произвести', 'Статус', 'Зелёный список'])
+    builder.add_headers(['Артикул', 'Название', *months, 'Обычно в месяц', 'Нужно на 2 мес', 'Можно взять', 'Хватит на, дней', 'В производстве', 'Произвести', 'Статус', 'Зелёный список'])
     for row in data['rows']:
         builder.add_row([
-            row['article'], row['name'], *row['months'], row['usual'], row['need'], row['available'],
+            row['article'], row['name'], *row['months'], row['usual'], row['need'], row['available'], row['days'],
             row['in_production'], row['produce'], STATUS_LABELS[row['status']], 'да' if row['green'] else '',
         ])
-    builder.set_column_widths([16, 60, *[11] * len(months), 14, 14, 13, 15, 12, 16, 15])
+    builder.set_column_widths([16, 60, *[11] * len(months), 14, 14, 13, 14, 15, 12, 16, 15])
     return builder.to_http_response(f"production-plan-{timezone.localdate().isoformat()}.xlsx")
 
 

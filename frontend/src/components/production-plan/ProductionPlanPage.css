@@ -20,10 +20,22 @@
     white-space: normal;
 }
 
+.plan-table .ui-table th,
+.plan-table .ui-table td {
+    padding-left: 7px;
+    padding-right: 7px;
+}
+
 .plan-head {
     display: inline-flex;
     flex-direction: column;
     align-items: flex-end;
+}
+
+.plan-head__label {
+    display: inline-flex;
+    align-items: center;
+    gap: 3px;
 }
 
 .plan-head small {

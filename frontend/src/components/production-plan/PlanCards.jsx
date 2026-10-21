@@ -2,7 +2,7 @@ import PropTypes from 'prop-types';
 import { Badge, Skeleton } from '../ui';
 import { FadeRise } from '../ui/motion';
 import Breakdown from './Breakdown';
-import { STATUS, qty } from './format';
+import { STATUS, days, qty } from './format';
 
 export default function PlanCards({ rows, months, loading, open, onOpen, onToggleGreen }) {
     if (loading) {
@@ -20,6 +20,7 @@ export default function PlanCards({ rows, months, loading, open, onOpen, onToggl
                 <span className="plan-card__name">{row.green && <span className="plan-green" />}{row.name}</span>
                 <span className="plan-card__line"><span>Обычно в месяц</span><b>{qty(row.usual)}</b></span>
                 <span className="plan-card__line"><span>Можно взять со склада</span><b className={row.available ? '' : 'is-zero'}>{row.available ? qty(row.available) : '0'}</b></span>
+                <span className="plan-card__line"><span>Склада хватит на</span><b className={row.status === 'urgent' ? 'is-zero' : ''}>{days(row.days)}</b></span>
                 <span className="plan-card__line"><span>В производстве</span><b>{qty(row.in_production)}</b></span>
                 <span className="plan-card__line plan-card__total"><span>Произвести</span><b>{qty(row.produce)} шт</b></span>
             </button>

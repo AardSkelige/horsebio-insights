@@ -37,13 +37,20 @@ class BuildTests(SimpleTestCase):
         self.assertEqual(row['usual'], 175)
         self.assertEqual(row['need'], 350)
         self.assertEqual(row['produce'], 200)
-        self.assertEqual(row['status'], 'produce')
+        self.assertEqual(row['days'], 17)
+        self.assertEqual(row['status'], 'urgent')
 
     def test_one_spike_does_not_inflate_the_plan(self):
         row = self.row(stock('A-1', quantity=0), sales('A-1', 600, 100, 110))
         self.assertEqual(row['usual'], 110)
         self.assertEqual(row['spikes'], [0])
         self.assertEqual(row['status'], 'urgent')
+
+    def test_no_usual_sales_sorts_last(self):
+        items = [stock('A', quantity=10), stock('B', quantity=200)]
+        sold = {**sales('A', 0, 0, 12), **sales('B', 10, 10, 10)}
+        rows = build(MONTHS, sold, items, [], set())
+        self.assertEqual([(r['article'], r['days']) for r in rows], [('B', 600), ('A', None)])
 
     def test_small_jump_is_not_a_spike(self):
         row = self.row(stock('A-1'), sales('A-1', 9, 2, 4))
@@ -76,7 +83,15 @@ class BuildTests(SimpleTestCase):
         self.assertEqual(row['channels'][1]['months'], [5, 0, 7])
         self.assertTrue(row['green'])
 
-    def test_urgent_first_then_by_amount(self):
+    def test_what_runs_out_sooner_goes_first(self):
+        items = [stock('11-11AP0500', 'ХФ+ 500', quantity=296), stock('05-01VP1000', 'Витамин Е', quantity=23)]
+        sold = {**sales('11-11AP0500', 176, 345, 259), **sales('05-01VP1000', 56, 19, 71)}
+        rows = build(MONTHS, sold, items, [], set())
+        self.assertEqual([(r['article'], r['days'], r['status']) for r in rows], [
+            ('05-01VP1000', 12, 'urgent'), ('11-11AP0500', 34, 'produce'),
+        ])
+
+    def test_urgent_first_then_fewer_days_then_amount(self):
         items = [stock('A', quantity=100), stock('B', quantity=0), stock('C', quantity=0)]
         sold = {**sales('A', 100, 100, 100), **sales('B', 5, 5, 5), **sales('C', 1, 1, 1)}
         self.assertEqual([r['article'] for r in build(MONTHS, sold, items, [], set())], ['B', 'C', 'A'])
