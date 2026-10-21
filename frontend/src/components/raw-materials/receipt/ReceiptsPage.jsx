@@ -24,7 +24,7 @@ export default function ReceiptsPage() {
             {data?.stale && <Notice tone="warning">МойСклад не ответил, показаны приёмки, загруженные раньше</Notice>}
             {!error && !data && [...Array(3)].map((_, i) => <Skeleton key={i} height={110} style={{ borderRadius: 12 }} />)}
             {data?.items.length === 0 && (
-                <EmptyState title="Новых приёмок нет" hint="Когда Вика проведёт приёмку на Шатл в МойСклад, она появится здесь" />
+                <EmptyState title="Новых приёмок нет" hint="Когда приёмку на Шатл проведут в МойСклад, она появится здесь" />
             )}
             {data?.items.length > 0 && (
                 <Stagger className="receipts">

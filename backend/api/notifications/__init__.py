@@ -22,3 +22,4 @@ from .core import (  # noqa: F401
 from . import discounted  # noqa: F401,E402  — регистрирует провайдер раздела
 from . import ozon_delivery  # noqa: F401,E402  — доставка Ozon в «Заказах сайта»
 from . import raw_materials  # noqa: F401,E402  — просроченные серии на складе сырья
+from . import production_plan  # noqa: F401,E402

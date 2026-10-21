@@ -61,6 +61,8 @@
 # Склад сырья: остатки из МойСклада, серии подгоняются под них. Сдвиг 240 секунд
 # уводит его с пятиминутных задач почты и Ozon, они стартуют в ту же минуту.
 55 * * * * sleep 240 && /root/horsebio/deploy/cron/horsebio-check.sh horsebio_raw_materials_sync
+# Продажи Ozon и заказы WB для производственного плана: раз в сутки, WB хранит заказы только 90 дней, поэтому копим их у себя.
+40 6 * * * /root/horsebio/deploy/cron/horsebio-check.sh horsebio_production_plan_sales
 25 9 * * * /root/horsebio/deploy/cron/horsebio-check.sh horsebio_inventory_check
 0 11 * * * /root/horsebio/deploy/cron/horsebio-check.sh horsebio_data_sync
 

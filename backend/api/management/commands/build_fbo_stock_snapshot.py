@@ -16,7 +16,7 @@ class Command(BaseCommand):
     help = 'Пересобрать снимок раздела «Остатки для FBO» из МойСклад'
 
     def handle(self, *args, **options):
-        from api.views.fbo_stock import SECTION_KEY, build_snapshot
+        from api.services.fbo_stock import SECTION_KEY, build_snapshot
 
         payload = build_snapshot()
 

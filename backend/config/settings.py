@@ -44,6 +44,7 @@ INSTALLED_APPS = [
 
     'raw_materials',
     'protocols',
+    'production_plan',
 ]
 
 MIDDLEWARE = [

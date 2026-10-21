@@ -50,14 +50,14 @@ class FboStockPageTests(_SectionTestCase):
     def test_open_page_does_not_touch_moysklad(self):
         SectionSnapshot.store('fbo-stock', STOCK_SNAPSHOT)
 
-        with patch('api.views.fbo_stock._build_data') as build:
+        with patch('api.services.fbo_stock._build_data') as build:
             payload = self.client.get(self.url).json()
 
         build.assert_not_called()
         self.assertEqual(payload['data']['items'][0]['article'], 'A')
 
     def test_first_open_before_any_run_builds_once(self):
-        with patch('api.views.fbo_stock._build_data', return_value=STOCK_SNAPSHOT) as build:
+        with patch('api.services.fbo_stock._build_data', return_value=STOCK_SNAPSHOT) as build:
             self.client.get(self.url)
 
         build.assert_called_once()
@@ -66,14 +66,14 @@ class FboStockPageTests(_SectionTestCase):
     def test_refresh_rebuilds(self):
         SectionSnapshot.store('fbo-stock', dict(STOCK_SNAPSHOT, store='старое'))
 
-        with patch('api.views.fbo_stock._build_data', return_value=STOCK_SNAPSHOT) as build:
+        with patch('api.services.fbo_stock._build_data', return_value=STOCK_SNAPSHOT) as build:
             payload = self.client.get(f'{self.url}?refresh=1').json()
 
         build.assert_called_once()
         self.assertEqual(payload['data']['store'], 'Склад готовой продукции')
 
     def test_command_stores_the_snapshot(self):
-        with patch('api.views.fbo_stock._build_data', return_value=STOCK_SNAPSHOT):
+        with patch('api.services.fbo_stock._build_data', return_value=STOCK_SNAPSHOT):
             call_command('build_fbo_stock_snapshot')
 
         self.assertEqual(SectionSnapshot.stored('fbo-stock').payload['store'],

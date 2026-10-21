@@ -22,6 +22,8 @@ import os
 
 import requests
 
+from api.services import http_retry
+
 logger = logging.getLogger(__name__)
 
 BASE_URL = "https://api-seller.ozon.ru"
@@ -47,14 +49,21 @@ def _headers():
     return {"Client-Id": client_id, "Api-Key": api_key, "Content-Type": "application/json"}
 
 
-def _post(path, payload):
-    try:
-        response = requests.post(f"{BASE_URL}{path}", headers=_headers(), json=payload, timeout=TIMEOUT)
-    except requests.RequestException as exc:
-        raise OzonStockError(f"Ozon недоступен ({path}): {exc}")
-    if response.status_code >= 300:
-        raise OzonStockError(f"Ozon ответил {response.status_code} на {path}: {response.text[:300]}")
-    return response.json()
+READ_PAUSES = (2, 5, 10, 20, 40)
+QUICK_PAUSES = (1, 2, 3)
+
+
+def _post(path, payload, pauses=()):
+    return http_retry.send(
+        lambda: requests.post(f"{BASE_URL}{path}", headers=_headers(), json=payload, timeout=TIMEOUT),
+        pauses,
+        lambda exc: OzonStockError(f"Ozon недоступен ({path}): {exc}"),
+        lambda response: OzonStockError(f"Ozon ответил {response.status_code} на {path}: {response.text[:300]}"),
+    ).json()
+
+
+def read(path, payload, pauses=READ_PAUSES):
+    return _post(path, payload, pauses)
 
 
 def warehouse_id():

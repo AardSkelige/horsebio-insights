@@ -20,6 +20,7 @@ urlpatterns = [
         path('raw-materials/', include('raw_materials.urls', namespace='raw_materials')),
 
         path('protocols/', include('protocols.urls', namespace='protocols')),
+        path('production-plan/', include('production_plan.urls', namespace='production_plan')),
 
     ])),
 

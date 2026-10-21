@@ -1,7 +1,7 @@
 import {
     Home, Package, Users, Layers, Archive, Truck,
     BarChart2, TrendingUp, PackageCheck, Boxes, PieChart, ShoppingCart, ShoppingBag,
-    DollarSign, Factory, FileSpreadsheet, ClipboardList, Activity, Clock, ShieldCheck, Mail, KeyRound, Tag, Warehouse, FileText,
+    DollarSign, Factory, FileSpreadsheet, ClipboardList, Activity, Clock, ShieldCheck, Mail, KeyRound, Tag, Warehouse, FileText, CalendarCheck,
 } from 'lucide-react';
 
 // pageKey — ключ страницы из бэкенд-реестра (api/access.py). По нему фильтруется
@@ -25,6 +25,7 @@ const NAV_GROUPS = [
             { path: '/inventory',                 label: 'Инвентаризация',          icon: ClipboardList, description: 'Контроль позиций с 1-го числа месяца', pageKey: 'inventory' },
             { path: '/raw-materials',             label: 'Склад сырья',             icon: Warehouse, description: 'Ячейки, серии и сроки годности на Шатле', pageKey: 'raw-materials' },
             { path: '/protocols',                 label: 'Протоколы',               icon: FileText, description: 'Технологические протоколы по заданиям', pageKey: 'protocols' },
+            { path: '/production-plan',           label: 'Производственный план',   icon: CalendarCheck, description: 'Что и сколько произвести на 2 месяца', pageKey: 'production-plan' },
         ],
     },
     {

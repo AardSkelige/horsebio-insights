@@ -223,6 +223,16 @@ SCRIPTS_CONFIG = [
         'args': ['sync_raw_materials'],
     },
     {
+        'id': 'horsebio_production_plan_sales',
+        'topic': 'Обновление данных',
+        'name': 'Продажи Ozon и WB для производственного плана',
+        'account': 'HorseBio',
+        'schedule': 'Ежедн. в 06:40',
+        'description': 'Заказы Ozon ФАРМ за три полных месяца и заказы WB за 89 дней, вместе со складами площадок (Django-команда sync_production_plan_sales)',
+        'script': '/app/manage.py',
+        'args': ['sync_production_plan_sales'],
+    },
+    {
         'id': 'horsebio_ozon_points',
         'topic': 'Обновление данных',
         'name': 'Пункты выдачи Ozon',

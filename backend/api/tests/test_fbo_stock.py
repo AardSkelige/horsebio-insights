@@ -14,7 +14,7 @@ from openpyxl import load_workbook
 
 from api.access import page_keys_for_path
 from api.models import UserPageAccess
-from api.views.fbo_stock import _build_data, _minimum_balances
+from api.services.fbo_stock import _build_data, _minimum_balances
 
 STORE_HREF = 'https://api.moysklad.ru/api/remap/1.2/entity/store/store-1'
 FOLDER_HREF = 'https://api.moysklad.ru/api/remap/1.2/entity/productfolder/folder-1'
@@ -79,7 +79,7 @@ class FboStockCalculationTests(SimpleTestCase):
     def tearDown(self):
         cache.clear()
 
-    @patch('api.views.fbo_stock.ms_http.get', side_effect=fake_ms_get)
+    @patch('api.services.fbo_stock.ms_http.get', side_effect=fake_ms_get)
     def test_in_transit_is_not_counted_as_available(self, _mock_get):
         """«Можно взять» = остаток − резерв: плановый выпуск в него не входит."""
         items = {item['article']: item for item in _build_data()['items']}
@@ -90,20 +90,20 @@ class FboStockCalculationTests(SimpleTestCase):
 
         self.assertEqual(items['08-02EP0800']['quantity'], 201.0)
 
-    @patch('api.views.fbo_stock.ms_http.get', side_effect=fake_ms_get)
+    @patch('api.services.fbo_stock.ms_http.get', side_effect=fake_ms_get)
     def test_reserve_above_stock_stays_negative(self, _mock_get):
         """Резерв больше остатка — показываем минус, а не ноль: это повод разобраться."""
         items = {item['article']: item for item in _build_data()['items']}
         self.assertEqual(items['01-14AP0250']['quantity'], -8.0)
 
-    @patch('api.views.fbo_stock.ms_http.get', side_effect=fake_ms_get)
+    @patch('api.services.fbo_stock.ms_http.get', side_effect=fake_ms_get)
     def test_below_minimum_marks_only_positions_under_their_own_minimum(self, _mock_get):
         items = {item['article']: item for item in _build_data()['items']}
         self.assertTrue(items['06-03GP0800']['below_minimum'])    # 219 < 267
         self.assertFalse(items['08-02EP0800']['below_minimum'])   # 201 > 133
         self.assertFalse(items['99-00XX0000']['below_minimum'])   # минимум не задан
 
-    @patch('api.views.fbo_stock.ms_http.get', side_effect=fake_ms_get)
+    @patch('api.services.fbo_stock.ms_http.get', side_effect=fake_ms_get)
     def test_minimum_balances_ignore_other_folder_branches(self, _mock_get):
         """Минимумы берём только из группы «Товары», не из соседних веток."""
         minimums = _minimum_balances()
@@ -114,7 +114,7 @@ class FboStockCalculationTests(SimpleTestCase):
         self.assertNotIn('foreign-marketplace', minimums)
         self.assertNotIn('foreign-outdoor', minimums)
 
-    @patch('api.views.fbo_stock.ms_http.get', side_effect=fake_ms_get)
+    @patch('api.services.fbo_stock.ms_http.get', side_effect=fake_ms_get)
     def test_stock_report_is_grouped_by_product(self, mock_get):
         """Без groupBy отчёт группирует по модификациям, и минимум товара не находится."""
         _build_data()
@@ -124,7 +124,7 @@ class FboStockCalculationTests(SimpleTestCase):
         for call in report_calls:
             self.assertEqual(call.kwargs['params']['groupBy'], 'product')
 
-    @patch('api.views.fbo_stock.ms_http.get', side_effect=fake_ms_get)
+    @patch('api.services.fbo_stock.ms_http.get', side_effect=fake_ms_get)
     def test_positions_without_movement_are_marked_empty(self, _mock_get):
         items = {item['article']: item for item in _build_data()['items']}
         self.assertTrue(items['99-00XX0000']['is_empty'])
@@ -142,7 +142,7 @@ class FboStockEndpointTests(TestCase):
     def tearDown(self):
         cache.clear()
 
-    @patch('api.views.fbo_stock.ms_http.get', side_effect=fake_ms_get)
+    @patch('api.services.fbo_stock.ms_http.get', side_effect=fake_ms_get)
     def test_endpoint_returns_items(self, _mock_get):
         response = self.client.get('/api/analysis/fbo-stock/')
         self.assertEqual(response.status_code, 200)
@@ -151,7 +151,7 @@ class FboStockEndpointTests(TestCase):
         articles = {item['article'] for item in payload['data']['items']}
         self.assertIn('06-03GP0800', articles)
 
-    @patch('api.views.fbo_stock.ms_http.get', side_effect=fake_ms_get)
+    @patch('api.services.fbo_stock.ms_http.get', side_effect=fake_ms_get)
     def test_excel_has_four_columns_and_skips_idle_positions(self, _mock_get):
         response = self.client.get('/api/analysis/fbo-stock/export/')
         self.assertEqual(response.status_code, 200)
@@ -167,7 +167,7 @@ class FboStockEndpointTests(TestCase):
         self.assertEqual(rows['06-03GP0800'], 219.0)
         self.assertNotIn('99-00XX0000', rows)   # позиции без движения в выгрузку не идут
 
-    @patch('api.views.fbo_stock.ms_http.get', side_effect=fake_ms_get)
+    @patch('api.services.fbo_stock.ms_http.get', side_effect=fake_ms_get)
     def test_access_is_separate_from_fbo_orders_page(self, _mock_get):
         """Соседний префикс /api/analysis/fbo/ не должен «съедать» страницу остатков."""
         self.assertEqual(page_keys_for_path('/api/analysis/fbo-stock/'), {'fbo-stock'})

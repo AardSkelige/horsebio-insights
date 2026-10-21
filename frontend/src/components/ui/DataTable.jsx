@@ -79,6 +79,7 @@ export default function DataTable({
                                             sortable ? 'is-sortable' : '',
                                             sorted ? 'is-sorted' : '',
                                             col.numeric ? 'is-numeric' : '',
+                                            col.className,
                                         ].filter(Boolean).join(' ')}
                                         onClick={sortable ? () => onSort(col.key) : undefined}
                                         aria-sort={sorted ? (sortOrder === 'asc' ? 'ascending' : 'descending') : undefined}
@@ -138,6 +139,7 @@ export default function DataTable({
                                                 className={[
                                                     col.numeric ? 'is-numeric' : '',
                                                     col.strong ? 'is-strong' : '',
+                                                    col.className,
                                                 ].filter(Boolean).join(' ') || undefined}
                                                 // Действие внутри ячейки не должно сворачивать строку
                                                 onClick={expandable && col.sortable === false ? (e) => e.stopPropagation() : undefined}
@@ -188,6 +190,7 @@ export const ColumnPropType = PropTypes.shape({
     numeric: PropTypes.bool,
     strong: PropTypes.bool,
     sortable: PropTypes.bool,
+    className: PropTypes.string,
 });
 
 DataTable.propTypes = {

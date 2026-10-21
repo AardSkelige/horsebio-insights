@@ -47,6 +47,7 @@ const SlotLabels = lazy(() => import('./components/raw-materials/issue/SlotLabel
 const ReceiptsPage = lazy(() => import('./components/raw-materials/receipt/ReceiptsPage'));
 const ReceiptPage = lazy(() => import('./components/raw-materials/receipt/ReceiptPage'));
 const ProtocolsPage = lazy(() => import('./components/protocols/ProtocolsPage'));
+const ProductionPlanPage = lazy(() => import('./components/production-plan/ProductionPlanPage'));
 
 const RouteFallback = () => (
   <div aria-busy="true" aria-label="Загрузка раздела" style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
@@ -348,6 +349,16 @@ function AppRoutes() {
             <LayoutWrapper>
               <LazyPage>
                 <ReceiptPage />
+              </LazyPage>
+            </LayoutWrapper>
+          </ProtectedRoute>
+        } />
+
+        <Route path="/production-plan" element={
+          <ProtectedRoute>
+            <LayoutWrapper>
+              <LazyPage>
+                <ProductionPlanPage />
               </LazyPage>
             </LayoutWrapper>
           </ProtectedRoute>
