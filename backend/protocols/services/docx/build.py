@@ -8,6 +8,14 @@ from .layout import add_automation_notice, fill_process_defaults, keep_completio
 from .tables import prune_related_label_rows, prune_unused_quantity_rows, quantity_table, set_sealing_datetime_row, task_requires_sealing
 from .hondrofit import hondrofit_water_dosages, prepare_mixed_hondrofit, rewrite_combined_hondrofit_title
 
+GRAMS_IN_HEADER = re.compile(r",\s*грамм.*$", re.S)
+BARE_NUMBER = re.compile(r"\s*\d[\d\s.,]*")
+WATER_UNIT = "г"
+
+
+def with_unit(qty_text, unit):
+    return f"{qty_text} {unit}" if qty_text and unit else qty_text
+
 def template_material_names(template_path):
     with zipfile.ZipFile(template_path, "r") as zin:
         document = ET.fromstring(zin.read("word/document.xml"))
@@ -55,6 +63,8 @@ def build_docx(template_path, output_path, batch_no, resolved_materials, labels,
             continue
         format_row_cells(cells[:5])
         if idx == 0:
+            for cell in cells[3:5]:
+                set_text(cell, GRAMS_IN_HEADER.sub("", text_of(cell)))
             continue
         name = text_of(cells[0]).strip()
         is_water = "вода" in name.lower() or "РІРѕРґР°" in name
@@ -67,9 +77,11 @@ def build_docx(template_path, output_path, batch_no, resolved_materials, labels,
         elif water_index < len(water_dosages):
             set_text(cells[1], "—")
             set_text(cells[2], "—")
-            set_text(cells[3], docx_qty_text(water_dosages[water_index]))
+            set_text(cells[3], with_unit(docx_qty_text(water_dosages[water_index]), WATER_UNIT))
             water_index += 1
             continue
+        if is_water and BARE_NUMBER.fullmatch(text_of(cells[3])):
+            set_text(cells[3], with_unit(text_of(cells[3]).strip(), WATER_UNIT))
         data = material_by_name.get(name)
         if not data:
             set_text(cells[1], "—")
@@ -79,7 +91,7 @@ def build_docx(template_path, output_path, batch_no, resolved_materials, labels,
         expiry_date = metadata_value(data.get("expiry_date"))
         set_text(cells[2], "—" if is_sodium_benzoate or not expiry_date else expiry_date)
         if not is_selenium:
-            set_text(cells[3], docx_qty_text(data.get("qty")))
+            set_text(cells[3], with_unit(docx_qty_text(data.get("qty")), (data.get("uom") or "").lower()))
 
     primary_label_table = None
     primary_label_match_complete = False

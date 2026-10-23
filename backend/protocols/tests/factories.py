@@ -19,7 +19,7 @@ def docx(material_rows):
     body = (
         '<w:p><w:r><w:t>Технологический протокол. Серия ____</w:t></w:r></w:p>'
         + _table([['a']]) + _table([['b']])
-        + _table([['Сырьё', 'Производитель', 'Годен до', 'Кол-во', 'Подпись']] + [[name, '', '', '', ''] for name in material_rows])
+        + _table([['Сырьё', 'Производитель', 'Годен до', 'Дозировка теоретическое кол-во, грамм', 'Дозировка фактическое кол-во, грамм']] + [[name, '', '', '', ''] for name in material_rows])
     )
     xml = f'<?xml version="1.0" encoding="UTF-8"?><w:document xmlns:w="{W}"><w:body>{body}</w:body></w:document>'
     buffer = io.BytesIO()

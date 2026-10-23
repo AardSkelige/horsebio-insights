@@ -27,8 +27,19 @@ class BuildTests(TestCase):
         self.assertIn('Серия 00689', xml)
         self.assertIn('ВИТАСОЛЬ партия № 379', xml)
         self.assertIn('11.11.2026', xml)
-        self.assertIn('9500', xml)
+        self.assertIn('9500 г', xml)
         self.assertEqual(filename, 'Протокол 00689 Мультикальций.docx')
+
+    def test_quantity_carries_the_moysklad_unit_instead_of_grams_in_the_header(self):
+        oil = material('Масло льняное', 'm-oil', uom='Мл')
+        echinacea = template('Эхинацея', rows=['Льняное масло'])
+        row_material(echinacea, 'Льняное масло', oil)
+        link('p-2', echinacea)
+        oil_task = task(plan_row('p-2', [('Эхинацея 1000 мл', 20)], [('m-oil', 'Масло льняное', 19200)]))
+        xml = text_of(build(oil_task, 0, [{'row_name': 'Льняное масло', 'material_id': 'm-oil', 'qty': 19200}])[0])
+        self.assertIn('19200 мл', xml)
+        self.assertIn('Дозировка теоретическое кол-во<', xml)
+        self.assertNotIn('грамм', xml)
 
     def test_series_typed_by_hand_is_remembered(self):
         build(self.task, 0, self.rows(series='A-77', expiry_date='2027-05-01'))

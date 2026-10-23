@@ -50,10 +50,12 @@ def build(task, index, rows):
     if group['template'] is None:
         raise ProtocolError('Для этой продукции не выбран шаблон протокола')
     prepared = variant(group, date.fromisoformat(task['moment']))
+    uoms = {row['row_name']: row['uom'] for row in prepared['rows']}
     materials = [
         {
             'template_name': row['row_name'],
             'qty': _qty(row.get('qty')),
+            'uom': uoms.get(row['row_name'], ''),
             'manufacturer': row.get('manufacturer') or '',
             'series': row.get('series') or '',
             'expiry_date': _date(row.get('expiry_date')).strftime('%d.%m.%Y') if row.get('expiry_date') else '',
