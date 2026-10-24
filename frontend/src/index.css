@@ -276,17 +276,33 @@ button:active:not(:disabled):not(.no-tap-scale):not([style*="width: 100%"]):not(
 
 .app-shell {
   position: fixed;
-  inset: 0 0 calc(0px - var(--vp-fix, 0px));
+  inset: 0;
   display: flex;
   overflow: hidden;
   background-color: var(--canvas);
   isolation: isolate;
 }
 
-@media (display-mode: standalone) {
-  html,
-  body {
-    overscroll-behavior: none;
+.app-content {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  overflow: auto;
+  overscroll-behavior-y: contain;
+}
+
+@media (max-width: 767px) {
+  .app-shell {
+    position: relative;
+    inset: auto;
+    min-height: 100vh;
+    min-height: 100dvh;
+    overflow: visible;
+  }
+
+  .app-content {
+    overflow: visible;
   }
 }
 

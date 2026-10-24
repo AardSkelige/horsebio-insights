@@ -3,11 +3,10 @@
   background: var(--canvas);
   color: var(--ink);
   display: flex;
-  inset: 0 0 calc(0px - var(--vp-fix, 0px));
-  overflow-y: auto;
-  overscroll-behavior: contain;
+  min-height: 100vh;
+  min-height: 100dvh;
   padding: 32px;
-  position: fixed;
+  position: relative;
 }
 
 .login-theme-toggle {

@@ -164,7 +164,7 @@ const Layout = ({ children }) => {
                     onClick={() => setMobileOpen(false)}
                     onTouchMove={e => e.preventDefault()}
                     style={{
-                        position: 'fixed', inset: 0, bottom: 'calc(0px - var(--vp-fix, 0px))', zIndex: 34,
+                        position: 'fixed', inset: 0, zIndex: 34,
                         backgroundColor: 'var(--scrim)',
                         opacity: mobileOpen ? 1 : 0,
                         pointerEvents: mobileOpen ? 'auto' : 'none',
@@ -186,7 +186,7 @@ const Layout = ({ children }) => {
             />
 
             {/* Scrollable content area */}
-            <div style={{ flex: 1, overflow: 'auto', overscrollBehaviorY: 'contain', minWidth: 0, display: 'flex', flexDirection: 'column' }}>
+            <div className="app-content">
 
                 {/* Mobile top bar */}
                 {isMobile && (

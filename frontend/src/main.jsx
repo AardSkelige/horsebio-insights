@@ -3,9 +3,6 @@ import './utils/browserPolyfills'
 import { createRoot } from 'react-dom/client'
 import './index.css'
 import App from './App.jsx'
-import { installViewportFix } from './utils/viewportFix'
-
-installViewportFix()
 
 if ('serviceWorker' in navigator) {
   navigator.serviceWorker.register('/sw.js').catch(() => {})

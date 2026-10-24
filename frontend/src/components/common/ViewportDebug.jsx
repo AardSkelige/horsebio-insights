@@ -48,7 +48,6 @@ const measure = () => {
         `doc client ${document.documentElement.clientHeight} · scrollH ${document.documentElement.scrollHeight} · scrollY ${Math.round(scrollY)} · scrollX ${Math.round(scrollX)}`,
         `safe top ${safe.top} · bottom ${safe.bottom} · left ${safe.left} · right ${safe.right}`,
         `vh ${unit('vh')} · dvh ${unit('dvh')} · svh ${unit('svh')} · lvh ${unit('lvh')}`,
-        `vp-fix ${getComputedStyle(document.documentElement).getPropertyValue('--vp-fix') || '—'}`,
         `shell ${rect('.app-shell')}`,
         `topbar ${rect('.app-topbar')}`,
         `login ${rect('.login-page')}`,
