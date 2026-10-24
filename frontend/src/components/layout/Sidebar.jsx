@@ -6,6 +6,7 @@ import { clearAuthStatus } from '../../utils/authSession';
 import { useAuthStatus } from '../../hooks/useAuthStatus';
 import { authApi } from '../../api/authApi';
 import { useDataPanel } from '../../contexts/DataPanelContext';
+import { leaveApp, smoothNavigate } from '../ui/motion';
 import { useNotifications } from '../../contexts/NotificationsContext';
 import NotificationsBell from '../notifications/NotificationsBell';
 import NavItem from './sidebar/NavItem';
@@ -45,24 +46,21 @@ export const Sidebar = ({ expanded, onToggle, isMobile, mobileOpen, onMobileClos
     const activePath = navSection(location.pathname);
     const isActive = (path) => path === activePath;
     const showExpanded = isMobile ? true : expanded;
+    let order = 0;
 
     // На мобильном сначала закрываем шторку и только потом навигируем:
     // iOS снимает «снимок» страницы в момент смены history-записи, и открытый
     // сайдбар иначе попадает в снимок жеста «назад».
     const mobileNavigate = isMobile
-        ? (path) => { onMobileClose(); setTimeout(() => navigate(path), 240); }
+        ? (path) => { onMobileClose(); setTimeout(() => smoothNavigate(navigate, path), 240); }
         : undefined;
 
     const handleLogout = async () => {
-        try {
-            await authApi.logout();
-        } catch (e) {
-            console.error(e);
-        } finally {
-            clearAuthStatus();
-            sessionStorage.clear();
-            navigate('/login', { replace: true });
-        }
+        authApi.logout().catch((e) => console.error(e));
+        await leaveApp();
+        clearAuthStatus();
+        sessionStorage.clear();
+        smoothNavigate(navigate, '/login', { replace: true, slow: true });
     };
 
     const asideStyle = isMobile
@@ -88,7 +86,7 @@ export const Sidebar = ({ expanded, onToggle, isMobile, mobileOpen, onMobileClos
         };
 
     return (
-        <aside style={asideStyle}>
+        <aside className="app-sidebar" style={asideStyle}>
 
             {/* Logo + toggle */}
             <div style={{
@@ -167,7 +165,8 @@ export const Sidebar = ({ expanded, onToggle, isMobile, mobileOpen, onMobileClos
                                 <div style={{ height: 1, margin: '6px 10px', backgroundColor: 'var(--on-dark-wash)' }} />
                             )}
                             {group.label && (
-                                <div style={{
+                                <div className="sidebar-intro" style={{
+                                    '--i': order++,
                                     maxHeight: showExpanded ? '40px' : 0,
                                     opacity: showExpanded ? 1 : 0,
                                     overflow: 'hidden',
@@ -215,6 +214,7 @@ export const Sidebar = ({ expanded, onToggle, isMobile, mobileOpen, onMobileClos
                                         onHover={setHovPath}
                                         unread={bySource[item.pageKey]?.unseen || 0}
                                         unreadTone={bySource[item.pageKey]?.level || 'info'}
+                                        order={order++}
                                     />
                                 ))}
                             </div>

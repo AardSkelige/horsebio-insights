@@ -1,10 +1,11 @@
 // frontend/src/components/auth/LoginPage.jsx
 import { useEffect, useState } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
-import { AlertCircle, ArrowRight, Database, FileSpreadsheet, LockKeyhole, Moon, PackageSearch, Sparkles, Sun } from 'lucide-react';
+import { AlertCircle, ArrowRight, Database, FileSpreadsheet, LockKeyhole, PackageSearch, Sparkles } from 'lucide-react';
 import './LoginPage.css';
 import { setAuthStatus } from '../../utils/authSession';
 import { authApi } from '../../api/authApi';
+import { smoothNavigate, switchTheme, ThemeIcon } from '../ui/motion';
 
 const LoginPage = () => {
     const [username, setUsername] = useState('');
@@ -31,7 +32,7 @@ const LoginPage = () => {
 
             if (data.status === 'success') {
                 setAuthStatus({ isAuthenticated: true });
-                navigate(from, { replace: true });
+                smoothNavigate(navigate, from, { replace: true, slow: true });
             } else {
                 setErrorMessage(data.message || 'Ошибка входа в систему');
             }
@@ -47,10 +48,10 @@ const LoginPage = () => {
             <button
                 type="button"
                 className="login-theme-toggle"
-                onClick={() => setTheme(current => current === 'dark' ? 'light' : 'dark')}
+                onClick={(event) => switchTheme(theme === 'dark' ? 'light' : 'dark', setTheme, event)}
                 title={theme === 'dark' ? 'Светлая тема' : 'Темная тема'}
             >
-                {theme === 'dark' ? <Sun size={16} /> : <Moon size={16} />}
+                <ThemeIcon dark={theme === 'dark'} size={16} />
             </button>
 
             <section className="login-shell">

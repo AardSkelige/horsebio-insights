@@ -1,9 +1,12 @@
-const DRAW_MS = 2200;
+const DRAW_MS = 1200;
+const FILL_FROM = 700;
+const FILL_MS = 800;
 const WALK_MS = 100000;
 const HOLD_MS = 2500;
 const IDLE_MS = 1200;
 
-const easeOut = (p) => 1 - (1 - Math.min(1, Math.max(0, p))) ** 3;
+const clamp01 = (p) => Math.min(1, Math.max(0, p));
+const easeOut = (p) => 1 - (1 - clamp01(p)) ** 3;
 
 export const withAlpha = (hex, alpha) => {
     const h = hex.replace('#', '');
@@ -23,7 +26,7 @@ const dayLabel = (iso, long) => new Date(`${iso}T12:00:00`)
 export const createWalker = () => ({ x: null, idle: -Infinity, hold: 0, fade: 0, last: null, a: 0 });
 
 export function drawPulse(ctx, view) {
-    const { width: W, box, points, unit, colors, el, t, reduced, pointer, walker, dark } = view;
+    const { width: W, box, points, unit, colors, el, t, reduced, intro, pointer, walker, dark } = view;
     const n = points.length;
     const values = points.map((p) => p.value);
     const max = Math.max(1, ...values) * 1.1;
@@ -35,12 +38,14 @@ export function drawPulse(ctx, view) {
         const i0 = Math.min(n - 2, Math.floor(fi)), u = fi - i0;
         return Y(values[i0]) + (Y(values[i0 + 1]) - Y(values[i0])) * (u * u * (3 - 2 * u));
     };
-    const elapsed = reduced ? Infinity : el;
-    const draw = easeOut(elapsed / DRAW_MS);
+    const play = intro && !reduced;
+    const drawMs = play ? DRAW_MS : 0;
+    const draw = play ? easeOut(el / DRAW_MS) : 1;
+    const fillIn = play ? easeOut((el - FILL_FROM) / FILL_MS) : 1;
     const tt = reduced ? 0 : t;
 
     const glowK = dark ? 1.6 : 1.5;
-    const fadeIn = reduced ? 1 : easeOut(el / 2500);
+    const fadeIn = play ? easeOut(el / 2500) : 1;
     const blob = (x, y, r, a) => {
         const g = ctx.createRadialGradient(x, y, 0, x, y, r);
         g.addColorStop(0, withAlpha(colors.glow, a));
@@ -55,11 +60,11 @@ export function drawPulse(ctx, view) {
 
     ctx.font = `12px ${colors.font}`;
     ctx.textBaseline = 'top';
+    ctx.globalAlpha = play ? clamp01(el / 900) : 1;
     ctx.strokeStyle = colors.hairline;
     ctx.lineWidth = 1;
     ctx.beginPath(); ctx.moveTo(left, base); ctx.lineTo(left + span, base); ctx.stroke();
     ctx.fillStyle = colors.muted;
-    ctx.globalAlpha = reduced ? 1 : Math.min(1, el / 900);
     for (let i = n - 1; i >= 0; i -= 7) {
         const label = i === n - 1 ? 'сегодня' : dayLabel(points[i].date, false);
         const tw = ctx.measureText(label).width;
@@ -82,36 +87,40 @@ export function drawPulse(ctx, view) {
 
     ctx.save();
     ctx.beginPath(); ctx.rect(0, 0, left + span * draw + 1, base + 1); ctx.clip();
+    ctx.globalAlpha = fillIn;
     ctx.fillStyle = fill; ctx.fill(area);
+    ctx.globalAlpha = 1;
     ctx.shadowColor = withAlpha(colors.glow, dark ? 0.4 : 0.8);
     ctx.shadowBlur = (dark ? 10 : 16) + (reduced ? 0 : 4 * Math.sin(t * 0.0011));
     ctx.strokeStyle = colors.line; ctx.lineWidth = 2.2; ctx.lineJoin = 'round';
     ctx.stroke(path);
     ctx.restore();
 
+    const ex = X(n - 1), ey = Y(values[n - 1]);
     if (draw < 0.999) {
-        const hx = left + span * draw;
+        if (el <= 0) return;
+        const px = left + span * draw;
         ctx.fillStyle = colors.line;
-        ctx.beginPath(); ctx.arc(hx, yAt(hx), 4, 0, Math.PI * 2); ctx.fill();
-        return;
+        ctx.beginPath(); ctx.arc(px, yAt(px), 4, 0, Math.PI * 2); ctx.fill();
+    } else {
+        const ph = reduced ? 0 : ((el - drawMs) % 1800) / 1800;
+        blob(ex, ey, 150, 0.11 * glowK * (0.7 + 0.3 * Math.sin(tt * 0.0012)));
+        ctx.fillStyle = colors.line;
+        ctx.globalAlpha = 0.3 * (1 - ph);
+        ctx.beginPath(); ctx.arc(ex, ey, 5 + 18 * easeOut(ph), 0, Math.PI * 2); ctx.fill();
+        ctx.globalAlpha = 1;
+        ctx.beginPath(); ctx.arc(ex, ey, 5, 0, Math.PI * 2); ctx.fill();
     }
 
-    const ex = X(n - 1), ey = Y(values[n - 1]);
-    const ph = reduced ? 0 : ((el - DRAW_MS) % 1800) / 1800;
-    blob(ex, ey, 150, 0.11 * glowK * (0.7 + 0.3 * Math.sin(tt * 0.0012)));
-    ctx.fillStyle = colors.line;
-    ctx.globalAlpha = 0.3 * (1 - ph);
-    ctx.beginPath(); ctx.arc(ex, ey, 5 + 18 * easeOut(ph), 0, Math.PI * 2); ctx.fill();
-    ctx.globalAlpha = 1;
-    ctx.beginPath(); ctx.arc(ex, ey, 5, 0, Math.PI * 2); ctx.fill();
-
-    const inBand = pointer.on && pointer.y > top - 40 && pointer.y < base + 30 && pointer.x > left - 20 && pointer.x < left + span + 20;
+    const inBand = draw >= 0.999 && pointer.on && pointer.y > top - 40 && pointer.y < base + 30 && pointer.x > left - 20 && pointer.x < left + span + 20;
     const dt = walker.last == null ? 0 : Math.min(64, el - walker.last);
     walker.last = el;
     if (walker.x == null) walker.x = left;
     if (inBand) {
         walker.x += (Math.min(Math.max(pointer.x, left), left + span) - walker.x) * 0.18;
         walker.idle = el; walker.hold = 0; walker.fade = 1;
+    } else if (play && el < DRAW_MS) {
+        walker.x = left; walker.fade = 0;
     } else if (!reduced && el - walker.idle > IDLE_MS) {
         if (walker.x < left + span - 0.5) {
             walker.x = Math.min(left + span, walker.x + span / WALK_MS * dt);
@@ -146,6 +155,6 @@ export function drawPulse(ctx, view) {
         ctx.fillText(label, Math.min(Math.max(x - tw / 2, left), left + span - tw), Math.min(y, top) - 14);
         ctx.globalAlpha = 1;
     };
-    tag(n - 1, ex, ey, 1 - walker.a);
+    tag(n - 1, ex, ey, draw < 0.999 ? 0 : 1 - walker.a);
     tag(Math.min(n - 1, Math.max(0, hi)), hx, hy, walker.a);
 }

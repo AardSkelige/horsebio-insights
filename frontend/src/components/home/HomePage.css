@@ -28,6 +28,36 @@
     z-index: 0;
 }
 
+.home-pulse__ghost {
+    position: absolute;
+    top: 52px;
+    left: 0;
+    width: 100%;
+    height: calc(100% - 80px);
+    overflow: visible;
+    border-bottom: 1px solid var(--hairline);
+    animation: home-pulse-wait 1.4s ease-in-out infinite alternate;
+}
+
+.home-pulse__ghost path {
+    fill: none;
+    stroke: var(--hairline);
+    stroke-width: 2.2;
+    stroke-linecap: round;
+    vector-effect: non-scaling-stroke;
+}
+
+@keyframes home-pulse-wait {
+    from { opacity: 0.45; }
+    to { opacity: 1; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .home-pulse__ghost {
+        animation: none;
+    }
+}
+
 .home__lead {
     position: relative;
     z-index: 1;

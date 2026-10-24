@@ -270,6 +270,120 @@ button:active:not(:disabled):not(.no-tap-scale):not([style*="width: 100%"]):not(
   to { transform: rotate(360deg); }
 }
 
+.home-glow {
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  pointer-events: none;
+  opacity: 0.6;
+  background:
+    radial-gradient(circle 60vmax at 68% 18%, color-mix(in srgb, var(--accent-glow) 26%, transparent), transparent 70%),
+    radial-gradient(circle 45vmax at 18% 85%, color-mix(in srgb, var(--accent-glow) 16%, transparent), transparent 70%);
+}
+
+.app-intro {
+  --intro-sidebar-at: 1.5s;
+  --intro-bar-at: 2.3s;
+}
+
+.app-intro--quick {
+  --intro-sidebar-at: 0.4s;
+  --intro-bar-at: 1s;
+}
+
+.app-intro .home-glow {
+  animation: intro-glow 3.2s ease-out backwards;
+}
+
+.app-intro--full .app-sidebar {
+  animation: intro-sidebar 800ms cubic-bezier(0.65, 0, 0.35, 1) var(--intro-sidebar-at) backwards;
+}
+
+.app-intro--full .sidebar-intro {
+  animation: intro-item 500ms cubic-bezier(0.22, 1, 0.36, 1) backwards;
+  animation-delay: calc(var(--intro-sidebar-at) + 0.4s + min(var(--i), 14) * 40ms);
+}
+
+.app-intro--full .intro-bar {
+  animation: intro-rise 600ms ease-out var(--intro-bar-at) backwards;
+}
+
+.app-intro .intro-late {
+  animation: intro-rise 600ms ease-out backwards;
+  animation-delay: var(--intro-delay, 0s);
+}
+
+@keyframes intro-glow {
+  from { opacity: 0; }
+  25% { opacity: 1; }
+}
+
+@keyframes intro-sidebar {
+  from { transform: translateX(-100%); }
+}
+
+@keyframes intro-item {
+  from {
+    opacity: 0;
+    transform: translateY(14px);
+  }
+}
+
+@keyframes intro-rise {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+}
+
+.app-outro main,
+.app-outro .intro-bar {
+  animation: outro-content 350ms ease-in forwards;
+}
+
+.app-outro .app-sidebar {
+  animation: outro-sidebar 500ms cubic-bezier(0.65, 0, 0.35, 1) 250ms forwards;
+}
+
+.app-outro .home-glow {
+  animation: outro-fade 400ms ease-in 350ms forwards;
+}
+
+@keyframes outro-content {
+  to {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+}
+
+@keyframes outro-sidebar {
+  to { transform: translateX(-100%); }
+}
+
+@keyframes outro-fade {
+  to { opacity: 0; }
+}
+
+::view-transition-old(root),
+::view-transition-new(root) {
+  animation-duration: 220ms;
+}
+
+:root[data-transition="theme"]::view-transition-old(root),
+:root[data-transition="theme"]::view-transition-new(root) {
+  animation: none;
+  mix-blend-mode: normal;
+}
+
+:root[data-transition] .route-transition {
+  animation: none;
+}
+
+:root[data-transition="slow"]::view-transition-old(root),
+:root[data-transition="slow"]::view-transition-new(root) {
+  animation-duration: 600ms;
+}
+
 /* Скелетон загрузки раздела (RouteFallback) */
 .skeleton {
   border-radius: 10px;
@@ -315,6 +429,14 @@ button:active:not(:disabled):not(.no-tap-scale):not([style*="width: 100%"]):not(
 
 @media (prefers-reduced-motion: reduce) {
   .route-transition {
+    animation: none;
+  }
+
+  .app-intro .home-glow,
+  .app-intro--full .app-sidebar,
+  .app-intro--full .sidebar-intro,
+  .app-intro--full .intro-bar,
+  .app-intro .intro-late {
     animation: none;
   }
 

@@ -1,6 +1,7 @@
 import { useState, useRef, useEffect } from 'react';
 import PropTypes from 'prop-types';
-import { UserCircle, Sun, Moon, LogOut } from 'lucide-react';
+import { UserCircle, LogOut } from 'lucide-react';
+import { ThemeIcon } from '../../ui/motion';
 import { useAuthStatus } from '../../../hooks/useAuthStatus';
 
 const avatarBase = {
@@ -119,7 +120,7 @@ const UserMenu = ({ expanded, theme, onToggleTheme, onLogout, onProfile }) => {
 
                 {expanded && (
                     <button
-                        onClick={(e) => { e.stopPropagation(); onToggleTheme(); }}
+                        onClick={(e) => { e.stopPropagation(); onToggleTheme(e); }}
                         onMouseEnter={() => setThemeHov(true)}
                         onMouseLeave={() => setThemeHov(false)}
                         title={theme === 'dark' ? 'Светлая тема' : 'Тёмная тема'}
@@ -133,10 +134,7 @@ const UserMenu = ({ expanded, theme, onToggleTheme, onLogout, onProfile }) => {
                             transition: 'background 150ms ease',
                         }}
                     >
-                        {theme === 'dark'
-                            ? <Sun size={15} />
-                            : <Moon size={15} />
-                        }
+                        <ThemeIcon dark={theme === 'dark'} size={15} />
                     </button>
                 )}
             </div>
@@ -179,13 +177,10 @@ const UserMenu = ({ expanded, theme, onToggleTheme, onLogout, onProfile }) => {
 
                     <button
                         onMouseEnter={() => setHovItem('theme')} onMouseLeave={() => setHovItem(null)}
-                        onClick={() => { onToggleTheme(); setOpen(false); }}
+                        onClick={(e) => { onToggleTheme(e); setOpen(false); }}
                         style={menuItemStyle(hovItem === 'theme')}
                     >
-                        {theme === 'dark'
-                            ? <Sun style={{ width: 15, height: 15, flexShrink: 0 }} />
-                            : <Moon style={{ width: 15, height: 15, flexShrink: 0 }} />
-                        }
+                        <ThemeIcon dark={theme === 'dark'} size={15} />
                         <span style={{ fontFamily: 'var(--sans)', fontSize: '13px' }}>
                             {theme === 'dark' ? 'Светлая тема' : 'Тёмная тема'}
                         </span>

@@ -2,6 +2,8 @@ import NAV_GROUPS from '../layout/sidebar/navGroups';
 
 const SECTIONS = 3;
 
+export const canSeePulse = (auth) => auth.isSuperuser === true || Boolean(auth.allowedPages?.includes('shipments-products'));
+
 const navItemsFor = (auth) => NAV_GROUPS
     .filter((group) => group.label)
     .flatMap((group) => group.items)

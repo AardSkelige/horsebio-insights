@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import PropTypes from 'prop-types';
 import { useReducedMotion } from 'motion/react';
 import { createWalker, drawPulse } from './pulseDraw';
@@ -24,9 +24,12 @@ const readColors = () => {
     };
 };
 
-export default function PulseChart({ points, unit, label }) {
+export default function PulseChart({ points, unit, label, startAt, intro = false }) {
     const wrapRef = useRef(null);
     const canvasRef = useRef(null);
+    const introRef = useRef(intro);
+    const [captionDelay] = useState(() => Math.max(0, startAt - performance.now()));
+    introRef.current = intro;
     const reduced = useReducedMotion();
     const pointsKey = JSON.stringify(points);
     const series = useMemo(() => JSON.parse(pointsKey), [pointsKey]);
@@ -43,7 +46,7 @@ export default function PulseChart({ points, unit, label }) {
         let raf = 0;
         let timer = 0;
         let visible = true;
-        const t0 = performance.now();
+        const t0 = startAt;
 
         const resize = () => {
             const r = canvas.getBoundingClientRect();
@@ -61,13 +64,13 @@ export default function PulseChart({ points, unit, label }) {
             drawPulse(ctx, {
                 width: size.w,
                 box: { x: BLEED, y: BLEED + LABEL_SPACE, w: size.w - BLEED * 2, h: boxH },
-                points: series, unit, colors, t, reduced,
+                points: series, unit, colors, t, reduced, intro: introRef.current,
                 el: t - t0,
                 pointer, walker,
                 dark: document.documentElement.dataset.theme === 'dark',
             });
             if (reduced || !visible || document.hidden) return;
-            if (!pointer.on && t - t0 > INTRO_MS) {
+            if (!pointer.on && (!introRef.current || t - t0 > INTRO_MS)) {
                 timer = setTimeout(() => { timer = 0; wake(); }, IDLE_FRAME_MS);
             } else {
                 raf = requestAnimationFrame(frame);
@@ -111,11 +114,11 @@ export default function PulseChart({ points, unit, label }) {
             wrap.removeEventListener('pointerleave', onLeave);
             document.removeEventListener('visibilitychange', onVisibility);
         };
-    }, [series, unit, reduced]);
+    }, [series, unit, reduced, startAt]);
 
     return (
         <figure ref={wrapRef} className="home-pulse" aria-label={label}>
-            <figcaption className="home-pulse__caption">{label}</figcaption>
+            <figcaption className="home-pulse__caption intro-late" style={{ '--intro-delay': `${captionDelay}ms` }}>{label}</figcaption>
             <canvas
                 ref={canvasRef}
                 className="home-pulse__canvas"
@@ -138,4 +141,6 @@ PulseChart.propTypes = {
     })).isRequired,
     unit: PropTypes.string.isRequired,
     label: PropTypes.string.isRequired,
+    startAt: PropTypes.number.isRequired,
+    intro: PropTypes.bool,
 };

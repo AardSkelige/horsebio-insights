@@ -1,7 +1,8 @@
 import { useState, useRef } from 'react';
-import { Link } from 'react-router-dom';
+import { Link, useLocation, useNavigate } from 'react-router-dom';
 import PropTypes from 'prop-types';
 import { m } from 'motion/react';
+import { isPlainClick, smoothNavigate } from '../../ui/motion';
 // Классы значков (.nt-badge / .nt-dot) живут вместе с уведомлениями
 import '../../notifications/notifications.css';
 
@@ -33,10 +34,19 @@ const tooltipStyle = (top) => ({
  */
 const NavItem = ({
     path, label, icon: Icon, expanded, active, onNavigate, hovered, onHover,
-    unread = 0, unreadTone = 'info',
+    unread = 0, unreadTone = 'info', order = 0,
 }) => {
     const [tipTop, setTipTop] = useState(0);
     const ref = useRef(null);
+    const navigate = useNavigate();
+    const location = useLocation();
+
+    const handleClick = (e) => {
+        if (!isPlainClick(e) || (!onNavigate && location.pathname === path)) return;
+        e.preventDefault();
+        if (onNavigate) onNavigate(path);
+        else smoothNavigate(navigate, path);
+    };
 
     const handleEnter = () => {
         if (ref.current) {
@@ -47,11 +57,11 @@ const NavItem = ({
     };
 
     return (
-        <div style={{ position: 'relative' }}>
+        <div className="sidebar-intro" style={{ position: 'relative', '--i': order }}>
             <Link
                 ref={ref}
                 to={path}
-                onClick={onNavigate ? (e) => { e.preventDefault(); onNavigate(path); } : undefined}
+                onClick={handleClick}
                 onMouseEnter={handleEnter}
                 style={{
                     position: 'relative',
@@ -135,6 +145,7 @@ NavItem.propTypes = {
     onHover: PropTypes.func.isRequired,
     unread: PropTypes.number,
     unreadTone: PropTypes.oneOf(['critical', 'warning', 'info']),
+    order: PropTypes.number,
 };
 
 export default NavItem;

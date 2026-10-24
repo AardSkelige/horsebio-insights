@@ -141,6 +141,32 @@ describe('HomePage', () => {
         expect(container.querySelector('[aria-busy="true"]')).toBeInTheDocument();
     });
 
+    it('пока главная грузится, на месте пульса стоит заготовка', async () => {
+        auth.allowedPages.push('shipments-products');
+        authApi.home.mockReturnValue(new Promise(() => {}));
+        const { container } = renderPage();
+
+        await act(async () => {});
+        expect(container.querySelector('.home-pulse--wait')).toBeInTheDocument();
+        expect(screen.queryByTestId('pulse')).not.toBeInTheDocument();
+    });
+
+    it('без доступа к отгрузкам заготовку пульса не показывает', async () => {
+        authApi.home.mockReturnValue(new Promise(() => {}));
+        const { container } = renderPage();
+
+        await act(async () => {});
+        expect(container.querySelector('.home-pulse--wait')).not.toBeInTheDocument();
+    });
+
+    it('пульс рисуется, не дожидаясь уведомлений', async () => {
+        notifications.loaded = false;
+        renderPage();
+
+        expect(await screen.findByTestId('pulse')).toBeInTheDocument();
+        expect(screen.queryByRole('heading', { level: 1 })).not.toBeInTheDocument();
+    });
+
     it('рисует пульс, только когда сервер его отдал', async () => {
         authApi.home.mockResolvedValue(homeData({ pulse: null }));
         renderPage();

@@ -5,3 +5,7 @@ export { default as ModalShell } from './ModalShell';
 export { default as DrawerShell } from './DrawerShell';
 export { Stagger, StaggerItem } from './Stagger';
 export { useRowHoverPill } from './useRowHoverPill';
+export { introFor, introFull, endIntro, leaveApp, introChartStart, introLeadAt, introEndAt, useIntro, useLeaving } from './intro';
+export { smoothNavigate, isPlainClick } from './smoothNavigate';
+export { switchTheme } from './themeSwitch';
+export { default as ThemeIcon } from './ThemeIcon';

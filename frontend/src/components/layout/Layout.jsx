@@ -10,19 +10,27 @@ import { NotificationsProvider } from '../../contexts/NotificationsContext';
 import { NotificationsBarButton, NotificationsPanel } from '../notifications';
 import Sidebar from './Sidebar';
 import { usePageTracking } from '../../hooks/usePageTracking';
-import { useSuperuser } from '../../hooks/useAuthStatus';
+import { useAuthStatus, useSuperuser } from '../../hooks/useAuthStatus';
 import { navSection } from './sidebar/navGroups';
+import { endIntro, introFor, introFull, switchTheme, useIntro, useLeaving } from '../ui/motion';
+import { canSeePulse } from '../home/homeSections';
 
 const MOBILE_BP = 768;
 
 const Layout = ({ children }) => {
     const location = useLocation();
     const section = navSection(location.pathname);
-    const visited = useRef({ path: location.pathname, section, same: false });
+    const entered = useRef(false);
+    const introOnEnter = introFor(location.pathname, !entered.current);
+    entered.current = true;
+    const visited = useRef({ path: location.pathname, section, same: false, intro: introOnEnter });
     if (visited.current.path !== location.pathname) {
-        visited.current = { path: location.pathname, section, same: visited.current.section === section };
+        visited.current = { path: location.pathname, section, same: visited.current.section === section, intro: introOnEnter };
     }
-    const sameSection = visited.current.same;
+    const calmEnter = visited.current.same || visited.current.intro;
+    const intro = useIntro();
+    const leaving = useLeaving();
+    const quickIntro = !canSeePulse(useAuthStatus());
     const { open, close } = useDataPanel();
     const panelRef = useRef(null);
     const dataPanelTriggerRef = useRef(null);
@@ -126,6 +134,16 @@ const Layout = ({ children }) => {
         return () => document.removeEventListener('mousedown', handler);
     }, [open, close]);
 
+    useEffect(() => {
+        if (!intro) return undefined;
+        window.addEventListener('pointerdown', endIntro);
+        window.addEventListener('keydown', endIntro);
+        return () => {
+            window.removeEventListener('pointerdown', endIntro);
+            window.removeEventListener('keydown', endIntro);
+        };
+    }, [intro]);
+
     const toggleSidebar = () => setSidebarExpanded(v => {
         localStorage.setItem('sidebar', v ? 'collapsed' : 'expanded');
         return !v;
@@ -135,7 +153,11 @@ const Layout = ({ children }) => {
         // Провайдер уведомлений здесь, а не в App: он нужен только на защищённых
         // страницах — и сайдбару со значками, и самим страницам разделов
         <NotificationsProvider>
-        <div style={{ display: 'flex', height: '100vh', overflow: 'hidden', backgroundColor: 'var(--canvas)' }}>
+        <div
+            className={leaving ? 'app-outro' : intro ? `app-intro${introFull() ? ' app-intro--full' : ''}${quickIntro ? ' app-intro--quick' : ''}` : undefined}
+            style={{ display: 'flex', height: '100vh', overflow: 'hidden', backgroundColor: 'var(--canvas)', isolation: 'isolate' }}
+        >
+            {location.pathname === '/' && <div className="home-glow" aria-hidden="true" />}
 
             {/* Mobile backdrop */}
             {isMobile && (
@@ -160,7 +182,7 @@ const Layout = ({ children }) => {
                 mobileOpen={mobileOpen}
                 onMobileClose={() => setMobileOpen(false)}
                 theme={theme}
-                onToggleTheme={() => setTheme(t => t === 'light' ? 'dark' : 'light')}
+                onToggleTheme={(event) => switchTheme(theme === 'light' ? 'dark' : 'light', setTheme, event)}
                 dataPanelTriggerRef={dataPanelTriggerRef}
             />
 
@@ -169,7 +191,7 @@ const Layout = ({ children }) => {
 
                 {/* Mobile top bar */}
                 {isMobile && (
-                    <div style={{
+                    <div className="intro-bar" style={{
                         position: 'sticky', top: 0, zIndex: 20,
                         height: 'calc(52px + env(safe-area-inset-top, 0px))',
                         backgroundColor: 'var(--canvas)',
@@ -207,7 +229,7 @@ const Layout = ({ children }) => {
 
                 <main
                     key={location.pathname}
-                    className={sameSection ? undefined : 'route-transition'}
+                    className={calmEnter ? undefined : 'route-transition'}
                     style={{ padding: '24px', flex: 1, boxSizing: 'border-box' }}
                 >
                     {children}
