@@ -1314,7 +1314,7 @@
     flex: 1;
     overflow-y: auto;
     overscroll-behavior: contain;
-    padding: 4px 16px calc(20px + env(safe-area-inset-bottom, 0px));
+    padding: 4px 16px calc(20px + env(safe-area-inset-bottom, 0px) + var(--under-bars, 0px));
 }
 
 @media (prefers-reduced-motion: reduce) {

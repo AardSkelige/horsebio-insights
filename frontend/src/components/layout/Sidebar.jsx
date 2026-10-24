@@ -72,6 +72,7 @@ export const Sidebar = ({ expanded, onToggle, isMobile, mobileOpen, onMobileClos
         ? {
             position: 'fixed', top: 0, left: 0, height: '100%',
             ...layer?.panel,
+            paddingBottom: layer?.extra,
             width: W_OPEN, minWidth: W_OPEN,
             backgroundColor: 'var(--surface-dark)',
             display: 'flex', flexDirection: 'column',

@@ -9,7 +9,7 @@ const measure = () => {
     const height = window.innerHeight;
     return {
         extra,
-        panel: { position: 'absolute', top, bottom: 'auto', height: height + extra, paddingBottom: extra, boxSizing: 'border-box' },
+        panel: { position: 'absolute', top, bottom: 'auto', height: height + extra, boxSizing: 'border-box', '--under-bars': `${extra}px` },
         scrim: { position: 'absolute', top: 0, left: 0, right: 0, bottom: 'auto', height: Math.max(document.documentElement.scrollHeight, top + height + extra) },
     };
 };
