@@ -5,6 +5,7 @@ import PropTypes from 'prop-types';
 import { AnimatePresence, m } from 'motion/react';
 import { BellOff, BellRing, CircleAlert, Menu, Share, SquarePlus, Trash2 } from 'lucide-react';
 import { Button } from '../ui';
+import { usePageLayer } from '../ui/motion/usePageLayer';
 import { pushApi } from '../../api/pushApi';
 import { canOffer, dismissPush, enablePush, onIOS, preparePush, pushDiagnostics, subscribeDevice, usePush } from '../../hooks/usePush';
 
@@ -46,6 +47,7 @@ export default function PushSheet({ quiet = false }) {
     }, [quiet]);
 
     const open = ready && !quiet && (outcome !== null || (!push.dismissed && canOffer(push)));
+    const scrimLayer = usePageLayer(open);
 
     const enable = async () => {
         setBusy(true);
@@ -136,6 +138,7 @@ export default function PushSheet({ quiet = false }) {
                 <m.div
                     key="scrim"
                     className="nt-sheet__scrim"
+                    style={scrimLayer?.scrim}
                     onClick={busy ? undefined : close}
                     initial={{ opacity: 0 }}
                     animate={{ opacity: 1 }}

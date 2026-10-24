@@ -86,7 +86,7 @@ describe('ModalShell', () => {
                 <div>содержимое модалки</div>
             </ModalShell>
         );
-        const backdrop = screen.getByText('содержимое модалки').closest('[style*="fixed"]').firstChild;
+        const backdrop = document.querySelector('[data-modal-scrim]');
         await user.click(backdrop);
         expect(onClose).toHaveBeenCalled();
     });

@@ -13,6 +13,7 @@ import { usePageTracking } from '../../hooks/usePageTracking';
 import { useAuthStatus, useSuperuser } from '../../hooks/useAuthStatus';
 import { navSection } from './sidebar/navGroups';
 import { endIntro, introFor, introFull, switchTheme, useIntro, useLeaving } from '../ui/motion';
+import { usePageLayer } from '../ui/motion/usePageLayer';
 import { canSeePulse } from '../home/homeSections';
 
 const MOBILE_BP = 768;
@@ -44,6 +45,7 @@ const Layout = ({ children }) => {
     );
     const [isMobile, setIsMobile] = useState(() => window.innerWidth < MOBILE_BP);
     const [mobileOpen, setMobileOpen] = useState(false);
+    const backdropLayer = usePageLayer(isMobile && mobileOpen);
 
     useEffect(() => {
         document.documentElement.setAttribute('data-theme', theme);
@@ -164,7 +166,7 @@ const Layout = ({ children }) => {
                     onClick={() => setMobileOpen(false)}
                     onTouchMove={e => e.preventDefault()}
                     style={{
-                        position: 'fixed', inset: 0, zIndex: 34,
+                        position: 'absolute', inset: 0, ...backdropLayer?.scrim, zIndex: 34,
                         backgroundColor: 'var(--scrim)',
                         opacity: mobileOpen ? 1 : 0,
                         pointerEvents: mobileOpen ? 'auto' : 'none',
@@ -193,7 +195,8 @@ const Layout = ({ children }) => {
                     <div className="intro-bar app-topbar" style={{
                         position: 'sticky', top: 0, zIndex: 20,
                         height: 'calc(52px + env(safe-area-inset-top, 0px))',
-                        backgroundColor: 'var(--canvas)',
+                        backgroundColor: mobileOpen ? 'var(--surface-dark)' : 'var(--canvas)',
+                        transition: 'background-color 220ms ease',
                         borderBottom: '1px solid var(--hairline)',
                         display: 'flex', alignItems: 'center', gap: 12,
                         paddingTop: 'env(safe-area-inset-top, 0px)',

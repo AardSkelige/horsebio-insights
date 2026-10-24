@@ -7,6 +7,7 @@ import { useAuthStatus } from '../../hooks/useAuthStatus';
 import { authApi } from '../../api/authApi';
 import { useDataPanel } from '../../contexts/DataPanelContext';
 import { leaveApp, smoothNavigate } from '../ui/motion';
+import { usePageLayer } from '../ui/motion/usePageLayer';
 import { unsubscribeDevice } from '../../hooks/usePush';
 import { useNotifications } from '../../contexts/NotificationsContext';
 import NotificationsBell from '../notifications/NotificationsBell';
@@ -65,9 +66,12 @@ export const Sidebar = ({ expanded, onToggle, isMobile, mobileOpen, onMobileClos
         smoothNavigate(navigate, '/login', { replace: true, slow: true });
     };
 
+    const layer = usePageLayer(Boolean(isMobile && mobileOpen));
+
     const asideStyle = isMobile
         ? {
             position: 'fixed', top: 0, left: 0, height: '100%',
+            ...layer?.panel,
             width: W_OPEN, minWidth: W_OPEN,
             backgroundColor: 'var(--surface-dark)',
             display: 'flex', flexDirection: 'column',

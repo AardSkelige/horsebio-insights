@@ -316,7 +316,8 @@ button:active:not(:disabled):not(.no-tap-scale):not([style*="width: 100%"]):not(
 
 .home-glow {
   position: absolute;
-  inset: 0;
+  inset: 0 0 auto;
+  height: 100vh;
   z-index: -1;
   pointer-events: none;
   opacity: 0.6;

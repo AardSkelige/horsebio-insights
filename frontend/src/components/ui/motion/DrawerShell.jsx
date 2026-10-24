@@ -2,6 +2,7 @@ import { useEffect } from 'react';
 import PropTypes from 'prop-types';
 import { createPortal } from 'react-dom';
 import { AnimatePresence, m } from 'motion/react';
+import { usePageLayer } from './usePageLayer';
 
 /**
  * Выдвижная панель справа: список или форма, которую человек разбирает,
@@ -16,6 +17,7 @@ import { AnimatePresence, m } from 'motion/react';
  * иначе панель приходится «искать, чем закрыть».
  */
 const DrawerShell = ({ open, onClose, label, width = 400, children }) => {
+    const layer = usePageLayer(open);
     useEffect(() => {
         if (!open) return undefined;
         const onKeyDown = (event) => { if (event.key === 'Escape') onClose(); };
@@ -29,6 +31,7 @@ const DrawerShell = ({ open, onClose, label, width = 400, children }) => {
                 <>
                     <m.div
                         className="ui-drawer__scrim"
+                        style={layer?.scrim}
                         onClick={onClose}
                         initial={{ opacity: 0 }}
                         animate={{ opacity: 1 }}
@@ -40,7 +43,7 @@ const DrawerShell = ({ open, onClose, label, width = 400, children }) => {
                         role="dialog"
                         aria-modal="true"
                         aria-label={label}
-                        style={{ width: `min(${width}px, 100vw)` }}
+                        style={{ width: `min(${width}px, 100vw)`, ...layer?.panel }}
                         initial={{ x: '100%' }}
                         animate={{ x: 0 }}
                         exit={{ x: '100%', transition: { duration: 0.2, ease: 'easeIn' } }}
