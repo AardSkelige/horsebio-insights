@@ -1,11 +1,13 @@
 .login-page {
-  align-items: center;
+  align-items: flex-start;
   background: var(--canvas);
   color: var(--ink);
   display: flex;
-  min-height: 100vh;
+  inset: 0;
+  overflow-y: auto;
+  overscroll-behavior: contain;
   padding: 32px;
-  position: relative;
+  position: fixed;
 }
 
 .login-theme-toggle {
@@ -38,7 +40,7 @@
   display: grid;
   gap: 32px;
   grid-template-columns: minmax(0, 1.1fr) minmax(360px, 440px);
-  margin: 0 auto;
+  margin: auto;
   max-width: 1120px;
   width: 100%;
 }

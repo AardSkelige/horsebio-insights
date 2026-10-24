@@ -179,6 +179,14 @@
     line-height: 1.5;
 }
 
+.nt-sheet__diag {
+    margin: 0 0 var(--space-2);
+    color: var(--muted-soft);
+    font-size: var(--size-sm);
+    font-family: ui-monospace, monospace;
+    word-break: break-word;
+}
+
 .nt-sheet__steps {
     display: grid;
     gap: var(--space-3);

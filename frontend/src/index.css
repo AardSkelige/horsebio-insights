@@ -271,10 +271,9 @@ button:active:not(:disabled):not(.no-tap-scale):not([style*="width: 100%"]):not(
 }
 
 .app-shell {
-  position: relative;
+  position: fixed;
+  inset: 0;
   display: flex;
-  height: 100vh;
-  height: 100dvh;
   overflow: hidden;
   background-color: var(--canvas);
   isolation: isolate;
@@ -284,6 +283,14 @@ button:active:not(:disabled):not(.no-tap-scale):not([style*="width: 100%"]):not(
   html,
   body {
     overscroll-behavior: none;
+  }
+}
+
+@supports (-webkit-touch-callout: none) {
+  input,
+  select,
+  textarea {
+    font-size: max(16px, 1em) !important;
   }
 }
 

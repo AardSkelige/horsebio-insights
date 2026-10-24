@@ -19,7 +19,7 @@ describe('PushPanelAction', () => {
         const subscription = { toJSON: () => ({ endpoint: 'https://push.example/1' }) };
         Object.defineProperty(navigator, 'serviceWorker', {
             configurable: true,
-            value: { ready: Promise.resolve({ pushManager: { getSubscription: () => Promise.resolve(subscription) } }) },
+            value: { ready: Promise.resolve({ pushManager: { getSubscription: () => Promise.resolve(subscription), permissionState: () => Promise.resolve('granted') } }) },
         });
         vi.resetModules();
         const { default: PushPanelAction } = await import('./PushPanelAction');

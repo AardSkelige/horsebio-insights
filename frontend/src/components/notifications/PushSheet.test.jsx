@@ -20,7 +20,12 @@ const subscription = { endpoint: 'https://push.example/1', toJSON: () => ({ endp
 const stubPush = (permission) => {
     window.PushManager = function PushManager() {};
     window.Notification = { permission, requestPermission: vi.fn(() => Promise.resolve('granted')) };
-    const pushManager = { getSubscription: vi.fn(() => Promise.resolve(null)), subscribe: vi.fn(() => Promise.resolve(subscription)) };
+    const states = { default: 'prompt', granted: 'granted', denied: 'denied' };
+    const pushManager = {
+        getSubscription: vi.fn(() => Promise.resolve(null)),
+        subscribe: vi.fn(() => Promise.resolve(subscription)),
+        permissionState: vi.fn(() => Promise.resolve(states[permission])),
+    };
     Object.defineProperty(navigator, 'serviceWorker', {
         configurable: true,
         value: { ready: Promise.resolve({ pushManager }), addEventListener: vi.fn(), removeEventListener: vi.fn() },
@@ -66,11 +71,26 @@ describe('PushSheet', () => {
     it('если телефон запретил, говорит об этом и где включить', async () => {
         stubPush('default');
         window.Notification.requestPermission = vi.fn(() => Promise.resolve('denied'));
+        const pushManager = navigator.serviceWorker.ready.then((r) => r.pushManager);
+        (await pushManager).subscribe.mockRejectedValue(Object.assign(new Error('denied'), { name: 'NotAllowedError' }));
+        (await pushManager).permissionState.mockResolvedValueOnce('prompt').mockResolvedValue('denied');
         await renderSheet();
 
         await act(async () => { fireEvent.click(screen.getByRole('button', { name: 'Включить' })); });
 
         expect(screen.getByText('Уведомления запрещены')).toBeInTheDocument();
+        expect(screen.getByText(/push=denied/)).toBeInTheDocument();
+    });
+
+    it('если iPhone сказал «запрещено», но подписка прошла, считает включённым', async () => {
+        const pushManager = stubPush('default');
+        window.Notification.requestPermission = vi.fn(() => Promise.resolve('denied'));
+        await renderSheet();
+
+        await act(async () => { fireEvent.click(screen.getByRole('button', { name: 'Включить' })); });
+
+        expect(pushManager.subscribe).toHaveBeenCalled();
+        expect(screen.getByText('Уведомления включены')).toBeInTheDocument();
     });
 
     it('ошибку подписки показывает текстом, а не глотает', async () => {
@@ -115,6 +135,6 @@ describe('PushSheet', () => {
         await renderSheet();
 
         expect(screen.getByText('Уведомления на iPhone')).toBeInTheDocument();
-        expect(screen.getByText('Выберите «На экран „Домой“»')).toBeInTheDocument();
+        expect(screen.getByText('Нажмите три полоски в строке адреса внизу')).toBeInTheDocument();
     });
 });

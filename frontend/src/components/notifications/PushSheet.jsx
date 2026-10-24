@@ -3,15 +3,15 @@ import { createPortal } from 'react-dom';
 import { useNavigate } from 'react-router-dom';
 import PropTypes from 'prop-types';
 import { AnimatePresence, m } from 'motion/react';
-import { BellOff, BellRing, CircleAlert, Share, SquarePlus } from 'lucide-react';
+import { BellOff, BellRing, CircleAlert, Menu, Share, SquarePlus, Trash2 } from 'lucide-react';
 import { Button } from '../ui';
 import { pushApi } from '../../api/pushApi';
-import { canOffer, dismissPush, enablePush, onIOS, subscribeDevice, usePush } from '../../hooks/usePush';
+import { canOffer, dismissPush, enablePush, onIOS, preparePush, pushDiagnostics, subscribeDevice, usePush } from '../../hooks/usePush';
 
 const SHOW_DELAY_MS = 1200;
 
 const deniedHint = () => (onIOS()
-    ? 'Включите их в «Настройках» iPhone: Уведомления → HorseBio.'
+    ? 'Если HorseBio нет в «Настройках» → «Уведомления», значит, иконка добавлена до обновления. Удалите её с экрана «Домой» и добавьте заново из Safari.'
     : 'Разрешите их в настройках браузера для этого сайта.');
 
 export default function PushSheet({ quiet = false }) {
@@ -20,6 +20,10 @@ export default function PushSheet({ quiet = false }) {
     const [ready, setReady] = useState(false);
     const [busy, setBusy] = useState(false);
     const [outcome, setOutcome] = useState(null);
+
+    useEffect(() => {
+        preparePush().catch(() => {});
+    }, []);
 
     useEffect(() => {
         if (push.permission !== 'granted') return;
@@ -51,10 +55,10 @@ export default function PushSheet({ quiet = false }) {
                 await pushApi.test();
                 setOutcome({ kind: 'ok' });
             } else {
-                setOutcome({ kind: 'denied' });
+                setOutcome({ kind: 'denied', diag: await pushDiagnostics() });
             }
         } catch (error) {
-            setOutcome({ kind: 'error', text: error?.message || String(error) });
+            setOutcome({ kind: 'error', text: `${error?.name || ''} ${error?.message || String(error)}`.trim(), diag: await pushDiagnostics() });
         } finally {
             setBusy(false);
         }
@@ -80,6 +84,7 @@ export default function PushSheet({ quiet = false }) {
                 <>
                     <h2 className="nt-sheet__title">Уведомления запрещены</h2>
                     <p className="nt-sheet__text">{deniedHint()}</p>
+                    <p className="nt-sheet__diag">{outcome.diag}</p>
                     <Button variant="primary" size="lg" block onClick={close}>Понятно</Button>
                 </>
             );
@@ -89,6 +94,7 @@ export default function PushSheet({ quiet = false }) {
                 <>
                     <h2 className="nt-sheet__title">Не получилось включить</h2>
                     <p className="nt-sheet__text">Пришлите этот текст разработчику: {outcome.text}</p>
+                    <p className="nt-sheet__diag">{outcome.diag}</p>
                     <Button variant="primary" size="lg" block onClick={close}>Понятно</Button>
                 </>
             );
@@ -99,9 +105,11 @@ export default function PushSheet({ quiet = false }) {
                     <h2 className="nt-sheet__title">Уведомления на iPhone</h2>
                     <p className="nt-sheet__text">Чтобы получать уведомления о делах, добавьте HorseBio на экран «Домой».</p>
                     <ol className="nt-sheet__steps">
-                        <li><Share size={18} aria-hidden="true" />Нажмите «Поделиться» внизу Safari</li>
-                        <li><SquarePlus size={18} aria-hidden="true" />Выберите «На экран „Домой“»</li>
-                        <li><BellRing size={18} aria-hidden="true" />Откройте HorseBio с иконки и включите уведомления</li>
+                        <li><Trash2 size={18} aria-hidden="true" />Если иконка HorseBio уже есть, удалите её</li>
+                        <li><Menu size={18} aria-hidden="true" />Нажмите три полоски в строке адреса внизу</li>
+                        <li><Share size={18} aria-hidden="true" />Выберите «Поделиться»</li>
+                        <li><SquarePlus size={18} aria-hidden="true" />Затем «На экран „Домой“»</li>
+                        <li><BellRing size={18} aria-hidden="true" />Откройте HorseBio с новой иконки и включите уведомления</li>
                     </ol>
                     <Button variant="primary" size="lg" block onClick={close}>Понятно</Button>
                 </>
@@ -110,7 +118,10 @@ export default function PushSheet({ quiet = false }) {
         return (
             <>
                 <h2 className="nt-sheet__title">Уведомления о делах</h2>
-                <p className="nt-sheet__text">Пришлём на это устройство, когда в ваших разделах появится что-то срочное.</p>
+                <p className="nt-sheet__text">
+                    Пришлём на это устройство, когда в ваших разделах появится что-то срочное.
+                    Нажмите «Включить», затем «Разрешить» в окне {onIOS() ? 'iPhone' : 'браузера'}.
+                </p>
                 <Button variant="primary" size="lg" block loading={busy} onClick={enable}>Включить</Button>
                 <Button variant="quiet" size="lg" block onClick={close}>Не сейчас</Button>
             </>
