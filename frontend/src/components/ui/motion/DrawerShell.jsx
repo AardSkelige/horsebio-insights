@@ -16,7 +16,7 @@ import { usePageLayer } from './usePageLayer';
  * Закрывается по Escape и по клику на подложку: то же поведение, что у модалки,
  * иначе панель приходится «искать, чем закрыть».
  */
-const DrawerShell = ({ open, onClose, label, width = 400, children }) => {
+const DrawerShell = ({ open, onClose, label, width = 400, className = '', children }) => {
     const layer = usePageLayer(open, { tinted: false });
     useEffect(() => {
         if (!open) return undefined;
@@ -39,7 +39,7 @@ const DrawerShell = ({ open, onClose, label, width = 400, children }) => {
                         transition={{ duration: 0.2, ease: 'easeOut' }}
                     />
                     <m.aside
-                        className="ui-drawer"
+                        className={['ui-drawer', className].filter(Boolean).join(' ')}
                         role="dialog"
                         aria-modal="true"
                         aria-label={label}
@@ -63,6 +63,7 @@ DrawerShell.propTypes = {
     onClose: PropTypes.func.isRequired,
     label: PropTypes.string.isRequired,
     width: PropTypes.number,
+    className: PropTypes.string,
     children: PropTypes.node,
 };
 

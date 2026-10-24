@@ -86,10 +86,10 @@ const MaterialSearchPanel = ({ materials, onSearch, onSelect }) => {
                     ref={inputRef}
                     value={value}
                     onChange={handleInput}
-                    onFocus={(e) => { e.target.style.borderColor = 'var(--primary)'; setOpen(true); }}
-                    onBlur={(e) => e.target.style.borderColor = 'var(--hairline)'}
+                    onFocus={() => setOpen(true)}
                     placeholder="Поиск материала по названию или коду"
-                    style={{ width: '100%', height: '40px', padding: '0 12px 0 36px', fontFamily: 'var(--sans)', fontSize: '14px', color: 'var(--ink)', backgroundColor: 'var(--canvas)', border: '1px solid var(--hairline)', borderRadius: '8px', outline: 'none', boxSizing: 'border-box', transition: 'border-color 150ms' }}
+                    className="ui-input ui-input--block"
+                    style={{ paddingLeft: 36 }}
                 />
             </div>
 

@@ -22,6 +22,6 @@ export { default as StatGrid } from './StatGrid';
 export { default as SectionLabel } from './SectionLabel';
 export { default as Segmented } from './Segmented';
 export { Page, Toolbar } from './Page';
-export { Input, Select, SearchInput, MultiSelect, DateRange, ResetFilters } from './Field';
+export { DateInput, FormField, Input, Select, SearchInput, MultiSelect, DateRange, ResetFilters } from './Field';
 export { EmptyState, ErrorState } from './State';
 export { Skeleton, SkeletonRows } from './Skeleton';

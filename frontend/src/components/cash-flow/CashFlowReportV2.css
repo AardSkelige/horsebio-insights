@@ -145,7 +145,7 @@ a.cfv2-tip-l { text-decoration: none; cursor: pointer; }
    ломает их в столбец при ≤600px — переопределяем с большей специфичностью) */
 @media (max-width: 600px) {
     .cfv2-ctr .cfv2-dates { flex-direction: row; align-items: center; gap: 8px; }
-    .cfv2-ctr .cfv2-dates .ui-input { flex: 1 1 0; min-width: 0; }
+    .cfv2-ctr .cfv2-dates .ui-date { flex: 1 1 0; min-width: 0; }
     .cfv2-ctr .cfv2-dates .filter-date-sep { display: inline; color: var(--muted-soft); flex-shrink: 0; }
 }
 

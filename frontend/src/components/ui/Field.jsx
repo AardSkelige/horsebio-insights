@@ -17,6 +17,54 @@ Input.propTypes = {
     className: PropTypes.string,
 };
 
+export function DateInput({ placeholder = 'Выберите дату', block = false, className = '', style, onChange, ...rest }) {
+    const [typed, setTyped] = useState(rest.defaultValue ?? '');
+    const filled = Boolean(rest.value !== undefined ? rest.value : typed);
+    return (
+        <span
+            className={['ui-date', block ? 'ui-date--block' : '', className].filter(Boolean).join(' ')}
+            data-empty={!filled || undefined}
+            data-placeholder={placeholder}
+            style={style}
+        >
+            <Input
+                type="date"
+                onChange={(e) => {
+                    setTyped(e.target.value);
+                    onChange?.(e);
+                }}
+                {...rest}
+            />
+        </span>
+    );
+}
+
+DateInput.propTypes = {
+    value: PropTypes.string,
+    defaultValue: PropTypes.string,
+    onChange: PropTypes.func,
+    placeholder: PropTypes.string,
+    block: PropTypes.bool,
+    className: PropTypes.string,
+    style: PropTypes.object,
+};
+
+export function FormField({ label, hint, children }) {
+    return (
+        <label className="ui-form-field">
+            <span className="ui-form-field__label">{label}</span>
+            {children}
+            {hint && <span className="ui-form-field__hint">{hint}</span>}
+        </label>
+    );
+}
+
+FormField.propTypes = {
+    label: PropTypes.node.isRequired,
+    hint: PropTypes.node,
+    children: PropTypes.node.isRequired,
+};
+
 /**
  * Выпадающий список.
  *
@@ -211,15 +259,15 @@ MultiSelect.propTypes = {
 export function DateRange({ from, to, onChange }) {
     return (
         <div className="filter-date-range">
-            <Input
-                type="date"
+            <DateInput
+                placeholder="Дата с"
                 value={from || ''}
                 onChange={(e) => onChange({ from: e.target.value || null, to })}
                 aria-label="Дата начала"
             />
             <span className="filter-date-sep ui-date-sep">—</span>
-            <Input
-                type="date"
+            <DateInput
+                placeholder="Дата по"
                 value={to || ''}
                 min={from || undefined}
                 onChange={(e) => onChange({ from, to: e.target.value || null })}

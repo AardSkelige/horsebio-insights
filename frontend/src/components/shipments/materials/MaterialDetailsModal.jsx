@@ -3,7 +3,7 @@ import { CloseButton, Disclosure, SectionLabel, StatCard, StatGrid } from '../..
 import PropTypes from 'prop-types';
 import { Loader2 } from 'lucide-react';
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
-import { formatDate, num } from '../../../utils/formatters';
+import { compact, formatDate, num } from '../../../utils/formatters';
 import { CHART_ANIMATION } from '../../../utils/chartAnimation';
 import { ModalShell } from '../../ui/motion';
 import { materialsApi } from '../../../api/materialsApi';
@@ -141,7 +141,7 @@ const MaterialDetailsModal = ({ material, visible, onClose, dateRange }) => {
                                             <LineChart data={chartData} margin={{ top: 4, right: 8, left: 0, bottom: 0 }}>
                                                 <CartesianGrid strokeDasharray="3 3" stroke="var(--hairline)" />
                                                 <XAxis dataKey="month" tick={{ fontFamily: 'var(--sans)', fontSize: 11, fill: 'var(--muted)' }} interval="preserveStartEnd" />
-                                                <YAxis tick={{ fontFamily: 'var(--sans)', fontSize: 11, fill: 'var(--muted)' }} tickFormatter={num} width={56} />
+                                                <YAxis tick={{ fontFamily: 'var(--sans)', fontSize: 11, fill: 'var(--muted)' }} tickFormatter={compact} width={56} />
                                                 <Tooltip
                                                     contentStyle={{ fontFamily: 'var(--sans)', fontSize: 12, borderRadius: 8, border: '1px solid var(--hairline)', background: 'var(--canvas)' }}
                                                     formatter={(v) => [`${num(v)} ${details.material.uom}`, 'Количество']}

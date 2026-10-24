@@ -170,7 +170,7 @@ describe('Панель', () => {
         renderIn(<NotificationsPanel />);
         expect(screen.getByRole('dialog', { name: 'Уведомления' })).toBeInTheDocument();
         expect(screen.getByText('Уценка')).toBeInTheDocument();
-        expect(screen.getByRole('link', { name: 'Открыть' })).toHaveAttribute('href', '/discounted');
+        expect(screen.getByRole('link', { name: 'Уценка' })).toHaveAttribute('href', '/discounted');
     });
 
     it('открытие панели ничего не помечает — отметку ставит человек', async () => {
@@ -204,14 +204,14 @@ describe('Панель', () => {
         const { unmount } = renderIn(<NotificationsPanel />);
         expect(screen.queryByText(/пора снимать с продажи/)).not.toBeInTheDocument();
         expect(screen.getByText('Новых нет')).toBeInTheDocument();
-        await userEvent.click(screen.getByRole('button', { name: 'Показать прочитанные (1)' }));
+        await userEvent.click(screen.getByRole('tab', { name: 'Все (1)' }));
         expect(state.setShowRead).toHaveBeenCalledWith(true);
         unmount();
 
         setState({ showRead: true });
         renderIn(<NotificationsPanel />);
         expect(screen.getByText(/пора снимать с продажи/)).toBeInTheDocument();
-        expect(screen.getByRole('button', { name: 'Скрыть прочитанные' })).toBeInTheDocument();
+        expect(screen.getByRole('tab', { name: 'Все (1)' })).toHaveAttribute('aria-selected', 'true');
     });
 
     it('если раздел не ответил, не обещает, что всё спокойно', () => {

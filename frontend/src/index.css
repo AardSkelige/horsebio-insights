@@ -333,7 +333,7 @@ button:active:not(:disabled):not(.no-tap-scale):not([style*="width: 100%"]):not(
 .app-topbar {
   height: calc(52px + var(--app-head-top));
   padding-top: var(--app-head-top);
-  transition: background-color 200ms ease, z-index 0s linear 220ms;
+  transition: background-color 200ms ease;
 }
 
 .app-topbar > * {
@@ -358,10 +358,9 @@ html.page-layer-tinted .app-topbar {
   z-index: 9995 !important;
   border-color: transparent !important;
   pointer-events: none;
-  transition: background-color 200ms ease;
 }
 
-html.page-layer-tinted .app-topbar > * {
+html.page-layer-tinted:not(.page-layer-untinting) .app-topbar > * {
   filter: brightness(var(--scrim-dim));
 }
 
@@ -553,7 +552,8 @@ html.page-layer-tinted .app-topbar > * {
   flex: 1 1 280px;
 }
 
-.filter-date-range input[type="date"] {
+.filter-date-range .ui-date,
+.filter-date-range > input[type="date"] {
   flex: 1 1 130px;
   min-width: 0;
 }
@@ -565,7 +565,8 @@ html.page-layer-tinted .app-topbar > * {
     align-items: stretch;
   }
 
-  .filter-date-range input[type="date"] {
+  .filter-date-range .ui-date,
+  .filter-date-range > input[type="date"] {
     flex: none;
   }
 

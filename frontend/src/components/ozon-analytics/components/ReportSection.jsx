@@ -1,7 +1,7 @@
 import { useState, useRef, useEffect } from 'react';
 import PropTypes from 'prop-types';
 import { Download, FileSpreadsheet, Megaphone, ShoppingCart, PercentCircle, X } from 'lucide-react';
-import { Button, IconButton, Input, Notice as UiNotice } from '../../ui';
+import { Button, DateInput, IconButton, Notice as UiNotice } from '../../ui';
 import { generateReport, exportAdvertisingData, exportSalesData } from '../api/ozonApi';
 
 
@@ -114,8 +114,8 @@ const ReportSection = () => {
                     </div>
                 </div>
                 <div style={{ display: 'flex', gap: '8px' }}>
-                    <Input type="date" value={adsStart} onChange={e => setAdsStart(e.target.value)} style={{ flex: 1, height: 36 }} />
-                    <Input type="date" value={adsEnd} onChange={e => setAdsEnd(e.target.value)} style={{ flex: 1, height: 36 }} />
+                    <DateInput placeholder="Дата с" value={adsStart} onChange={e => setAdsStart(e.target.value)} style={{ flex: 1 }} />
+                    <DateInput placeholder="Дата по" value={adsEnd} onChange={e => setAdsEnd(e.target.value)} style={{ flex: 1 }} />
                 </div>
                 <Button variant="primary" icon={Download} disabled={!adsStart || !adsEnd} onClick={handleExportAds}>
                     Скачать Excel
@@ -132,8 +132,8 @@ const ReportSection = () => {
                     </div>
                 </div>
                 <div style={{ display: 'flex', gap: '8px' }}>
-                    <Input type="date" value={salesStart} onChange={e => setSalesStart(e.target.value)} style={{ flex: 1, height: 36 }} />
-                    <Input type="date" value={salesEnd} onChange={e => setSalesEnd(e.target.value)} style={{ flex: 1, height: 36 }} />
+                    <DateInput placeholder="Дата с" value={salesStart} onChange={e => setSalesStart(e.target.value)} style={{ flex: 1 }} />
+                    <DateInput placeholder="Дата по" value={salesEnd} onChange={e => setSalesEnd(e.target.value)} style={{ flex: 1 }} />
                 </div>
                 <Button variant="primary" icon={Download} disabled={!salesStart || !salesEnd} onClick={handleExportSales}>
                     Скачать Excel

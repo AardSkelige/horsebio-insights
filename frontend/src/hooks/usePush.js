@@ -17,7 +17,7 @@ const detect = () => {
     return { permission: 'unsupported', needsInstall: typeof window !== 'undefined' && isIOS() && !isStandalone() };
 };
 
-let state = { ...detect(), dismissed: false };
+let state = { ...detect(), dismissed: false, asked: false };
 let prepared = null;
 const listeners = new Set();
 
@@ -100,9 +100,9 @@ export const pushDiagnostics = async () => {
     return `Notification=${fromNotification()}, push=${push}, приложение=${isStandalone() ? 'да' : 'нет'}`;
 };
 
-export const dismissPush = () => setState({ dismissed: true });
+export const dismissPush = () => setState({ dismissed: true, asked: false });
 
-export const offerPush = () => setState({ dismissed: false });
+export const offerPush = () => setState({ dismissed: false, asked: true });
 
 export const onIOS = () => isIOS();
 

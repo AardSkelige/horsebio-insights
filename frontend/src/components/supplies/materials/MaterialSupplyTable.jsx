@@ -54,7 +54,7 @@ const columns = (onMaterialClick) => [
         label: 'Код',
         render: (r) => <span style={{ fontFamily: 'var(--mono)', fontSize: 'var(--size-sm)' }}>{r.code}</span>,
     },
-    { key: 'group', label: 'Группа' },
+    { key: 'group', label: 'Группа', className: 'ui-hide-phone' },
     { key: 'total_quantity', label: 'Количество', numeric: true, render: (r) => `${num(r.total_quantity)} ${r.uom}` },
     { key: 'average_price', label: 'Средняя цена', numeric: true, render: (r) => `${(r.average_price || 0).toFixed(2)} ₽/${r.uom}` },
     { key: 'total_sum', label: 'Сумма', numeric: true, render: (r) => `${num(r.total_sum)} ₽` },

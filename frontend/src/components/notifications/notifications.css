@@ -112,23 +112,43 @@
 /* ── панель ────────────────────────────────────────────── */
 
 .nt-panel__bar {
-    display: flex;
-    justify-content: flex-end;
-    gap: var(--space-4);
-    padding: 8px 16px 0;
+    padding: var(--space-2) 16px 0;
     flex-shrink: 0;
 }
 
-.nt-panel__all {
-    border: 0;
-    background: transparent;
-    padding: 0;
-    font-family: var(--sans);
-    font-size: 11.5px;
-    color: var(--primary);
-    cursor: pointer;
+.nt-panel__bar .ui-segmented {
+    width: 100%;
 }
-.nt-panel__all:hover { text-decoration: underline; }
+
+.nt-panel__bar .ui-segmented__item {
+    flex: 1;
+}
+
+.nt-push-row {
+    display: flex;
+    align-items: center;
+    gap: var(--space-3);
+    width: 100%;
+    min-height: 44px;
+    padding: 0 var(--space-3);
+    border: 1px solid var(--hairline);
+    border-radius: var(--radius-lg);
+    background: var(--canvas);
+    color: var(--muted);
+    font-family: var(--sans);
+    font-size: var(--size-md);
+    text-align: left;
+    cursor: pointer;
+    transition: background-color 150ms ease;
+}
+@media (hover: hover) {
+    .nt-push-row:hover { background: var(--surface-soft); }
+}
+.nt-push-row:disabled { cursor: default; }
+.nt-push-row__text {
+    flex: 1;
+    color: var(--ink);
+}
 .nt-panel__push {
     display: grid;
     gap: var(--space-2);
@@ -143,6 +163,9 @@
     z-index: 9990;
     background: var(--scrim);
 }
+
+.nt-sheet__scrim.is-over-panel { z-index: 10000; }
+.nt-sheet.is-over-panel { z-index: 10001; }
 
 .nt-sheet {
     position: fixed;
@@ -236,8 +259,7 @@
     align-items: baseline;
     justify-content: space-between;
     gap: 8px;
-    padding: 12px 10px 5px;
-    border-bottom: 1px solid var(--hairline);
+    padding: 12px 10px 6px;
 }
 
 .nt-group__label {
@@ -249,13 +271,20 @@
     color: var(--muted-soft);
 }
 
-.nt-group__link {
-    font-family: var(--sans);
-    font-size: 11.5px;
-    color: var(--primary);
+.nt-group__head--link {
+    align-items: center;
+    min-height: 40px;
+    margin-bottom: 4px;
+    padding-top: 6px;
+    color: var(--muted-soft);
     text-decoration: none;
+    border-radius: 8px;
+    transition: background-color 150ms ease;
 }
-.nt-group__link:hover { text-decoration: underline; }
+@media (hover: hover) {
+    .nt-group__head--link:hover { background: var(--surface-soft); }
+}
+
 
 .nt-panel__count {
     font-family: var(--sans);
@@ -327,3 +356,92 @@
 .nt-section--critical { border-left-color: var(--error); }
 .nt-section--warning  { border-left-color: var(--warning); }
 .nt-section--info     { border-left-color: var(--info); }
+
+@media (max-width: 767px) {
+    .nt-panel .ui-drawer__head {
+        gap: 0;
+        padding: 10px 6px 10px 20px;
+    }
+
+    .nt-panel .ui-drawer__title {
+        font-size: var(--size-xl);
+        font-weight: 600;
+    }
+
+    .nt-panel .ui-drawer__head .ui-icon-btn {
+        width: 44px;
+        height: 44px;
+    }
+
+    .nt-panel .ui-drawer__head .ui-icon-btn svg {
+        width: 20px;
+        height: 20px;
+    }
+
+    .nt-panel .nt-panel__count {
+        margin-right: var(--space-1);
+        font-size: var(--size-md);
+    }
+
+    .nt-panel .nt-panel__bar {
+        padding: var(--space-3) 16px 0;
+    }
+
+    .nt-panel .nt-panel__bar .ui-segmented__item {
+        min-height: 40px;
+        font-size: var(--size-md);
+    }
+
+    .nt-panel .ui-drawer__body {
+        padding-top: var(--space-3);
+    }
+
+    .nt-panel .nt-push-row {
+        min-height: 52px;
+        padding: 0 var(--space-4);
+        font-size: 15px;
+    }
+
+    .nt-panel .nt-group + .nt-group { margin-top: 24px; }
+
+    .nt-panel .nt-group__head--link {
+        min-height: 44px;
+        padding: 6px 10px 6px 4px;
+    }
+
+    .nt-panel .nt-group__label { font-size: var(--size-xs); }
+
+    .nt-panel .nt-item {
+        gap: var(--space-3);
+        padding: 14px 4px 14px 14px;
+        border-radius: var(--radius-lg);
+    }
+
+    .nt-panel .nt-item + .nt-item { margin-top: var(--space-2); }
+
+    .nt-panel .nt-item__dot {
+        width: 8px;
+        height: 8px;
+        margin-top: 7px;
+    }
+
+    .nt-panel .nt-item__title { font-size: 15px; line-height: 1.35; }
+
+    .nt-panel .nt-item__body {
+        margin-top: 2px;
+        font-size: 14px;
+        line-height: 1.45;
+    }
+
+    .nt-panel .nt-item__toggle {
+        width: 44px;
+        height: 44px;
+        margin: -10px 0 -10px 0;
+        border-radius: 50%;
+    }
+
+    .nt-panel .nt-item__toggle svg {
+        width: 18px;
+        height: 18px;
+    }
+}

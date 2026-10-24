@@ -1,5 +1,5 @@
 import PropTypes from 'prop-types';
-import { Badge, Input, Select } from '../ui';
+import { Badge, DateInput, Input, Select } from '../ui';
 import { formatDate } from '../../utils/formatters';
 
 const MANUAL = 'manual';
@@ -60,7 +60,7 @@ export default function ProtocolRow({ row, onDate, candidates, onChange, onMap }
                     {choice === MANUAL && (
                         <div className="protocols__manual">
                             <Input placeholder="Серия" value={row.series} onChange={(e) => onChange({ ...row, series: e.target.value })} />
-                            <Input type="date" value={row.expiry_date || ''} onChange={(e) => onChange({ ...row, expiry_date: e.target.value || null })} aria-label="Годен до" />
+                            <DateInput placeholder="Годен до" value={row.expiry_date || ''} onChange={(e) => onChange({ ...row, expiry_date: e.target.value || null })} aria-label="Годен до" />
                             <Input placeholder="Производитель" value={row.manufacturer} onChange={(e) => onChange({ ...row, manufacturer: e.target.value })} />
                         </div>
                     )}

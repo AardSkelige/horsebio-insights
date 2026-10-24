@@ -38,6 +38,7 @@ export default function PageHeader({ title, subtitle, actions, onRefresh, refres
                             loading={refreshing}
                             loadingLabel={refreshingLabel}
                             onClick={onRefresh}
+                            className="ui-page-header__refresh"
                         >
                             {refreshLabel}
                         </Button>

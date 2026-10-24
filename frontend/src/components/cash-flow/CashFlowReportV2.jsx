@@ -3,7 +3,7 @@ import { num } from '../../utils/formatters';
 import { createPortal } from 'react-dom';
 import PropTypes from 'prop-types';
 import { TrendingUp, TrendingDown, Download, AlertCircle, Calendar, X, ExternalLink } from 'lucide-react';
-import { Button, Input, Page, PageHeader, Segmented } from '../ui';
+import { Button, DateInput, Page, PageHeader, Segmented } from '../ui';
 import { FadeRise, Stagger, StaggerItem, AnimatedNumber } from '../ui/motion';
 import { analysisApi } from '../../api/analysisApi';
 import './CashFlowReportV2.css';
@@ -325,9 +325,9 @@ const CashFlowReportV2 = () => {
                     <div className="cfv2-ctr">
                         <div className="cfv2-ctr-row">
                             <div className="filter-date-range cfv2-dates">
-                                <Input type="date" value={dateFrom} onChange={onDateFrom} disabled={loading} aria-label="Дата начала" />
+                                <DateInput placeholder="Дата с" value={dateFrom} onChange={onDateFrom} disabled={loading} aria-label="Дата начала" />
                                 <span className="filter-date-sep ui-date-sep">—</span>
-                                <Input type="date" value={dateTo} onChange={onDateTo} disabled={loading} aria-label="Дата окончания" />
+                                <DateInput placeholder="Дата по" value={dateTo} onChange={onDateTo} disabled={loading} aria-label="Дата окончания" />
                             </div>
                             {data && (
                                 <Button variant="quiet" icon={Download} loading={exporting} disabled={loading} onClick={exportToExcel}>

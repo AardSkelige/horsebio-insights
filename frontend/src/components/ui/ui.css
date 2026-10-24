@@ -329,6 +329,58 @@
     flex: 0 0 auto;
 }
 
+.ui-form-row {
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--space-4);
+}
+
+.ui-form-field {
+    display: flex;
+    flex: 1 1 200px;
+    flex-direction: column;
+    gap: var(--space-1);
+    min-width: 0;
+}
+
+.ui-form-field__label {
+    font-family: var(--sans);
+    font-size: var(--size-sm);
+    font-weight: 600;
+    letter-spacing: 0.04em;
+    color: var(--muted);
+}
+
+.ui-form-field__hint {
+    font-family: var(--sans);
+    font-size: var(--size-xs);
+    color: var(--muted);
+}
+
+.ui-date {
+    display: inline-flex;
+    min-width: 0;
+    position: relative;
+}
+
+.ui-date > .ui-input {
+    flex: 1;
+    min-width: 0;
+    width: 100%;
+}
+
+.ui-date--block {
+    display: flex;
+    width: 100%;
+}
+
+.ui-form-field > .ui-date,
+.ui-form-field > .ui-select,
+.ui-form-field > .ui-input {
+    flex: none;
+    width: 100%;
+}
+
 /* ── Множественный выбор ────────────────────────────────── */
 
 .ui-multiselect {
@@ -498,6 +550,7 @@
     gap: var(--space-4);
     flex-wrap: wrap;
 }
+
 
 .ui-page-header__meta {
     font-family: var(--sans);
@@ -784,8 +837,7 @@
     grid-template-columns: repeat(auto-fill, minmax(min(var(--stat-min, 190px), 100%), 1fr));
 }
 
-/* На узком экране значение ещё немного уменьшается, карточка ужимается,
-   а сетка складывается по две в ряд вместо столбика */
+/* На узком экране значение и карточка немного ужимаются */
 @media (max-width: 600px) {
     .ui-stat__value {
         font-size: 20px !important;
@@ -799,9 +851,6 @@
         margin-bottom: 5px;
     }
 
-    .ui-statgrid {
-        grid-template-columns: repeat(auto-fill, minmax(min(var(--stat-min-sm, 150px), 100%), 1fr));
-    }
 }
 
 .ui-stat--dark .ui-stat__note {
@@ -1332,3 +1381,206 @@
         animation: none;
     }
 }
+
+
+@media (max-width: 767px) {
+    .ui-hide-phone {
+        display: none;
+    }
+
+    .ui-btn--md:not(.ui-btn--link):not(.ui-btn--quiet) {
+        min-height: 44px;
+        border-radius: var(--radius-lg);
+    }
+
+    .ui-table td.is-numeric,
+    .ui-table th.is-numeric {
+        white-space: nowrap;
+    }
+
+    .ui-input,
+    .ui-select__control,
+    .ui-multiselect__control,
+    .ui-search__input {
+        height: 44px;
+        padding-top: 0;
+        padding-bottom: 0;
+        font-size: 16px;
+        border-radius: var(--radius-lg);
+    }
+
+    input.ui-input[type="date"] {
+        display: flex;
+        align-items: center;
+        -webkit-appearance: none;
+        appearance: none;
+        text-align: left;
+    }
+
+    input.ui-input[type="date"]::-webkit-date-and-time-value {
+        text-align: left;
+    }
+
+    .ui-search__icon {
+        left: 14px;
+    }
+
+    .ui-search__input {
+        padding-left: 40px;
+    }
+
+    .ui-search__clear {
+        right: 6px;
+        width: 32px;
+        height: 32px;
+        align-items: center;
+        justify-content: center;
+    }
+
+    .ui-select__chevron,
+    .ui-select__chevron.is-static {
+        width: 16px;
+        height: 16px;
+    }
+
+    .ui-toolbar {
+        flex-direction: column;
+        align-items: stretch;
+        gap: var(--space-2);
+    }
+
+    .ui-toolbar > *,
+    .ui-toolbar .ui-search,
+    .ui-toolbar .ui-select,
+    .ui-toolbar .ui-multiselect,
+    .ui-toolbar .filter-date-range {
+        flex: none;
+        width: 100%;
+        max-width: 100%;
+    }
+
+    .ui-toolbar .filter-date-range {
+        flex-direction: row;
+        gap: var(--space-2);
+    }
+
+    .ui-toolbar .filter-date-range .ui-date {
+        flex: 1 1 0;
+    }
+
+}
+
+@supports (-webkit-touch-callout: none) {
+    .ui-date[data-empty]::after {
+        content: attr(data-placeholder);
+        position: absolute;
+        left: var(--control-pad-x);
+        top: 50%;
+        transform: translateY(-50%);
+        font-size: var(--size-md);
+        color: var(--muted-soft);
+        pointer-events: none;
+    }
+}
+
+@media (max-width: 767px) {
+    .ui-date[data-empty]::after {
+        font-size: 16px;
+    }
+}
+
+@media (max-width: 767px) {
+
+    .ui-reset {
+        width: 100%;
+        min-height: 44px;
+        border-color: transparent;
+        border-radius: var(--radius-lg);
+        background: var(--error-bg);
+        color: var(--error-ink);
+        font-size: 15px;
+    }
+
+    .ui-multiselect__menu {
+        right: 0;
+        min-width: 0;
+    }
+
+    .ui-page-header {
+        gap: var(--space-3);
+    }
+
+    .ui-page-header > div:first-child {
+        flex: 1 1 65%;
+        min-width: 0;
+    }
+
+    .ui-page-header__actions {
+        display: contents;
+    }
+
+    .ui-page-header {
+        justify-content: flex-start;
+    }
+
+    .ui-page-header__refresh {
+        order: 1;
+        margin-left: auto;
+    }
+
+    .ui-page-header__meta {
+        order: 2;
+        flex-basis: 100%;
+    }
+
+    .ui-page-header__actions > :not(.ui-page-header__refresh):not(.ui-page-header__meta) {
+        order: 3;
+    }
+
+    .ui-statgrid {
+        grid-template-columns: 1fr !important;
+        gap: var(--space-2) !important;
+    }
+
+    .ui-statgrid > .ui-stat {
+        display: grid;
+        grid-template-columns: minmax(0, 1fr) auto;
+        align-items: center;
+        column-gap: var(--space-3);
+        padding: 12px 16px;
+    }
+
+    .ui-statgrid > .ui-stat .ui-stat__title {
+        grid-column: 1;
+        margin-bottom: 0;
+    }
+
+    .ui-statgrid > .ui-stat .ui-stat__value {
+        grid-column: 2;
+        grid-row: 1 / span 2;
+        text-align: right;
+    }
+
+    .ui-statgrid > .ui-stat .ui-stat__note {
+        grid-column: 1;
+        margin-top: 2px;
+    }
+
+    .ui-segmented {
+        flex-wrap: nowrap;
+        max-width: 100%;
+        overflow-x: auto;
+        scrollbar-width: none;
+        -webkit-overflow-scrolling: touch;
+    }
+
+    .ui-segmented::-webkit-scrollbar {
+        display: none;
+    }
+
+    .ui-segmented__item {
+        flex-shrink: 0;
+        min-height: 40px;
+    }
+}
+

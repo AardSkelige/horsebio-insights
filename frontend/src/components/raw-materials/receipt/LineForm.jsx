@@ -1,6 +1,6 @@
 import PropTypes from 'prop-types';
 import { Check } from 'lucide-react';
-import { Input } from '../../ui';
+import { DateInput, Input } from '../../ui';
 import { formatQuantity } from '../format';
 import { sameAs, saved } from './draft';
 
@@ -21,7 +21,7 @@ export default function LineForm({ line, draft, onChange }) {
                 </label>
                 <label className="receipt__field">
                     <span className="stock__label">Годен до</span>
-                    <Input block type="date" value={draft.expiry_date} onChange={set('expiry_date')} />
+                    <DateInput block placeholder="с мешка" value={draft.expiry_date} onChange={set('expiry_date')} />
                 </label>
                 <label className="receipt__field receipt__field--wide">
                     <span className="stock__label">Производитель{!line.filled && line.manufacturer ? ' · из прошлой серии' : ''}</span>

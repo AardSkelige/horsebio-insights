@@ -2,7 +2,7 @@ import { useState, useCallback } from 'react';
 import { num } from '../../utils/formatters';
 import PropTypes from 'prop-types';
 import { TrendingUp, TrendingDown, Download, AlertCircle, Calendar, Info, X, ExternalLink } from 'lucide-react';
-import { Button, DataTable, Page, PageHeader, SectionLabel, StatCard, StatGrid } from '../ui';
+import { Button, DataTable, DateInput, Page, PageHeader, SectionLabel, StatCard, StatGrid } from '../ui';
 import { analysisApi } from '../../api/analysisApi';
 
 
@@ -10,13 +10,6 @@ const rowShape = PropTypes.shape({ name: PropTypes.string.isRequired, amount: Pr
 
 
 
-
-const dateInput = {
-    height: '36px', padding: '0 10px',
-    fontFamily: 'var(--sans)', fontSize: '13px', color: 'var(--ink)',
-    backgroundColor: 'var(--canvas)', border: '1px solid var(--hairline)',
-    borderRadius: '8px', outline: 'none', transition: 'border-color 150ms',
-};
 
 /**
  * Показатель отчёта: сумма в рублях, при наличии `trend` — стрелка и цвет
@@ -175,13 +168,9 @@ const CashFlowReport = () => {
                 <SectionLabel>Период</SectionLabel>
                 <div style={{ display: 'flex', flexWrap: 'wrap', gap: '10px', alignItems: 'center' }}>
                     <div className="filter-date-range" style={{ flex: '1 1 280px' }}>
-                        <input type="date" value={dateFrom} onChange={e => setDateFrom(e.target.value)} disabled={loading} style={dateInput}
-                            onFocus={e => e.target.style.borderColor = 'var(--primary)'}
-                            onBlur={e => e.target.style.borderColor = 'var(--hairline)'} />
+                        <DateInput placeholder="Дата с" value={dateFrom} onChange={e => setDateFrom(e.target.value)} disabled={loading} aria-label="Дата начала" />
                         <span className="filter-date-sep" style={{ fontFamily: 'var(--sans)', fontSize: '13px', color: 'var(--muted)', lineHeight: 1 }}>—</span>
-                        <input type="date" value={dateTo} onChange={e => setDateTo(e.target.value)} disabled={loading} style={dateInput}
-                            onFocus={e => e.target.style.borderColor = 'var(--primary)'}
-                            onBlur={e => e.target.style.borderColor = 'var(--hairline)'} />
+                        <DateInput placeholder="Дата по" value={dateTo} onChange={e => setDateTo(e.target.value)} disabled={loading} aria-label="Дата окончания" />
                     </div>
                     <Button variant="primary" icon={Calendar} loading={loading} disabled={!canFetch} onClick={fetchReport}>
                         {loading ? 'Формируется...' : 'Сформировать отчёт'}

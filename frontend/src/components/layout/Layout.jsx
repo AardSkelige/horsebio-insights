@@ -281,7 +281,7 @@ const Layout = ({ children }) => {
 
             <FloatingLoadingCard />
             <NotificationsPanel />
-            <PushSheet quiet={intro || leaving || mobileOpen} />
+            <PushSheet quiet={intro || leaving || mobileOpen} auto={location.pathname === '/'} />
         </div>
         </NotificationsProvider>
     );

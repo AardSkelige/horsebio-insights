@@ -90,7 +90,7 @@ const columns = (onMaterialClick) => [
         label: 'Код',
         render: (r) => <span style={{ fontFamily: 'var(--mono)', fontSize: 'var(--size-sm)' }}>{r.code}</span>,
     },
-    { key: 'group', label: 'Группа' },
+    { key: 'group', label: 'Группа', className: 'ui-hide-phone' },
     { key: 'total_usage', label: 'Количество', numeric: true, render: (r) => `${num(r.total_usage)} ${r.uom}` },
     { key: 'shipments_count', label: 'Отгрузки', numeric: true, render: (r) => num(r.shipments_count) },
     { key: 'suppliers_count', label: 'Поставщики', render: (r) => r.suppliers_count ? pluralWith(r.suppliers_count, 'поставщик', 'поставщика', 'поставщиков') : '—' },

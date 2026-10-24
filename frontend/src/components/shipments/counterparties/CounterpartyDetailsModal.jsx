@@ -6,7 +6,7 @@ import { ChevronDown, Loader2, AlertCircle } from 'lucide-react';
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend } from 'recharts';
 import { CounterpartyPropTypes } from './types';
 import { CHART_ANIMATION } from '../../../utils/chartAnimation';
-import { formatDate, formatDateTime, pluralWith } from '../../../utils/formatters';
+import { compact, formatDate, formatDateTime, pluralWith } from '../../../utils/formatters';
 import { ModalShell } from '../../ui/motion';
 
 /* ── helpers ──────────────────────────────────────────────── */
@@ -205,8 +205,8 @@ const CounterpartyDetailsModal = ({ counterparty, visible, onClose, dateRange })
                                             <LineChart data={chartData}>
                                                 <CartesianGrid strokeDasharray="3 3" stroke="var(--hairline)" />
                                                 <XAxis dataKey="month" tick={{ fontSize: 11, fontFamily: 'var(--sans)', fill: 'var(--muted)' }} />
-                                                <YAxis yAxisId="quantity" tick={{ fontSize: 11, fontFamily: 'var(--sans)', fill: 'var(--muted)' }} tickFormatter={v => `${fmt(v)} шт.`} width={70} />
-                                                <YAxis yAxisId="revenue" orientation="right" tick={{ fontSize: 11, fontFamily: 'var(--sans)', fill: 'var(--muted)' }} tickFormatter={v => `${(v / 1000).toFixed(0)}k ₽`} width={60} />
+                                                <YAxis yAxisId="quantity" tick={{ fontSize: 11, fontFamily: 'var(--sans)', fill: 'var(--muted)' }} tickFormatter={v => `${compact(v)} шт.`} width={76} />
+                                                <YAxis yAxisId="revenue" orientation="right" tick={{ fontSize: 11, fontFamily: 'var(--sans)', fill: 'var(--muted)' }} tickFormatter={v => `${compact(v)} ₽`} width={64} />
                                                 <Tooltip content={<CustomTooltip />} />
                                                 <Legend wrapperStyle={{ fontFamily: 'var(--sans)', fontSize: 12 }} />
                                                 <Line {...CHART_ANIMATION} yAxisId="quantity" type="monotone" dataKey="quantity" name="Количество" stroke="var(--primary)" strokeWidth={2} dot={{ r: 3 }} />

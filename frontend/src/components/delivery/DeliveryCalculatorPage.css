@@ -1349,6 +1349,21 @@
     
     }
 
+@media (max-width: 767px) {
+    .delivery-input input,
+    .delivery-search input,
+    .delivery-calc-strip__actions .delivery-input input {
+        height: 44px;
+        font-size: 16px;
+        border-radius: var(--radius-lg);
+    }
+
+    .delivery-calc-strip__actions .delivery-calculate {
+        height: 44px;
+        min-height: 44px;
+    }
+}
+
 @media (max-width: 640px) {
     .delivery-page {
         gap: 20px;

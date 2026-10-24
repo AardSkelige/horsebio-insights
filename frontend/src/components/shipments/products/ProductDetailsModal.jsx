@@ -3,7 +3,7 @@ import { CloseButton, Disclosure, Metric, MetricGrid, SectionLabel, StatCard, St
 import PropTypes from 'prop-types';
 import { Loader2 } from 'lucide-react';
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
-import { formatDateTime, money, moneyPrecise, num } from '../../../utils/formatters';
+import { compact, formatDateTime, money, moneyPrecise, num } from '../../../utils/formatters';
 import { CHART_ANIMATION } from '../../../utils/chartAnimation';
 import { ModalShell } from '../../ui/motion';
 import { productsApi } from '../../../api/productsApi';
@@ -117,8 +117,8 @@ const ProductDetailsModal = ({ product, visible, onClose, dateRange, salesChanne
                                             <LineChart data={chartData} margin={{ top: 4, right: 48, left: 0, bottom: 0 }}>
                                                 <CartesianGrid strokeDasharray="3 3" stroke="var(--hairline)" />
                                                 <XAxis dataKey="month" tick={{ fontFamily: 'var(--sans)', fontSize: 11, fill: 'var(--muted)' }} />
-                                                <YAxis yAxisId="qty" tick={{ fontFamily: 'var(--sans)', fontSize: 11, fill: 'var(--muted)' }} tickFormatter={num} width={50} />
-                                                <YAxis yAxisId="rev" orientation="right" tick={{ fontFamily: 'var(--sans)', fontSize: 11, fill: 'var(--muted)' }} tickFormatter={v => `${(v / 1000).toFixed(0)}k`} width={44} />
+                                                <YAxis yAxisId="qty" tick={{ fontFamily: 'var(--sans)', fontSize: 11, fill: 'var(--muted)' }} tickFormatter={compact} width={56} />
+                                                <YAxis yAxisId="rev" orientation="right" tick={{ fontFamily: 'var(--sans)', fontSize: 11, fill: 'var(--muted)' }} tickFormatter={compact} width={56} />
                                                 <Tooltip content={<ChartTooltip />} />
                                                 <Line {...CHART_ANIMATION} yAxisId="qty" type="monotone" dataKey="quantity" name="Количество" stroke="var(--primary)" strokeWidth={2} dot={{ r: 3, fill: 'var(--primary)' }} activeDot={{ r: 5 }} />
                                                 <Line {...CHART_ANIMATION} yAxisId="rev" type="monotone" dataKey="revenue" name="Выручка" stroke="var(--success-ink)" strokeWidth={2} dot={{ r: 3, fill: 'var(--success-ink)' }} activeDot={{ r: 5 }} />

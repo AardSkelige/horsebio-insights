@@ -6,6 +6,7 @@ import { AnimatePresence, m } from 'motion/react';
 import { BellOff, BellRing, CircleAlert, Menu, Share, SquarePlus, ToggleRight, Trash2 } from 'lucide-react';
 import { Button } from '../ui';
 import { usePageLayer } from '../ui/motion/usePageLayer';
+import { useNotifications } from '../../contexts/NotificationsContext';
 import { pushApi } from '../../api/pushApi';
 import { canOffer, dismissPush, enablePush, onIOS, preparePush, pushDiagnostics, subscribeDevice, usePush } from '../../hooks/usePush';
 
@@ -15,7 +16,7 @@ const deniedHint = () => (onIOS()
     ? 'Если HorseBio нет в «Настройках» → «Уведомления», значит, иконка добавлена до обновления. Удалите её с экрана «Домой» и добавьте заново из Safari.'
     : 'Разрешите их в настройках браузера для этого сайта.');
 
-export default function PushSheet({ quiet = false }) {
+export default function PushSheet({ quiet = false, auto = true }) {
     const navigate = useNavigate();
     const push = usePush();
     const [ready, setReady] = useState(false);
@@ -46,9 +47,12 @@ export default function PushSheet({ quiet = false }) {
         return () => clearTimeout(timer);
     }, [quiet]);
 
-    const open = ready && !quiet && (outcome !== null || (!push.dismissed && canOffer(push)));
+    const { panelOpen } = useNotifications();
+    const open = ready && !quiet && (outcome !== null || (!push.dismissed && canOffer(push) && (auto || push.asked)));
     const [phone] = useState(() => window.matchMedia?.('(max-width: 767px)').matches ?? false);
     const scrimLayer = usePageLayer(open && phone);
+    const [shown, setShown] = useState({ open: false, overPanel: false, auto: false });
+    if (open !== shown.open) setShown(open ? { open, overPanel: panelOpen, auto: !push.asked } : { ...shown, open });
 
     const enable = async () => {
         setBusy(true);
@@ -71,6 +75,22 @@ export default function PushSheet({ quiet = false }) {
         setOutcome(null);
         dismissPush();
     };
+
+    useEffect(() => {
+        if (!auto && shown.auto) dismissPush();
+    }, [auto, shown.auto]);
+
+    useEffect(() => {
+        if (!open || busy) return undefined;
+        const onKeyDown = (event) => {
+            if (event.key !== 'Escape') return;
+            event.stopPropagation();
+            setOutcome(null);
+            dismissPush();
+        };
+        window.addEventListener('keydown', onKeyDown, true);
+        return () => window.removeEventListener('keydown', onKeyDown, true);
+    }, [open, busy]);
 
     const body = () => {
         if (outcome?.kind === 'ok') {
@@ -139,7 +159,7 @@ export default function PushSheet({ quiet = false }) {
             {open && phone && (
                 <m.div
                     key="scrim"
-                    className="nt-sheet__scrim"
+                    className={`nt-sheet__scrim${shown.overPanel ? ' is-over-panel' : ''}`}
                     style={scrimLayer?.scrim}
                     onClick={busy ? undefined : close}
                     initial={{ opacity: 0 }}
@@ -152,7 +172,7 @@ export default function PushSheet({ quiet = false }) {
                 <m.div
                     key="sheet"
                     aria-modal={phone ? 'true' : undefined}
-                    className="nt-sheet"
+                    className={`nt-sheet${shown.overPanel ? ' is-over-panel' : ''}`}
                     role="dialog"
                     aria-label="Уведомления"
                     initial={{ opacity: 0, y: 40 }}
@@ -169,4 +189,4 @@ export default function PushSheet({ quiet = false }) {
     );
 }
 
-PushSheet.propTypes = { quiet: PropTypes.bool };
+PushSheet.propTypes = { quiet: PropTypes.bool, auto: PropTypes.bool };

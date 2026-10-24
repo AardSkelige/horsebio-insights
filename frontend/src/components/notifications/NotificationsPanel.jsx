@@ -1,8 +1,8 @@
 import { useMemo } from 'react';
 import { Link } from 'react-router-dom';
-import { RefreshCw } from 'lucide-react';
+import { CheckCheck, ChevronRight, RefreshCw } from 'lucide-react';
 import { pluralWith } from '../../utils/formatters';
-import { CloseButton, IconButton, Notice, Skeleton } from '../ui';
+import { CloseButton, IconButton, Notice, Segmented, Skeleton } from '../ui';
 import { DrawerShell } from '../ui/motion';
 import { useNotifications } from '../../contexts/NotificationsContext';
 import NotificationItem from './NotificationItem';
@@ -44,13 +44,16 @@ export default function NotificationsPanel() {
     const groups = useMemo(() => groupBySource(visible), [visible]);
 
     return (
-        <DrawerShell open={panelOpen} onClose={closePanel} label="Уведомления">
+        <DrawerShell open={panelOpen} onClose={closePanel} label="Уведомления" className="nt-panel">
             <div className="ui-drawer__head">
                 <h2 className="ui-drawer__title">Уведомления</h2>
                 {counts.unseen > 0 && (
                     <span className="nt-panel__count">
                         {pluralWith(counts.unseen, 'новое', 'новых', 'новых')}
                     </span>
+                )}
+                {counts.unseen > 0 && (
+                    <IconButton icon={CheckCheck} label="Прочитать всё" onClick={() => setRead([], true)} />
                 )}
                 <IconButton
                     icon={RefreshCw}
@@ -62,18 +65,17 @@ export default function NotificationsPanel() {
                 <CloseButton onClick={closePanel} />
             </div>
 
-            {(counts.unseen > 0 || readCount > 0) && (
+            {readCount > 0 && (
                 <div className="nt-panel__bar">
-                    {counts.unseen > 0 && (
-                        <button type="button" className="nt-panel__all" onClick={() => setRead([], true)}>
-                            Прочитать всё
-                        </button>
-                    )}
-                    {readCount > 0 && (
-                        <button type="button" className="nt-panel__all" onClick={() => setShowRead(!showRead)}>
-                            {showRead ? 'Скрыть прочитанные' : `Показать прочитанные (${readCount})`}
-                        </button>
-                    )}
+                    <Segmented
+                        layoutId="nt-panel-filter"
+                        value={showRead ? 'all' : 'new'}
+                        onChange={(value) => setShowRead(value === 'all')}
+                        options={[
+                            { value: 'new', label: `Новые (${counts.unseen})` },
+                            { value: 'all', label: `Все (${items.length})` },
+                        ]}
+                    />
                 </div>
             )}
 
@@ -99,14 +101,16 @@ export default function NotificationsPanel() {
 
                 {groups.map((group) => (
                     <section className="nt-group" key={group.source}>
-                        <div className="nt-group__head">
-                            <span className="nt-group__label">{group.label}</span>
-                            {group.route && (
-                                <Link className="nt-group__link" to={group.route} onClick={closePanel}>
-                                    Открыть
-                                </Link>
-                            )}
-                        </div>
+                        {group.route ? (
+                            <Link className="nt-group__head nt-group__head--link" to={group.route} onClick={closePanel}>
+                                <span className="nt-group__label">{group.label}</span>
+                                <ChevronRight size={16} aria-hidden="true" />
+                            </Link>
+                        ) : (
+                            <div className="nt-group__head">
+                                <span className="nt-group__label">{group.label}</span>
+                            </div>
+                        )}
                         {group.items.map((item) => (
                             <NotificationItem key={item.key} item={item} onToggleRead={setRead} />
                         ))}

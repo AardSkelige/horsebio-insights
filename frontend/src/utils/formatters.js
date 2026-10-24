@@ -26,6 +26,10 @@ export const numOrDash = (value) => {
  */
 export const money = (value) => `${num(value)} ₽`;
 
+const compactFormat = new Intl.NumberFormat('ru-RU', { notation: 'compact', maximumFractionDigits: 1 });
+
+export const compact = (value) => compactFormat.format(Number(value) || 0);
+
 /** Рубли с копейками: «1 234,56 ₽» — цена за единицу, тариф. */
 export const moneyPrecise = (value) => {
     const n = Number(value ?? 0);

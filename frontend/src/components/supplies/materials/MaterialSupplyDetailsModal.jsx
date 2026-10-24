@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { num } from '../../../utils/formatters';
+import { compact, num } from '../../../utils/formatters';
 import { CloseButton, Disclosure, Metric, MetricGrid, SectionLabel, StatCard, StatGrid } from '../../ui';
 import PropTypes from 'prop-types';
 import { Loader2 } from 'lucide-react';
@@ -125,7 +125,7 @@ const MaterialSupplyDetailsModal = ({ material, visible, onClose, dateRange }) =
                                             <LineChart data={chartData} margin={{ top: 4, right: 48, left: 0, bottom: 0 }}>
                                                 <CartesianGrid strokeDasharray="3 3" stroke="var(--hairline)" />
                                                 <XAxis dataKey="month" tick={{ fontFamily: 'var(--sans)', fontSize: 11, fill: 'var(--muted)' }} />
-                                                <YAxis yAxisId="qty" tick={{ fontFamily: 'var(--sans)', fontSize: 11, fill: 'var(--muted)' }} tickFormatter={num} width={50} />
+                                                <YAxis yAxisId="qty" tick={{ fontFamily: 'var(--sans)', fontSize: 11, fill: 'var(--muted)' }} tickFormatter={compact} width={56} />
                                                 <YAxis yAxisId="price" orientation="right" tick={{ fontFamily: 'var(--sans)', fontSize: 11, fill: 'var(--muted)' }} tickFormatter={v => `${v.toFixed(0)}₽`} width={44} />
                                                 <Tooltip content={<ChartTooltip uom={uom} />} />
                                                 <Line {...CHART_ANIMATION} yAxisId="qty" type="monotone" dataKey="quantity" name="quantity" stroke="var(--primary)" strokeWidth={2} dot={{ r: 3, fill: 'var(--primary)' }} activeDot={{ r: 5 }} />
