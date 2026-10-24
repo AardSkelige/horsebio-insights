@@ -9,8 +9,11 @@ vi.mock('../../api/pushApi', () => ({
         key: () => Promise.resolve({ publicKey: 'BA4t99aIjJ5P' }),
         subscribe: (...args) => subscribeApi(...args),
         unsubscribe: vi.fn(),
+        test: () => sendTest(),
     },
 }));
+
+const sendTest = vi.fn(() => Promise.resolve({ sent: 1, devices: 1 }));
 
 const subscription = { endpoint: 'https://push.example/1', toJSON: () => ({ endpoint: 'https://push.example/1', keys: { p256dh: 'k', auth: 'a' } }) };
 
@@ -56,6 +59,28 @@ describe('PushSheet', () => {
         expect(window.Notification.requestPermission).toHaveBeenCalled();
         expect(pushManager.subscribe).toHaveBeenCalledWith(expect.objectContaining({ userVisibleOnly: true }));
         expect(subscribeApi).toHaveBeenCalledWith(subscription.toJSON());
+        expect(sendTest).toHaveBeenCalled();
+        expect(screen.getByText('Уведомления включены')).toBeInTheDocument();
+    });
+
+    it('если телефон запретил, говорит об этом и где включить', async () => {
+        stubPush('default');
+        window.Notification.requestPermission = vi.fn(() => Promise.resolve('denied'));
+        await renderSheet();
+
+        await act(async () => { fireEvent.click(screen.getByRole('button', { name: 'Включить' })); });
+
+        expect(screen.getByText('Уведомления запрещены')).toBeInTheDocument();
+    });
+
+    it('ошибку подписки показывает текстом, а не глотает', async () => {
+        const pushManager = stubPush('default');
+        pushManager.subscribe.mockRejectedValue(new Error('push service not available'));
+        await renderSheet();
+
+        await act(async () => { fireEvent.click(screen.getByRole('button', { name: 'Включить' })); });
+
+        expect(screen.getByText(/push service not available/)).toBeInTheDocument();
     });
 
     it('«Не сейчас» прячет окошко до следующего запуска', async () => {

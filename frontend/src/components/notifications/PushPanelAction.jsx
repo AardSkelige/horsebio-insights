@@ -3,7 +3,7 @@ import { BellRing, Send } from 'lucide-react';
 import { Button, Notice } from '../ui';
 import { pushApi } from '../../api/pushApi';
 import { pluralWith } from '../../utils/formatters';
-import { canOffer, enablePush, offerPush, subscribeDevice, usePush } from '../../hooks/usePush';
+import { canOffer, enablePush, offerPush, onIOS, subscribeDevice, usePush } from '../../hooks/usePush';
 
 export default function PushPanelAction() {
     const push = usePush();
@@ -33,6 +33,16 @@ export default function PushPanelAction() {
                     Прислать тестовое уведомление
                 </Button>
                 {result && <Notice tone={result.tone}>{result.text}</Notice>}
+            </div>
+        );
+    }
+
+    if (push.permission === 'denied') {
+        return (
+            <div className="nt-panel__push">
+                <Notice tone="warning">
+                    {onIOS() ? 'Уведомления запрещены. Включите их в «Настройках» iPhone: Уведомления → HorseBio.' : 'Уведомления запрещены в настройках браузера для этого сайта.'}
+                </Notice>
             </div>
         );
     }

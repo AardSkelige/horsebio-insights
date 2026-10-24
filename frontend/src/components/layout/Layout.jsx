@@ -154,8 +154,7 @@ const Layout = ({ children }) => {
         // страницах — и сайдбару со значками, и самим страницам разделов
         <NotificationsProvider>
         <div
-            className={leaving ? 'app-outro' : intro ? `app-intro${introFull() ? ' app-intro--full' : ''}${quickIntro ? ' app-intro--quick' : ''}` : undefined}
-            style={{ display: 'flex', height: '100vh', overflow: 'hidden', backgroundColor: 'var(--canvas)', isolation: 'isolate' }}
+            className={`app-shell${leaving ? ' app-outro' : intro ? ` app-intro${introFull() ? ' app-intro--full' : ''}${quickIntro ? ' app-intro--quick' : ''}` : ''}`}
         >
             {location.pathname === '/' && <div className="home-glow" aria-hidden="true" />}
 
@@ -187,7 +186,7 @@ const Layout = ({ children }) => {
             />
 
             {/* Scrollable content area */}
-            <div style={{ flex: 1, overflow: 'auto', minWidth: 0, display: 'flex', flexDirection: 'column' }}>
+            <div style={{ flex: 1, overflow: 'auto', overscrollBehaviorY: 'contain', minWidth: 0, display: 'flex', flexDirection: 'column' }}>
 
                 {/* Mobile top bar */}
                 {isMobile && (

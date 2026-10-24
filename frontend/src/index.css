@@ -270,6 +270,23 @@ button:active:not(:disabled):not(.no-tap-scale):not([style*="width: 100%"]):not(
   to { transform: rotate(360deg); }
 }
 
+.app-shell {
+  position: relative;
+  display: flex;
+  height: 100vh;
+  height: 100dvh;
+  overflow: hidden;
+  background-color: var(--canvas);
+  isolation: isolate;
+}
+
+@media (display-mode: standalone) {
+  html,
+  body {
+    overscroll-behavior: none;
+  }
+}
+
 .home-glow {
   position: absolute;
   inset: 0;

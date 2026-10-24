@@ -58,7 +58,10 @@ export const enablePush = async () => {
     const permission = await Notification.requestPermission();
     setState({ permission });
     if (permission === 'granted') await subscribeDevice();
+    return permission;
 };
+
+export const onIOS = () => isIOS();
 
 export const dismissPush = () => setState({ dismissed: true });
 
