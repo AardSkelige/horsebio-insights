@@ -23,8 +23,10 @@ export const NotificationsProvider = ({ children }) => {
 
     const [data, setData] = useState(EMPTY);
     const [loading, setLoading] = useState(false);
+    const [loaded, setLoaded] = useState(false);
     const [error, setError] = useState(null);
     const [panelOpen, setPanelOpen] = useState(false);
+    const [showRead, setShowRead] = useState(false);
     const loadedAtRef = useRef(0);
     const abortRef = useRef(null);
 
@@ -40,12 +42,14 @@ export const NotificationsProvider = ({ children }) => {
             );
             setData(result);
             setError(null);
+            setLoaded(true);
             loadedAtRef.current = Date.now();
         } catch (e) {
             if (e.name === 'AbortError') return;
             // Молчаливая ошибка: колокольчик — не главная задача экрана, поэтому
             // он показывает её у себя внутри и не мешает работать со страницей
             setError(e?.message || 'Не удалось загрузить уведомления');
+            setLoaded(true);
         } finally {
             if (!controller.signal.aborted) setLoading(false);
         }
@@ -98,21 +102,28 @@ export const NotificationsProvider = ({ children }) => {
         } catch { /* отметка не критична: вернётся при следующем опросе */ }
     }, []);
 
-    const openPanel = useCallback(() => setPanelOpen(true), []);
+    const openPanel = useCallback((options) => {
+        setShowRead(options?.showRead === true);
+        setPanelOpen(true);
+    }, []);
     const closePanel = useCallback(() => setPanelOpen(false), []);
 
     const value = useMemo(() => ({
         items: data.items || [],
         counts: data.counts || EMPTY.counts,
         bySource: data.by_source || {},
+        complete: data.complete !== false && !error,
+        loaded,
         loading,
         error,
         panelOpen,
+        showRead,
+        setShowRead,
         openPanel,
         closePanel,
         reload: load,
         setRead,
-    }), [data, loading, error, panelOpen, openPanel, closePanel, load, setRead]);
+    }), [data, loaded, loading, error, panelOpen, showRead, openPanel, closePanel, load, setRead]);
 
     return (
         <NotificationsContext.Provider value={value}>
@@ -132,9 +143,13 @@ NotificationsProvider.propTypes = { children: PropTypes.node.isRequired };
 export const useNotifications = () => useContext(NotificationsContext) || {
     ...EMPTY,
     bySource: {},
+    complete: true,
+    loaded: true,
     loading: false,
     error: null,
     panelOpen: false,
+    showRead: false,
+    setShowRead: () => {},
     openPanel: () => {},
     closePanel: () => {},
     reload: () => {},

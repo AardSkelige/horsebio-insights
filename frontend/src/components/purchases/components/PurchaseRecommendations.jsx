@@ -14,7 +14,7 @@ const CollapsibleSection = ({ title, hint, defaultOpen = false, children, badge 
                 style={{ width: '100%', display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '16px 20px', background: 'none', border: 'none', cursor: 'pointer', textAlign: 'left' }}
             >
                 <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-                    <span style={{ fontFamily: 'var(--serif)', fontSize: '18px', fontWeight: 400, color: 'var(--ink)' }}>{title}</span>
+                    <span style={{ fontFamily: 'var(--display)', fontSize: '18px', fontWeight: 400, color: 'var(--ink)' }}>{title}</span>
                     {badge && <span style={{ fontFamily: 'var(--sans)', fontSize: '12px', color: 'var(--muted)' }}>{badge}</span>}
                 </div>
                 <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexShrink: 0 }}>
@@ -52,7 +52,7 @@ DetailBlock.propTypes = { title: PropTypes.string.isRequired, content: PropTypes
 const SummaryPill = ({ label, value, uom, accent, note, hint }) => (
     <div style={{ backgroundColor: 'var(--surface-soft)', borderRadius: '8px', padding: '12px 14px', display: 'flex', flexDirection: 'column', gap: '4px' }}>
         <div style={{ fontFamily: 'var(--sans)', fontSize: '11px', fontWeight: 600, letterSpacing: '0.06em', textTransform: 'uppercase', color: accent || 'var(--muted)', display: 'flex', alignItems: 'center', gap: '6px' }}>{label}{hint && <Hint text={hint} />}</div>
-        <div style={{ fontFamily: 'var(--serif)', fontSize: '20px', color: 'var(--ink)', lineHeight: 1, fontVariantNumeric: 'lining-nums', fontFeatureSettings: '"lnum" 1' }}>
+        <div style={{ fontFamily: 'var(--display)', fontSize: '20px', color: 'var(--ink)', lineHeight: 1, fontVariantNumeric: 'lining-nums', fontFeatureSettings: '"lnum" 1' }}>
             {value}
             {uom && value !== '—' && <span style={{ fontFamily: 'var(--sans)', fontSize: '12px', color: 'var(--muted)', marginLeft: '4px' }}>{uom}</span>}
         </div>

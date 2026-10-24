@@ -124,7 +124,7 @@ const SupplierDetailsModal = ({ supplier, visible, onClose, startDate, endDate }
         <ModalShell open={visible} onClose={onClose} maxWidth={1080}>
                 {/* Header */}
                 <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', padding: '20px 24px 16px', borderBottom: '1px solid var(--hairline)', flexShrink: 0 }}>
-                    <h2 style={{ fontFamily: 'var(--serif)', fontSize: 22, fontWeight: 400, letterSpacing: '-0.02em', color: 'var(--ink)', margin: 0 }}>
+                    <h2 style={{ fontFamily: 'var(--display)', fontSize: 22, fontWeight: 400, letterSpacing: '-0.02em', color: 'var(--ink)', margin: 0 }}>
                         {supplier?.name}
                     </h2>
                     <CloseButton onClick={onClose} />
@@ -183,7 +183,7 @@ const SupplierDetailsModal = ({ supplier, visible, onClose, startDate, endDate }
                                         </thead>
                                         <tbody>
                                             {details.supply_history?.map((s, i) => (
-                                                <SupplyRow key={`${s.number || i}`} supply={s} />
+                                                <SupplyRow key={s.id ?? i} supply={s} />
                                             ))}
                                             {!details.supply_history?.length && (
                                                 <tr><td colSpan={5} style={{ fontFamily: 'var(--sans)', fontSize: 12, color: 'var(--muted)', textAlign: 'center', padding: '20px 0' }}>Нет данных</td></tr>

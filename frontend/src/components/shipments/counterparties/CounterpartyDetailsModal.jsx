@@ -142,7 +142,7 @@ const CounterpartyDetailsModal = ({ counterparty, visible, onClose, dateRange })
                 {/* Header */}
                 <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', padding: '20px 24px 16px', borderBottom: '1px solid var(--hairline)', flexShrink: 0 }}>
                     <div>
-                        <h2 style={{ fontFamily: 'var(--serif)', fontSize: 24, fontWeight: 400, letterSpacing: '-0.02em', color: 'var(--ink)', margin: 0 }}>
+                        <h2 style={{ fontFamily: 'var(--display)', fontSize: 24, fontWeight: 400, letterSpacing: '-0.02em', color: 'var(--ink)', margin: 0 }}>
                             {counterparty?.name}
                         </h2>
                         <p style={{ fontFamily: 'var(--sans)', fontSize: 12, color: 'var(--muted)', margin: '4px 0 0' }}>Детальная статистика контрагента</p>

@@ -85,7 +85,7 @@ const MaterialSupplyDetailsModal = ({ material, visible, onClose, dateRange }) =
                 {/* Header */}
                 <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', padding: '20px 24px 16px', borderBottom: '1px solid var(--hairline)', flexShrink: 0 }}>
                     <div style={{ display: 'flex', alignItems: 'baseline', gap: 10, minWidth: 0 }}>
-                        <h2 style={{ fontFamily: 'var(--serif)', fontSize: 22, fontWeight: 400, letterSpacing: '-0.02em', color: 'var(--ink)', margin: 0 }}>
+                        <h2 style={{ fontFamily: 'var(--display)', fontSize: 22, fontWeight: 400, letterSpacing: '-0.02em', color: 'var(--ink)', margin: 0 }}>
                             {loading || !details ? (material?.name || 'Детали') : details.material.name}
                         </h2>
                         {!loading && details?.material?.code && (

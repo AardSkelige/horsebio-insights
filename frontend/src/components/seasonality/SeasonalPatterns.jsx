@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import PropTypes from 'prop-types';
 import { TrendingUp, TrendingDown, AlertTriangle } from 'lucide-react';
+import { Pagination } from '../ui';
 
 const MONTHS = ['Янв', 'Фев', 'Мар', 'Апр', 'Май', 'Июн', 'Июл', 'Авг', 'Сен', 'Окт', 'Ноя', 'Дек'];
 
@@ -35,7 +36,6 @@ const tdBase = { fontFamily: 'var(--sans)', fontSize: '12px', color: 'var(--body
 export const SeasonalPatterns = ({ data, onProductSelect }) => {
     const [page, setPage] = useState(1);
     const products = data?.products || [];
-    const totalPages = Math.max(1, Math.ceil(products.length / PAGE_SIZE));
     const paginated = products.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
 
     return (
@@ -88,24 +88,10 @@ export const SeasonalPatterns = ({ data, onProductSelect }) => {
                 </table>
             </div>
 
-            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '8px' }}>
-                <span style={{ fontFamily: 'var(--sans)', fontSize: '12px', color: 'var(--muted)' }}>
-                    Всего {products.length} продуктов · нажмите строку для детального анализа
-                </span>
-                {totalPages > 1 && (
-                    <div style={{ display: 'flex', gap: '4px' }}>
-                        {[...Array(totalPages)].map((_, i) => (
-                            <button
-                                key={i}
-                                onClick={() => setPage(i + 1)}
-                                style={{ fontFamily: 'var(--sans)', fontSize: '12px', padding: '4px 10px', borderRadius: '6px', border: `1px solid ${page === i + 1 ? 'var(--primary)' : 'var(--hairline)'}`, backgroundColor: page === i + 1 ? 'var(--primary)' : 'var(--canvas)', color: page === i + 1 ? 'var(--on-primary)' : 'var(--body)', cursor: 'pointer' }}
-                            >
-                                {i + 1}
-                            </button>
-                        ))}
-                    </div>
-                )}
-            </div>
+            <Pagination pagination={{ current: page, pageSize: PAGE_SIZE, total: products.length }} onPageChange={setPage} />
+            <span style={{ fontFamily: 'var(--sans)', fontSize: '12px', color: 'var(--muted)' }}>
+                Нажмите строку для детального анализа
+            </span>
         </div>
     );
 };

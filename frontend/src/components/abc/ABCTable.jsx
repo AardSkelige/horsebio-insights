@@ -2,6 +2,7 @@ import { useState, useMemo } from 'react';
 import PropTypes from 'prop-types';
 import { ChevronUp, ChevronDown, ChevronsUpDown } from 'lucide-react';
 import { formatNumber, formatCurrency } from '../../utils/formatters';
+import { Pagination } from '../ui';
 
 const COLORS = {
     A: { color: 'var(--primary-active)', bg: 'var(--accent-bg)',  border: 'var(--accent-border)'  },
@@ -58,7 +59,6 @@ export const ABCTable = ({ data }) => {
         return sortDir === 'asc' ? av - bv : bv - av;
     }), [filtered, sortKey, sortDir]);
 
-    const totalPages = Math.max(1, Math.ceil(sorted.length / PAGE_SIZE));
     const paginated  = sorted.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
 
     const handleSort = (key) => {
@@ -137,26 +137,7 @@ export const ABCTable = ({ data }) => {
                 </table>
             </div>
 
-            {/* Pagination */}
-            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '8px' }}>
-                <span style={{ fontFamily: 'var(--sans)', fontSize: '12px', color: 'var(--muted)' }}>
-                    Всего {sorted.length} записей
-                </span>
-                {totalPages > 1 && (
-                    <div style={{ display: 'flex', gap: '4px' }}>
-                        <button onClick={() => setPage(p => Math.max(1, p - 1))} disabled={page === 1} style={{ fontFamily: 'var(--sans)', fontSize: '12px', padding: '4px 10px', borderRadius: '6px', border: '1px solid var(--hairline)', backgroundColor: 'var(--canvas)', color: 'var(--body)', cursor: page === 1 ? 'not-allowed' : 'pointer', opacity: page === 1 ? 0.4 : 1 }}>←</button>
-                        {Array.from({ length: totalPages }, (_, i) => i + 1)
-                            .filter(p => p === 1 || p === totalPages || Math.abs(p - page) <= 1)
-                            .reduce((acc, p, i, arr) => { if (i > 0 && arr[i - 1] !== p - 1) acc.push('…'); acc.push(p); return acc; }, [])
-                            .map((p, i) => p === '…'
-                                ? <span key={`e${i}`} style={{ fontFamily: 'var(--sans)', fontSize: '12px', padding: '4px 6px', color: 'var(--muted)' }}>…</span>
-                                : <button key={p} onClick={() => setPage(p)} style={{ fontFamily: 'var(--sans)', fontSize: '12px', padding: '4px 10px', borderRadius: '6px', border: `1px solid ${p === page ? 'var(--primary)' : 'var(--hairline)'}`, backgroundColor: p === page ? 'var(--primary)' : 'var(--canvas)', color: p === page ? 'var(--on-primary)' : 'var(--body)', cursor: 'pointer' }}>{p}</button>
-                            )
-                        }
-                        <button onClick={() => setPage(p => Math.min(totalPages, p + 1))} disabled={page === totalPages} style={{ fontFamily: 'var(--sans)', fontSize: '12px', padding: '4px 10px', borderRadius: '6px', border: '1px solid var(--hairline)', backgroundColor: 'var(--canvas)', color: 'var(--body)', cursor: page === totalPages ? 'not-allowed' : 'pointer', opacity: page === totalPages ? 0.4 : 1 }}>→</button>
-                    </div>
-                )}
-            </div>
+            <Pagination pagination={{ current: page, pageSize: PAGE_SIZE, total: sorted.length }} onPageChange={setPage} />
         </div>
     );
 };

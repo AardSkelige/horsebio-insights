@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { num } from '../../../../utils/formatters';
 import PropTypes from 'prop-types';
-import { m } from 'motion/react';
+import { Segmented } from '../../../ui';
 import { ChevronRight } from 'lucide-react';
 
 
@@ -72,22 +72,13 @@ const MaterialsSection = ({ categories }) => {
 
     return (
         <div>
-            {/* Tabs */}
-            <div style={{ display: 'flex', gap: 4, marginBottom: 12, flexWrap: 'wrap' }}>
-                {tabs.map(tab => (
-                    <button key={tab.key} onClick={() => setActiveTab(tab.key)}
-                        style={{ position: 'relative', fontFamily: 'var(--sans)', fontSize: 12, fontWeight: 500, padding: '5px 12px', borderRadius: 6, border: tab.key === activeTab ? '1px solid transparent' : '1px solid var(--hairline)', background: 'transparent', color: tab.key === activeTab ? 'var(--on-primary)' : 'var(--body)', cursor: 'pointer', transition: 'color 150ms ease' }}>
-                        {tab.key === activeTab && (
-                            <m.span
-                                layoutId="materials-tabs-pill"
-                                transition={{ type: 'spring', stiffness: 500, damping: 40 }}
-                                style={{ position: 'absolute', inset: -1, borderRadius: 6, background: 'var(--primary)' }}
-                            />
-                        )}
-                        <span style={{ position: 'relative' }}>{tab.label}</span>
-                    </button>
-                ))}
-            </div>
+            <Segmented
+                options={tabs.map((tab) => ({ value: tab.key, label: tab.label }))}
+                value={activeTab}
+                onChange={setActiveTab}
+                layoutId="materials-tabs-pill"
+                style={{ marginBottom: 'var(--space-3)' }}
+            />
 
             {/* Table */}
             <div style={{ maxHeight: 400, overflowY: 'auto', border: '1px solid var(--hairline)', borderRadius: 8 }}>

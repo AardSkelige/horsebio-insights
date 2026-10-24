@@ -288,10 +288,8 @@ class DocumentChecksMixin:
     def check_inventory_prices(self):
         """Проверить цены в позициях инвентаризаций за последний месяц.
 
-        Окно нарочно короче, чем doc_months: цена в документе сравнивается с FIFO
-        «на сегодня», и для старых документов FIFO успевает законно измениться
-        (распродажа старых партий) — получаются ложные тревоги задним числом.
-        У свежего документа FIFO на дату создания ≈ FIFO сейчас, сравнение честное.
+        Цена сравнивается с FIFO за секунду до инвентаризации: новая партия законно сдвигает FIFO, и сравнение с сегодняшним давало ложные тревоги (№00071 и №00072 от 29.09.2026).
+        Если FIFO на ту дату нет, потому что остаток был нулевой, сравниваем с сегодняшним.
 
         Оцениваем только позиции с correctionAmount > 0. Сама инвентаризация склад
         не двигает — движение делают связанные оприходование (излишки) и списание
@@ -367,12 +365,12 @@ class DocumentChecksMixin:
                 zero_positions = []
                 deviation_positions = []
 
-                for pos in positions:
-                    # Цена идёт в учёт только у излишка (через оприходование). Позиция
-                    # без коррекции никуда не попадает, недостачу списание оценит по FIFO.
-                    if (pos.get("correctionAmount") or 0) <= 0:
-                        continue
+                # Цена идёт в учёт только у излишка (через оприходование). Позиция
+                # без коррекции никуда не попадает, недостачу списание оценит по FIFO.
+                surplus = [p for p in positions if (p.get("correctionAmount") or 0) > 0]
+                price_on_date = self._fifo_on_date(doc.get("moment", ""), surplus) if surplus else {}
 
+                for pos in surplus:
                     price = pos.get("price", 0) or 0
                     assortment = pos.get("assortment", {})
                     product_name = assortment.get("name", "?")
@@ -383,8 +381,8 @@ class DocumentChecksMixin:
                         zero_positions.append(product_name)
                         continue
 
-                    if pid and pid in stock_price_by_id:
-                        avg = stock_price_by_id[pid]
+                    avg = price_on_date.get(pid) or stock_price_by_id.get(pid)
+                    if avg:
                         deviation = abs(price - avg) / avg * 100
                         if deviation > 30:
                             deviation_positions.append({
@@ -420,6 +418,36 @@ class DocumentChecksMixin:
             print(f"  ❌ Ошибка: {e}")
 
         print()
+
+    def _fifo_on_date(self, moment, positions):
+        import time
+
+        ids = []
+        for pos in positions:
+            href = pos.get("assortment", {}).get("meta", {}).get("href", "")
+            if "/entity/product/" in href:
+                ids.append(href.split("/")[-1].split("?")[0])
+        if not ids or not moment:
+            return {}
+
+        before = (datetime.strptime(moment[:19], '%Y-%m-%d %H:%M:%S') - timedelta(seconds=1)).strftime('%Y-%m-%d %H:%M:%S')
+        prices = {}
+        for start in range(0, len(ids), 40):
+            filters = [f"moment={before}"] + [
+                f"product=https://api.moysklad.ru/api/remap/1.2/entity/product/{pid}" for pid in ids[start:start + 40]
+            ]
+            time.sleep(0.2)
+            try:
+                rows = self.h._get("/report/stock/all", {"filter": ";".join(filters), "limit": 1000}).get("rows", [])
+            except Exception as e:
+                print(f"  FIFO на {before} не получен, сравниваю с сегодняшним: {e}")
+                continue
+            for row in rows:
+                pid = row.get("meta", {}).get("href", "").split("/")[-1].split("?")[0]
+                price = round(row.get("price", 0) or 0)
+                if price > 0:
+                    prices[pid] = price
+        return prices
 
     def check_suspect_moves(self):
         """Найти перемещения с нарушениями за последние N месяцев.

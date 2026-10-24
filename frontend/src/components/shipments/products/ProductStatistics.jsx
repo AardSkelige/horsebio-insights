@@ -45,7 +45,7 @@ const ProductStatistics = ({ stats }) => {
                 maxValue={byQty[0]?._val}
                 renderItem={(item) => (
                     <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-                        <span style={{ fontFamily: 'var(--serif)', fontSize: 16, fontWeight: 400, color: 'var(--ink)', fontVariantNumeric: 'lining-nums', fontFeatureSettings: '"lnum" 1' }}>{num(item.quantity)} шт.</span>
+                        <span style={{ fontFamily: 'var(--display)', fontSize: 16, fontWeight: 400, color: 'var(--ink)', fontVariantNumeric: 'lining-nums', fontFeatureSettings: '"lnum" 1' }}>{num(item.quantity)} шт.</span>
                         <span style={{ fontFamily: 'var(--sans)', fontSize: 11, color: 'var(--muted)', alignSelf: 'flex-end' }}>{item.shipments_count} отгрузок</span>
                     </div>
                 )}
@@ -56,7 +56,7 @@ const ProductStatistics = ({ stats }) => {
                 maxValue={byRev[0]?._val}
                 renderItem={(item) => (
                     <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-                        <span style={{ fontFamily: 'var(--serif)', fontSize: 16, fontWeight: 400, color: 'var(--ink)', fontVariantNumeric: 'lining-nums', fontFeatureSettings: '"lnum" 1' }}>{money(item.revenue)}</span>
+                        <span style={{ fontFamily: 'var(--display)', fontSize: 16, fontWeight: 400, color: 'var(--ink)', fontVariantNumeric: 'lining-nums', fontFeatureSettings: '"lnum" 1' }}>{money(item.revenue)}</span>
                         <span style={{ fontFamily: 'var(--sans)', fontSize: 11, color: 'var(--muted)', alignSelf: 'flex-end' }}>{num(item.price_per_unit)} ₽/шт.</span>
                     </div>
                 )}
@@ -66,7 +66,7 @@ const ProductStatistics = ({ stats }) => {
                 items={byAvg}
                 maxValue={byAvg[0]?._val}
                 renderItem={(item) => (
-                    <span style={{ fontFamily: 'var(--serif)', fontSize: 16, fontWeight: 400, color: 'var(--ink)', fontVariantNumeric: 'lining-nums', fontFeatureSettings: '"lnum" 1' }}>{item.average_quantity} шт.</span>
+                    <span style={{ fontFamily: 'var(--display)', fontSize: 16, fontWeight: 400, color: 'var(--ink)', fontVariantNumeric: 'lining-nums', fontFeatureSettings: '"lnum" 1' }}>{item.average_quantity} шт.</span>
                 )}
             />
         </StatGrid>

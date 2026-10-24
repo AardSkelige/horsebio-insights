@@ -54,7 +54,7 @@ function mpRows(list) {
 }
 
 const numStyle = (color, size = 26) => ({
-    fontFamily: 'var(--serif)', fontSize: size, fontWeight: 400, letterSpacing: '-0.02em',
+    fontFamily: 'var(--display)', fontSize: size, fontWeight: 400, letterSpacing: '-0.02em',
     lineHeight: 1.15, color, fontVariantNumeric: 'lining-nums', fontFeatureSettings: '"lnum" 1',
 });
 
@@ -132,7 +132,7 @@ function AgeStrip({ items, warnDays }) {
                             <span style={{
                                 position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center',
                                 fontSize: 11.5, fontWeight: 700, whiteSpace: 'nowrap', overflow: 'hidden',
-                                color: b.darkText ? 'var(--cat-clay-ink)' : 'var(--on-primary)',
+                                color: b.darkText ? 'var(--cat-clay-ink)' : 'var(--on-fill)',
                                 textShadow: b.darkText ? 'none' : 'var(--shadow-card)',
                             }}>{fmtRub(b.sum)}</span>
                         )}
@@ -283,7 +283,7 @@ export default function PendingReturnsDetail({ onBack }) {
             <div style={{ display: 'flex', alignItems: 'flex-start', gap: 12, marginBottom: 4 }}>
                 <PackageOpen size={20} style={{ color: 'var(--muted)', flexShrink: 0, marginTop: 4 }} />
                 <div style={{ minWidth: 0, flex: 1 }}>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: 9, flexWrap: 'wrap', fontFamily: 'var(--serif)', fontSize: 24, fontWeight: 600, color: 'var(--ink)', lineHeight: 1.15 }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 9, flexWrap: 'wrap', fontFamily: 'var(--display)', fontSize: 24, fontWeight: 600, color: 'var(--ink)', lineHeight: 1.15 }}>
                         Что разобрать из возвратов
                         <InfoTip text={PENDING_RETURNS_HINT} width={320} />
                     </div>

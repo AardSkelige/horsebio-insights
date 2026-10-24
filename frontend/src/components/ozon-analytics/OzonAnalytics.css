@@ -19,7 +19,7 @@
 
 .ozon-section__heading h2 {
   color: var(--ink);
-  font-family: var(--serif);
+  font-family: var(--display);
   font-size: 24px;
   font-weight: 400;
   letter-spacing: -0.02em;

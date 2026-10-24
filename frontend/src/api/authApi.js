@@ -13,9 +13,6 @@ export const authApi = {
     home: (signal) =>
         api.get('/auth/home/', { signal }),
 
-    updateHome: (pinnedPaths) =>
-        api.patch('/auth/home/', { pinnedPaths }),
-
     login: async (username, password) => {
         const csrfData = await parserAPI.getCsrfToken();
         const formData = new FormData();

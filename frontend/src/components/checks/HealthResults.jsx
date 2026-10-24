@@ -46,9 +46,9 @@ const RECENT_CHANGES_HINT =
     + '«тогда-то робот это увидел». Со временем (когда пройдёт две недели с того прогона) запись '
     + 'сама пропадёт из списка.';
 
-// Цифры — по дизайн-системе: сериф (Cormorant) weight 400, отрицательный трекинг, lining-nums
+// Цифры — по дизайн-системе: шрифт заголовков weight 400, отрицательный трекинг, lining-nums
 const numStyle = (color, size = 28) => ({
-    fontFamily: 'var(--serif)', fontSize: size, fontWeight: 400, letterSpacing: '-0.02em',
+    fontFamily: 'var(--display)', fontSize: size, fontWeight: 400, letterSpacing: '-0.02em',
     lineHeight: 1.15, color, fontVariantNumeric: 'lining-nums', fontFeatureSettings: '"lnum" 1',
 });
 const statLabelStyle = {

@@ -1,7 +1,8 @@
 import { useState, useCallback, useRef, useEffect, Fragment } from 'react';
+import { createPortal } from 'react-dom';
 import PropTypes from 'prop-types';
 import { Factory, Trash2, Calculator, Download, Loader2, ChevronDown, ChevronUp, FileSpreadsheet } from 'lucide-react';
-import { Button, Page, PageHeader, SearchInput, SectionLabel, Segmented } from '../ui';
+import { Button, Notice, Page, PageHeader, SearchInput, SectionLabel, Segmented } from '../ui';
 import { FadeRise } from '../ui/motion';
 import { productionApi } from '../../api/productionApi';
 
@@ -211,277 +212,277 @@ const ProductionCalculator = () => {
         return next;
     });
 
-    const noticeColors = { error: 'var(--error-ink)', success: 'var(--success-ink)', warning: 'var(--warning)', loading: 'var(--surface-dark)' };
 
     return (
-        <Page>
-            <PageHeader
-                title="Расчёт производства"
-                subtitle="Материалы для производства товаров по техкартам"
-                actions={result && (
-                    <>
-                        <Button variant="soft" onClick={handleClear}>Очистить всё</Button>
-                        <Button variant="primary" icon={Download} loading={exporting} onClick={handleExport}>
-                            {exporting ? 'Экспорт...' : 'Экспорт'}
-                        </Button>
-                    </>
-                )}
-            />
-
-            {/* Input section */}
-            <section>
-                <SectionLabel>Ввод данных</SectionLabel>
-
-                {/* Вкладки — общий переключатель, как на остальных экранах */}
-                <Segmented
-                    layoutId="production-tabs"
-                    value={activeTab}
-                    onChange={setActiveTab}
-                    options={[
-                        { value: 'manual', label: 'Ручной ввод' },
-                        { value: 'upload', label: 'Загрузить Excel' },
-                    ]}
+        <>
+            <Page>
+                <PageHeader
+                    title="Расчёт производства"
+                    subtitle="Материалы для производства товаров по техкартам"
+                    actions={result && (
+                        <>
+                            <Button variant="soft" onClick={handleClear}>Очистить всё</Button>
+                            <Button variant="primary" icon={Download} loading={exporting} onClick={handleExport}>
+                                {exporting ? 'Экспорт...' : 'Экспорт'}
+                            </Button>
+                        </>
+                    )}
                 />
 
-                {/* Manual input */}
-                {activeTab === 'manual' && (
-                    <FadeRise style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
-                        <div ref={searchContainerRef} style={{ position: 'relative', display: 'flex' }}>
-                            <SearchInput
-                                value={searchValue}
-                                onChange={(v) => { setSearchValue(v); searchProducts(v); }}
-                                placeholder="Поиск по артикулу или названию..."
-                                onFocus={() => { if (searchResults.length > 0) setShowDropdown(true); }}
-                            />
-                            {searchLoading && <Loader2 style={{ position: 'absolute', right: '12px', top: '50%', transform: 'translateY(-50%)', width: 14, height: 14, color: 'var(--muted)' }} className="animate-spin" />}
+                {/* Input section */}
+                <section>
+                    <SectionLabel>Ввод данных</SectionLabel>
 
-                            {showDropdown && searchResults.length > 0 && (
-                                <div style={{ position: 'absolute', top: '100%', left: 0, right: 0, zIndex: 50, backgroundColor: 'var(--canvas)', border: '1px solid var(--hairline)', borderRadius: '8px', marginTop: '4px', boxShadow: 'var(--shadow-soft)', overflow: 'hidden' }}>
-                                    {searchResults.map(product => (
-                                        <div
-                                            key={product.article}
-                                            onMouseDown={() => handleAddProduct(product)}
-                                            style={{ padding: '10px 14px', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '12px', borderBottom: '1px solid var(--hairline)', transition: 'background-color 100ms' }}
-                                            onMouseEnter={e => e.currentTarget.style.backgroundColor = 'var(--surface-card)'}
-                                            onMouseLeave={e => e.currentTarget.style.backgroundColor = 'transparent'}
-                                        >
-                                            <div style={{ overflow: 'hidden', flex: 1, display: 'flex', gap: '8px', alignItems: 'baseline', minWidth: 0 }}>
-                                                <span style={{ fontFamily: 'var(--mono)', fontSize: '12px', fontWeight: 500, color: 'var(--ink)', flexShrink: 0 }}>{product.article}</span>
-                                                <span style={{ fontFamily: 'var(--sans)', fontSize: '12px', color: 'var(--muted)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{product.name}</span>
+                    {/* Вкладки — общий переключатель, как на остальных экранах */}
+                    <Segmented
+                        layoutId="production-tabs"
+                        value={activeTab}
+                        onChange={setActiveTab}
+                        options={[
+                            { value: 'manual', label: 'Ручной ввод' },
+                            { value: 'upload', label: 'Загрузить Excel' },
+                        ]}
+                    />
+
+                    {/* Manual input */}
+                    {activeTab === 'manual' && (
+                        <FadeRise style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+                            <div ref={searchContainerRef} style={{ position: 'relative', display: 'flex' }}>
+                                <SearchInput
+                                    value={searchValue}
+                                    onChange={(v) => { setSearchValue(v); searchProducts(v); }}
+                                    placeholder="Поиск по артикулу или названию..."
+                                    onFocus={() => { if (searchResults.length > 0) setShowDropdown(true); }}
+                                />
+                                {searchLoading && <Loader2 style={{ position: 'absolute', right: '12px', top: '50%', transform: 'translateY(-50%)', width: 14, height: 14, color: 'var(--muted)' }} className="animate-spin" />}
+
+                                {showDropdown && searchResults.length > 0 && (
+                                    <div style={{ position: 'absolute', top: '100%', left: 0, right: 0, zIndex: 50, backgroundColor: 'var(--canvas)', border: '1px solid var(--hairline)', borderRadius: '8px', marginTop: '4px', boxShadow: 'var(--shadow-soft)', overflow: 'hidden' }}>
+                                        {searchResults.map(product => (
+                                            <div
+                                                key={product.article}
+                                                onMouseDown={() => handleAddProduct(product)}
+                                                style={{ padding: '10px 14px', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '12px', borderBottom: '1px solid var(--hairline)', transition: 'background-color 100ms' }}
+                                                onMouseEnter={e => e.currentTarget.style.backgroundColor = 'var(--surface-card)'}
+                                                onMouseLeave={e => e.currentTarget.style.backgroundColor = 'transparent'}
+                                            >
+                                                <div style={{ overflow: 'hidden', flex: 1, display: 'flex', gap: '8px', alignItems: 'baseline', minWidth: 0 }}>
+                                                    <span style={{ fontFamily: 'var(--mono)', fontSize: '12px', fontWeight: 500, color: 'var(--ink)', flexShrink: 0 }}>{product.article}</span>
+                                                    <span style={{ fontFamily: 'var(--sans)', fontSize: '12px', color: 'var(--muted)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{product.name}</span>
+                                                </div>
+                                                <TechCardBadge has={product.has_processing_plan} />
                                             </div>
-                                            <TechCardBadge has={product.has_processing_plan} />
-                                        </div>
-                                    ))}
+                                        ))}
+                                    </div>
+                                )}
+                            </div>
+
+                            {manualItems.length > 0 ? (
+                                <>
+                                    <div style={{ overflowX: 'auto' }}>
+                                        <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+                                            <thead>
+                                                <tr>
+                                                    <th style={{ ...thStyle, width: 120 }}>Артикул</th>
+                                                    <th style={thStyle}>Наименование</th>
+                                                    <th style={{ ...thStyle, width: 100 }}>Техкарта</th>
+                                                    <th style={{ ...thStyle, width: 120, textAlign: 'right' }}>Количество</th>
+                                                    <th style={{ ...thStyle, width: 48 }}></th>
+                                                </tr>
+                                            </thead>
+                                            <tbody>
+                                                {manualItems.map(item => (
+                                                    <tr key={item.article} style={{ borderBottom: '1px solid var(--hairline)' }}
+                                                        onMouseEnter={e => e.currentTarget.style.backgroundColor = 'var(--surface-card)'}
+                                                        onMouseLeave={e => e.currentTarget.style.backgroundColor = 'transparent'}
+                                                    >
+                                                        <td style={{ padding: '9px 12px', fontFamily: 'var(--mono)', fontSize: '12px', color: 'var(--muted)' }}>{item.article}</td>
+                                                        <td style={{ padding: '9px 12px', fontFamily: 'var(--sans)', fontSize: '13px', color: 'var(--ink)' }}>{item.name}</td>
+                                                        <td style={{ padding: '9px 12px' }}><TechCardBadge has={item.has_processing_plan} /></td>
+                                                        <td style={{ padding: '9px 12px', textAlign: 'right' }}>
+                                                            <input
+                                                                type="number"
+                                                                min={1}
+                                                                value={item.quantity}
+                                                                onChange={e => handleQuantityChange(item.article, e.target.value)}
+                                                                style={{ width: '80px', textAlign: 'right', padding: '5px 8px', fontFamily: 'var(--mono)', fontSize: '12px', color: 'var(--ink)', backgroundColor: 'var(--canvas)', border: '1px solid var(--hairline)', borderRadius: '6px', outline: 'none' }}
+                                                                onFocus={e => e.target.style.borderColor = 'var(--primary)'}
+                                                                onBlur={e => e.target.style.borderColor = 'var(--hairline)'}
+                                                            />
+                                                        </td>
+                                                        <td style={{ padding: '9px 12px', textAlign: 'right' }}>
+                                                            <button
+                                                                onClick={() => handleRemoveProduct(item.article)}
+                                                                style={{ background: 'none', border: 'none', cursor: 'pointer', padding: '4px', color: 'var(--muted)', display: 'flex', alignItems: 'center', transition: 'color 150ms' }}
+                                                                onMouseEnter={e => e.currentTarget.style.color = 'var(--error-ink)'}
+                                                                onMouseLeave={e => e.currentTarget.style.color = 'var(--muted)'}
+                                                            >
+                                                                <Trash2 style={{ width: 14, height: 14 }} />
+                                                            </button>
+                                                        </td>
+                                                    </tr>
+                                                ))}
+                                            </tbody>
+                                        </table>
+                                    </div>
+                                    <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
+                                        <Button variant="primary" icon={Calculator} loading={calculating} onClick={handleCalculateManual}>
+                                            {calculating ? 'Расчёт...' : 'Рассчитать компоненты'}
+                                        </Button>
+                                    </div>
+                                </>
+                            ) : (
+                                <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', padding: '48px 0', gap: '8px' }}>
+                                    <Factory style={{ width: 32, height: 32, color: 'var(--hairline)' }} />
+                                    <p style={{ fontFamily: 'var(--sans)', fontSize: '13px', color: 'var(--muted)', margin: 0 }}>Добавьте товары для расчёта</p>
                                 </div>
                             )}
-                        </div>
+                        </FadeRise>
+                    )}
 
-                        {manualItems.length > 0 ? (
-                            <>
+                    {/* File upload */}
+                    {activeTab === 'upload' && (
+                        <FadeRise>
+                            <input ref={fileInputRef} type="file" accept=".xlsx,.xls" onChange={handleFileInputChange} style={{ display: 'none' }} />
+                            <div
+                                onClick={() => !calculating && fileInputRef.current?.click()}
+                                onDragOver={e => { e.preventDefault(); setDragOver(true); }}
+                                onDragLeave={() => setDragOver(false)}
+                                onDrop={handleDrop}
+                                style={{
+                                    border: `2px dashed ${dragOver ? 'var(--primary)' : 'var(--hairline)'}`,
+                                    borderRadius: '12px', padding: '48px 24px',
+                                    display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '12px',
+                                    cursor: calculating ? 'default' : 'pointer',
+                                    backgroundColor: dragOver ? 'var(--accent-wash)' : 'transparent',
+                                    transition: 'border-color 150ms, background-color 150ms',
+                                    userSelect: 'none',
+                                }}
+                            >
+                                {calculating
+                                    ? <Loader2 style={{ width: 32, height: 32, color: 'var(--primary)' }} className="animate-spin" />
+                                    : <FileSpreadsheet style={{ width: 32, height: 32, color: dragOver ? 'var(--primary)' : 'var(--muted)' }} />
+                                }
+                                <p style={{ fontFamily: 'var(--sans)', fontSize: '14px', fontWeight: 500, color: 'var(--ink)', margin: 0 }}>
+                                    {calculating ? 'Обработка файла...' : 'Перетащите Excel файл или нажмите для выбора'}
+                                </p>
+                                <p style={{ fontFamily: 'var(--sans)', fontSize: '12px', color: 'var(--muted)', margin: 0, textAlign: 'center' }}>
+                                    Файл должен содержать колонки: Артикул, Наименование, Количество
+                                </p>
+                            </div>
+                        </FadeRise>
+                    )}
+                </section>
+
+                {/* Results */}
+                {result && (
+                    <>
+                        {result.components_summary?.length > 0 && (
+                            <section>
+                                <SectionLabel>Сводка компонентов ({result.components_summary.length})</SectionLabel>
                                 <div style={{ overflowX: 'auto' }}>
                                     <table style={{ width: '100%', borderCollapse: 'collapse' }}>
                                         <thead>
                                             <tr>
-                                                <th style={{ ...thStyle, width: 120 }}>Артикул</th>
-                                                <th style={thStyle}>Наименование</th>
-                                                <th style={{ ...thStyle, width: 100 }}>Техкарта</th>
-                                                <th style={{ ...thStyle, width: 120, textAlign: 'right' }}>Количество</th>
-                                                <th style={{ ...thStyle, width: 48 }}></th>
+                                                <th style={{ ...thStyle, width: 40 }}>№</th>
+                                                <th style={thStyle}>Материал</th>
+                                                <th style={{ ...thStyle, width: 80 }}>Ед.изм.</th>
+                                                <th style={{ ...thStyle, width: 140, textAlign: 'right' }}>Количество</th>
                                             </tr>
                                         </thead>
                                         <tbody>
-                                            {manualItems.map(item => (
-                                                <tr key={item.article} style={{ borderBottom: '1px solid var(--hairline)' }}
+                                            {result.components_summary.map((c, i) => (
+                                                <tr key={c.material_id} style={{ borderBottom: '1px solid var(--hairline)' }}
                                                     onMouseEnter={e => e.currentTarget.style.backgroundColor = 'var(--surface-card)'}
                                                     onMouseLeave={e => e.currentTarget.style.backgroundColor = 'transparent'}
                                                 >
-                                                    <td style={{ padding: '9px 12px', fontFamily: 'var(--mono)', fontSize: '12px', color: 'var(--muted)' }}>{item.article}</td>
-                                                    <td style={{ padding: '9px 12px', fontFamily: 'var(--sans)', fontSize: '13px', color: 'var(--ink)' }}>{item.name}</td>
-                                                    <td style={{ padding: '9px 12px' }}><TechCardBadge has={item.has_processing_plan} /></td>
-                                                    <td style={{ padding: '9px 12px', textAlign: 'right' }}>
-                                                        <input
-                                                            type="number"
-                                                            min={1}
-                                                            value={item.quantity}
-                                                            onChange={e => handleQuantityChange(item.article, e.target.value)}
-                                                            style={{ width: '80px', textAlign: 'right', padding: '5px 8px', fontFamily: 'var(--mono)', fontSize: '12px', color: 'var(--ink)', backgroundColor: 'var(--canvas)', border: '1px solid var(--hairline)', borderRadius: '6px', outline: 'none' }}
-                                                            onFocus={e => e.target.style.borderColor = 'var(--primary)'}
-                                                            onBlur={e => e.target.style.borderColor = 'var(--hairline)'}
-                                                        />
-                                                    </td>
-                                                    <td style={{ padding: '9px 12px', textAlign: 'right' }}>
-                                                        <button
-                                                            onClick={() => handleRemoveProduct(item.article)}
-                                                            style={{ background: 'none', border: 'none', cursor: 'pointer', padding: '4px', color: 'var(--muted)', display: 'flex', alignItems: 'center', transition: 'color 150ms' }}
-                                                            onMouseEnter={e => e.currentTarget.style.color = 'var(--error-ink)'}
-                                                            onMouseLeave={e => e.currentTarget.style.color = 'var(--muted)'}
-                                                        >
-                                                            <Trash2 style={{ width: 14, height: 14 }} />
-                                                        </button>
+                                                    <td style={{ padding: '9px 12px', fontFamily: 'var(--mono)', fontSize: '12px', color: 'var(--muted-soft)' }}>{i + 1}</td>
+                                                    <td style={{ padding: '9px 12px', fontFamily: 'var(--sans)', fontSize: '13px', color: 'var(--ink)' }}>{c.material_name}</td>
+                                                    <td style={{ padding: '9px 12px', fontFamily: 'var(--mono)', fontSize: '12px', color: 'var(--muted)' }}>{c.uom}</td>
+                                                    <td style={{ padding: '9px 12px', fontFamily: 'var(--mono)', fontSize: '12px', color: 'var(--ink)', textAlign: 'right' }}>
+                                                        {c.total_quantity?.toLocaleString('ru-RU', { maximumFractionDigits: 2 })}
                                                     </td>
                                                 </tr>
                                             ))}
                                         </tbody>
                                     </table>
                                 </div>
-                                <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
-                                    <Button variant="primary" icon={Calculator} loading={calculating} onClick={handleCalculateManual}>
-                                        {calculating ? 'Расчёт...' : 'Рассчитать компоненты'}
-                                    </Button>
-                                </div>
-                            </>
-                        ) : (
-                            <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', padding: '48px 0', gap: '8px' }}>
-                                <Factory style={{ width: 32, height: 32, color: 'var(--hairline)' }} />
-                                <p style={{ fontFamily: 'var(--sans)', fontSize: '13px', color: 'var(--muted)', margin: 0 }}>Добавьте товары для расчёта</p>
-                            </div>
+                            </section>
                         )}
-                    </FadeRise>
-                )}
 
-                {/* File upload */}
-                {activeTab === 'upload' && (
-                    <FadeRise>
-                        <input ref={fileInputRef} type="file" accept=".xlsx,.xls" onChange={handleFileInputChange} style={{ display: 'none' }} />
-                        <div
-                            onClick={() => !calculating && fileInputRef.current?.click()}
-                            onDragOver={e => { e.preventDefault(); setDragOver(true); }}
-                            onDragLeave={() => setDragOver(false)}
-                            onDrop={handleDrop}
-                            style={{
-                                border: `2px dashed ${dragOver ? 'var(--primary)' : 'var(--hairline)'}`,
-                                borderRadius: '12px', padding: '48px 24px',
-                                display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '12px',
-                                cursor: calculating ? 'default' : 'pointer',
-                                backgroundColor: dragOver ? 'var(--accent-wash)' : 'transparent',
-                                transition: 'border-color 150ms, background-color 150ms',
-                                userSelect: 'none',
-                            }}
-                        >
-                            {calculating
-                                ? <Loader2 style={{ width: 32, height: 32, color: 'var(--primary)' }} className="animate-spin" />
-                                : <FileSpreadsheet style={{ width: 32, height: 32, color: dragOver ? 'var(--primary)' : 'var(--muted)' }} />
-                            }
-                            <p style={{ fontFamily: 'var(--sans)', fontSize: '14px', fontWeight: 500, color: 'var(--ink)', margin: 0 }}>
-                                {calculating ? 'Обработка файла...' : 'Перетащите Excel файл или нажмите для выбора'}
-                            </p>
-                            <p style={{ fontFamily: 'var(--sans)', fontSize: '12px', color: 'var(--muted)', margin: 0, textAlign: 'center' }}>
-                                Файл должен содержать колонки: Артикул, Наименование, Количество
-                            </p>
-                        </div>
-                    </FadeRise>
-                )}
-            </section>
-
-            {/* Results */}
-            {result && (
-                <>
-                    {result.components_summary?.length > 0 && (
-                        <section>
-                            <SectionLabel>Сводка компонентов ({result.components_summary.length})</SectionLabel>
-                            <div style={{ overflowX: 'auto' }}>
-                                <table style={{ width: '100%', borderCollapse: 'collapse' }}>
-                                    <thead>
-                                        <tr>
-                                            <th style={{ ...thStyle, width: 40 }}>№</th>
-                                            <th style={thStyle}>Материал</th>
-                                            <th style={{ ...thStyle, width: 80 }}>Ед.изм.</th>
-                                            <th style={{ ...thStyle, width: 140, textAlign: 'right' }}>Количество</th>
-                                        </tr>
-                                    </thead>
-                                    <tbody>
-                                        {result.components_summary.map((c, i) => (
-                                            <tr key={c.material_id} style={{ borderBottom: '1px solid var(--hairline)' }}
-                                                onMouseEnter={e => e.currentTarget.style.backgroundColor = 'var(--surface-card)'}
-                                                onMouseLeave={e => e.currentTarget.style.backgroundColor = 'transparent'}
-                                            >
-                                                <td style={{ padding: '9px 12px', fontFamily: 'var(--mono)', fontSize: '12px', color: 'var(--muted-soft)' }}>{i + 1}</td>
-                                                <td style={{ padding: '9px 12px', fontFamily: 'var(--sans)', fontSize: '13px', color: 'var(--ink)' }}>{c.material_name}</td>
-                                                <td style={{ padding: '9px 12px', fontFamily: 'var(--mono)', fontSize: '12px', color: 'var(--muted)' }}>{c.uom}</td>
-                                                <td style={{ padding: '9px 12px', fontFamily: 'var(--mono)', fontSize: '12px', color: 'var(--ink)', textAlign: 'right' }}>
-                                                    {c.total_quantity?.toLocaleString('ru-RU', { maximumFractionDigits: 2 })}
-                                                </td>
+                        {result.products?.length > 0 && (
+                            <section>
+                                <SectionLabel>
+                                    Детали по товарам ({result.products_found} найдено{result.products_not_found > 0 && `, ${result.products_not_found} не найдено`}{result.products_without_processing_plan > 0 && `, ${result.products_without_processing_plan} без техкарт`})
+                                </SectionLabel>
+                                <div style={{ overflowX: 'auto' }}>
+                                    <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+                                        <thead>
+                                            <tr>
+                                                <th style={{ ...thStyle, width: 32 }}></th>
+                                                <th style={{ ...thStyle, width: 120 }}>Артикул</th>
+                                                <th style={thStyle}>Наименование</th>
+                                                <th style={{ ...thStyle, width: 80, textAlign: 'right' }}>Кол-во</th>
+                                                <th style={{ ...thStyle, width: 130 }}>Статус</th>
+                                                <th style={thStyle}>Техкарта</th>
                                             </tr>
-                                        ))}
-                                    </tbody>
-                                </table>
-                            </div>
-                        </section>
-                    )}
-
-                    {result.products?.length > 0 && (
-                        <section>
-                            <SectionLabel>
-                                Детали по товарам ({result.products_found} найдено{result.products_not_found > 0 && `, ${result.products_not_found} не найдено`}{result.products_without_processing_plan > 0 && `, ${result.products_without_processing_plan} без техкарт`})
-                            </SectionLabel>
-                            <div style={{ overflowX: 'auto' }}>
-                                <table style={{ width: '100%', borderCollapse: 'collapse' }}>
-                                    <thead>
-                                        <tr>
-                                            <th style={{ ...thStyle, width: 32 }}></th>
-                                            <th style={{ ...thStyle, width: 120 }}>Артикул</th>
-                                            <th style={thStyle}>Наименование</th>
-                                            <th style={{ ...thStyle, width: 80, textAlign: 'right' }}>Кол-во</th>
-                                            <th style={{ ...thStyle, width: 130 }}>Статус</th>
-                                            <th style={thStyle}>Техкарта</th>
-                                        </tr>
-                                    </thead>
-                                    <tbody>
-                                        {result.products.map(p => {
-                                            const canExpand = p.has_processing_plan && p.components?.length > 0;
-                                            const isExpanded = expandedRows.has(p.article);
-                                            return (
-                                                <Fragment key={p.article}>
-                                                    <tr
-                                                        style={{ borderBottom: '1px solid var(--hairline)', cursor: canExpand ? 'pointer' : 'default' }}
-                                                        onClick={() => canExpand && toggleExpanded(p.article)}
-                                                        onMouseEnter={e => e.currentTarget.style.backgroundColor = 'var(--surface-card)'}
-                                                        onMouseLeave={e => e.currentTarget.style.backgroundColor = 'transparent'}
-                                                    >
-                                                        <td style={{ padding: '9px 12px', width: 32 }}>
-                                                            {canExpand && (isExpanded
-                                                                ? <ChevronUp style={{ width: 14, height: 14, color: 'var(--muted)' }} />
-                                                                : <ChevronDown style={{ width: 14, height: 14, color: 'var(--muted)' }} />
-                                                            )}
-                                                        </td>
-                                                        <td style={{ padding: '9px 12px', fontFamily: 'var(--mono)', fontSize: '12px', color: 'var(--muted)' }}>{p.article}</td>
-                                                        <td style={{ padding: '9px 12px', fontFamily: 'var(--sans)', fontSize: '13px', color: 'var(--ink)' }}>{p.name}</td>
-                                                        <td style={{ padding: '9px 12px', fontFamily: 'var(--mono)', fontSize: '12px', color: 'var(--ink)', textAlign: 'right' }}>{p.quantity}</td>
-                                                        <td style={{ padding: '9px 12px' }}><StatusBadge record={p} /></td>
-                                                        <td style={{ padding: '9px 12px', fontFamily: 'var(--sans)', fontSize: '12px', color: 'var(--muted)' }}>{p.processing_plan_name || '—'}</td>
-                                                    </tr>
-                                                    {isExpanded && p.components?.map((c, ci) => (
-                                                        <tr key={`${p.article}_${c.material_id}`} style={{ borderBottom: '1px solid var(--hairline)', backgroundColor: 'var(--surface-card)' }}>
-                                                            <td colSpan={6} style={{ padding: '7px 12px 7px 52px' }}>
-                                                                <div style={{ display: 'flex', gap: '20px', alignItems: 'center' }}>
-                                                                    <span style={{ fontFamily: 'var(--mono)', fontSize: '11px', color: 'var(--muted-soft)', flexShrink: 0 }}>{ci + 1}</span>
-                                                                    <span style={{ fontFamily: 'var(--sans)', fontSize: '12px', color: 'var(--ink)', flex: 1 }}>{c.material_name}</span>
-                                                                    <span style={{ fontFamily: 'var(--mono)', fontSize: '11px', color: 'var(--muted)', flexShrink: 0 }}>{c.uom}</span>
-                                                                    <span style={{ fontFamily: 'var(--mono)', fontSize: '11px', color: 'var(--muted)', flexShrink: 0 }}>на ед.: {c.quantity_per_recipe?.toLocaleString('ru-RU', { maximumFractionDigits: 2 })}</span>
-                                                                    <span style={{ fontFamily: 'var(--mono)', fontSize: '12px', color: 'var(--ink)', flexShrink: 0, fontWeight: 500 }}>итого: {c.total_quantity?.toLocaleString('ru-RU', { maximumFractionDigits: 2 })}</span>
-                                                                </div>
+                                        </thead>
+                                        <tbody>
+                                            {result.products.map(p => {
+                                                const canExpand = p.has_processing_plan && p.components?.length > 0;
+                                                const isExpanded = expandedRows.has(p.article);
+                                                return (
+                                                    <Fragment key={p.article}>
+                                                        <tr
+                                                            style={{ borderBottom: '1px solid var(--hairline)', cursor: canExpand ? 'pointer' : 'default' }}
+                                                            onClick={() => canExpand && toggleExpanded(p.article)}
+                                                            onMouseEnter={e => e.currentTarget.style.backgroundColor = 'var(--surface-card)'}
+                                                            onMouseLeave={e => e.currentTarget.style.backgroundColor = 'transparent'}
+                                                        >
+                                                            <td style={{ padding: '9px 12px', width: 32 }}>
+                                                                {canExpand && (isExpanded
+                                                                    ? <ChevronUp style={{ width: 14, height: 14, color: 'var(--muted)' }} />
+                                                                    : <ChevronDown style={{ width: 14, height: 14, color: 'var(--muted)' }} />
+                                                                )}
                                                             </td>
+                                                            <td style={{ padding: '9px 12px', fontFamily: 'var(--mono)', fontSize: '12px', color: 'var(--muted)' }}>{p.article}</td>
+                                                            <td style={{ padding: '9px 12px', fontFamily: 'var(--sans)', fontSize: '13px', color: 'var(--ink)' }}>{p.name}</td>
+                                                            <td style={{ padding: '9px 12px', fontFamily: 'var(--mono)', fontSize: '12px', color: 'var(--ink)', textAlign: 'right' }}>{p.quantity}</td>
+                                                            <td style={{ padding: '9px 12px' }}><StatusBadge record={p} /></td>
+                                                            <td style={{ padding: '9px 12px', fontFamily: 'var(--sans)', fontSize: '12px', color: 'var(--muted)' }}>{p.processing_plan_name || '—'}</td>
                                                         </tr>
-                                                    ))}
-                                                </Fragment>
-                                            );
-                                        })}
-                                    </tbody>
-                                </table>
-                            </div>
-                        </section>
-                    )}
-                </>
-            )}
+                                                        {isExpanded && p.components?.map((c, ci) => (
+                                                            <tr key={`${p.article}_${c.material_id}`} style={{ borderBottom: '1px solid var(--hairline)', backgroundColor: 'var(--surface-card)' }}>
+                                                                <td colSpan={6} style={{ padding: '7px 12px 7px 52px' }}>
+                                                                    <div style={{ display: 'flex', gap: '20px', alignItems: 'center' }}>
+                                                                        <span style={{ fontFamily: 'var(--mono)', fontSize: '11px', color: 'var(--muted-soft)', flexShrink: 0 }}>{ci + 1}</span>
+                                                                        <span style={{ fontFamily: 'var(--sans)', fontSize: '12px', color: 'var(--ink)', flex: 1 }}>{c.material_name}</span>
+                                                                        <span style={{ fontFamily: 'var(--mono)', fontSize: '11px', color: 'var(--muted)', flexShrink: 0 }}>{c.uom}</span>
+                                                                        <span style={{ fontFamily: 'var(--mono)', fontSize: '11px', color: 'var(--muted)', flexShrink: 0 }}>на ед.: {c.quantity_per_recipe?.toLocaleString('ru-RU', { maximumFractionDigits: 2 })}</span>
+                                                                        <span style={{ fontFamily: 'var(--mono)', fontSize: '12px', color: 'var(--ink)', flexShrink: 0, fontWeight: 500 }}>итого: {c.total_quantity?.toLocaleString('ru-RU', { maximumFractionDigits: 2 })}</span>
+                                                                    </div>
+                                                                </td>
+                                                            </tr>
+                                                        ))}
+                                                    </Fragment>
+                                                );
+                                            })}
+                                        </tbody>
+                                    </table>
+                                </div>
+                            </section>
+                        )}
+                    </>
+                )}
 
-            {/* Toast notification */}
-            {notice && (
-                <div style={{ position: 'fixed', bottom: '24px', right: '24px', zIndex: 100, backgroundColor: noticeColors[notice.type] || 'var(--surface-dark)', color: 'var(--on-primary)', borderRadius: '8px', padding: '10px 16px', fontFamily: 'var(--sans)', fontSize: '13px', display: 'flex', alignItems: 'center', gap: '8px', boxShadow: 'var(--shadow-soft)' }}>
-                    {notice.type === 'loading' && <Loader2 style={{ width: 14, height: 14 }} className="animate-spin" />}
-                    {notice.text}
-                </div>
+            </Page>
+            {notice && createPortal(
+                <div style={{ position: 'fixed', bottom: 24, right: 24, zIndex: 100, background: 'var(--canvas)', borderRadius: 'var(--radius-md)', boxShadow: 'var(--shadow-soft)' }}>
+                    <Notice tone={notice.type}>{notice.text}</Notice>
+                </div>,
+                document.body,
             )}
-        </Page>
+        </>
     );
 };
 

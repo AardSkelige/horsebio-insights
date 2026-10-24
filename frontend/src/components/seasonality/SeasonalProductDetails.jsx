@@ -79,7 +79,7 @@ const SeasonalProductDetails = ({ data, loading, error }) => {
             {/* Header */}
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: '12px', flexWrap: 'wrap' }}>
                 <div>
-                    <div style={{ fontFamily: 'var(--serif)', fontSize: '20px', fontWeight: 400, color: 'var(--ink)' }}>{data.name || 'Загрузка...'}</div>
+                    <div style={{ fontFamily: 'var(--display)', fontSize: '20px', fontWeight: 400, color: 'var(--ink)' }}>{data.name || 'Загрузка...'}</div>
                     <div style={{ fontFamily: 'var(--sans)', fontSize: '12px', color: 'var(--muted)', marginTop: 2 }}>Артикул: {data.article || '—'}</div>
                 </div>
                 {info && (

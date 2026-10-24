@@ -17,6 +17,8 @@ const state = {
     loading: false,
     error: null,
     panelOpen: false,
+    showRead: false,
+    setShowRead: vi.fn(),
     openPanel: vi.fn(),
     closePanel: vi.fn(),
     reload: vi.fn(),
@@ -66,7 +68,8 @@ const withCounts = (items) => {
 const setState = (patch) => Object.assign(state, patch);
 
 beforeEach(() => {
-    setState({ ...withCounts([]), bySource: {}, loading: false, error: null, panelOpen: false });
+    setState({ ...withCounts([]), bySource: {}, complete: true, loading: false, error: null, panelOpen: false, showRead: false });
+    state.setShowRead = vi.fn();
     state.openPanel = vi.fn();
     state.closePanel = vi.fn();
     state.reload = vi.fn();
@@ -196,10 +199,26 @@ describe('Панель', () => {
         expect(state.setRead).toHaveBeenCalledWith([], true);
     });
 
-    it('прочитанное остаётся в списке', () => {
-        setState({ ...withCounts([item({ seen: true })]), panelOpen: true });
+    it('прочитанное спрятано, но его можно показать', async () => {
+        setState({ ...withCounts([item({ seen: true })]), panelOpen: true, showRead: false });
+        const { unmount } = renderIn(<NotificationsPanel />);
+        expect(screen.queryByText(/пора снимать с продажи/)).not.toBeInTheDocument();
+        expect(screen.getByText('Новых нет')).toBeInTheDocument();
+        await userEvent.click(screen.getByRole('button', { name: 'Показать прочитанные (1)' }));
+        expect(state.setShowRead).toHaveBeenCalledWith(true);
+        unmount();
+
+        setState({ showRead: true });
         renderIn(<NotificationsPanel />);
         expect(screen.getByText(/пора снимать с продажи/)).toBeInTheDocument();
+        expect(screen.getByRole('button', { name: 'Скрыть прочитанные' })).toBeInTheDocument();
+    });
+
+    it('если раздел не ответил, не обещает, что всё спокойно', () => {
+        setState({ ...withCounts([]), panelOpen: true, complete: false });
+        renderIn(<NotificationsPanel />);
+        expect(screen.getByText('Не все разделы ответили, список может быть неполным')).toBeInTheDocument();
+        expect(screen.queryByText('Ничего не требует внимания')).not.toBeInTheDocument();
     });
 
     it('пустая говорит об этом прямо', () => {

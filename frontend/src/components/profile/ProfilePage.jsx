@@ -139,7 +139,7 @@ const ProfilePage = () => {
                     </div>
                     <div style={{ minWidth: 0 }}>
                         <h1 style={{
-                            margin: 0, fontFamily: 'var(--serif)',
+                            margin: 0, fontFamily: 'var(--display)',
                             fontSize: isMobile ? 24 : 34,
                             fontWeight: 400, letterSpacing: '-0.025em', lineHeight: 1.1,
                             color: 'var(--on-dark)',
@@ -184,7 +184,7 @@ const ProfilePage = () => {
                         alignSelf: isMobile ? 'stretch' : 'auto',
                     }}>
                         <div style={{
-                            fontFamily: 'var(--serif)', fontSize: 20, fontWeight: 400,
+                            fontFamily: 'var(--display)', fontSize: 20, fontWeight: 400,
                             letterSpacing: '-0.02em', color: 'var(--on-dark)', marginBottom: 4,
                         }}>
                             {badge.title}
@@ -276,7 +276,7 @@ const ProfilePage = () => {
                                 ].map(([l, v]) => (
                                     <div key={l} style={{ borderTop: '1px solid var(--hairline)', paddingTop: 12 }}>
                                         <div style={{
-                                            fontFamily: 'var(--serif)', fontSize: 28, fontWeight: 400,
+                                            fontFamily: 'var(--display)', fontSize: 28, fontWeight: 400,
                                             letterSpacing: '-0.025em', lineHeight: 1, color: 'var(--ink)',
                                             fontVariantNumeric: 'lining-nums', fontFeatureSettings: '"lnum" 1',
                                         }}>

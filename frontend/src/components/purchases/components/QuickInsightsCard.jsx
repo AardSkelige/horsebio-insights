@@ -59,7 +59,7 @@ const QuickInsightsCard = ({ analysisData, material, onPeriodChange }) => {
     return (
         <div style={{ backgroundColor: 'var(--canvas)', border: '1px solid var(--hairline)', borderRadius: '10px', padding: '24px', display: 'flex', flexDirection: 'column', gap: '20px' }}>
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '12px' }}>
-                <h2 style={{ fontFamily: 'var(--serif)', fontSize: '22px', fontWeight: 400, letterSpacing: '-0.02em', color: 'var(--ink)', margin: 0 }}>Ключевые показатели</h2>
+                <h2 style={{ fontFamily: 'var(--display)', fontSize: '22px', fontWeight: 400, letterSpacing: '-0.02em', color: 'var(--ink)', margin: 0 }}>Ключевые показатели</h2>
                 <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
                     <span style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', fontFamily: 'var(--sans)', fontSize: '13px', color: 'var(--muted)' }}>Период расчёта <Hint text="За какой срок брать расход и сроки поставок. Выбор личный: у коллег остаётся их период." /></span>
                     <select

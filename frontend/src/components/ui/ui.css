@@ -467,7 +467,7 @@
 }
 
 .ui-page-header__title {
-    font-family: var(--serif);
+    font-family: var(--display);
     font-size: var(--size-display);
     font-variant-numeric: lining-nums;
     font-weight: 400;
@@ -738,7 +738,7 @@
 }
 
 .ui-stat__value {
-    font-family: var(--serif);
+    font-family: var(--display);
     font-weight: 400;
     letter-spacing: -0.02em;
     line-height: 1.1;
@@ -1294,7 +1294,7 @@
 }
 
 .ui-drawer__title {
-    font-family: var(--serif);
+    font-family: var(--display);
     font-weight: 400;
     font-size: 17px;
     color: var(--ink);

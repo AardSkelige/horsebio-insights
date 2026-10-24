@@ -35,7 +35,7 @@ const PurchaseVerdict = ({ analysisData, material }) => {
             </div>
             <div>
                 <div style={{ fontFamily: 'var(--sans)', fontSize: '11px', fontWeight: 600, letterSpacing: '0.08em', textTransform: 'uppercase', color: 'var(--primary)', marginBottom: '6px' }}>Рекомендация</div>
-                <p style={{ fontFamily: 'var(--serif)', fontSize: '18px', color: 'var(--ink)', margin: 0, lineHeight: 1.45, fontVariantNumeric: 'lining-nums', fontFeatureSettings: '"lnum" 1' }}>
+                <p style={{ fontFamily: 'var(--display)', fontSize: '18px', color: 'var(--ink)', margin: 0, lineHeight: 1.45, fontVariantNumeric: 'lining-nums', fontFeatureSettings: '"lnum" 1' }}>
                     Заказывайте, когда остаток упадёт до <b>{num(reorder)} {uom}</b>.
                     {supplier ? (
                         <>

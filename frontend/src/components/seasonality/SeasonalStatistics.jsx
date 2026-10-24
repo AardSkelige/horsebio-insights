@@ -33,7 +33,7 @@ export const SeasonalStatistics = ({ data }) => {
     return (
         <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
             <div>
-                <div style={{ fontFamily: 'var(--serif)', fontSize: '20px', fontWeight: 400, color: 'var(--ink)', margin: '0 0 2px' }}>{data.name}</div>
+                <div style={{ fontFamily: 'var(--display)', fontSize: '20px', fontWeight: 400, color: 'var(--ink)', margin: '0 0 2px' }}>{data.name}</div>
                 <div style={{ fontFamily: 'var(--sans)', fontSize: '12px', color: 'var(--muted)' }}>Артикул: {data.article}</div>
             </div>
 
@@ -68,11 +68,11 @@ export const SeasonalStatistics = ({ data }) => {
                     <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(300px, 1fr))', gap: '10px' }}>
                         <div style={{ backgroundColor: 'var(--canvas)', borderRadius: '8px', padding: '12px 14px' }}>
                             <div style={{ fontFamily: 'var(--sans)', fontSize: '11px', color: 'var(--muted)', marginBottom: '4px' }}>Стандартное отклонение</div>
-                            <div style={{ fontFamily: 'var(--serif)', fontSize: '18px', fontVariantNumeric: 'lining-nums', fontFeatureSettings: '"lnum" 1' }}>{data.stability_metrics.coefficient_std.toFixed(2)}</div>
+                            <div style={{ fontFamily: 'var(--display)', fontSize: '18px', fontVariantNumeric: 'lining-nums', fontFeatureSettings: '"lnum" 1' }}>{data.stability_metrics.coefficient_std.toFixed(2)}</div>
                         </div>
                         <div style={{ backgroundColor: 'var(--canvas)', borderRadius: '8px', padding: '12px 14px' }}>
                             <div style={{ fontFamily: 'var(--sans)', fontSize: '11px', color: 'var(--muted)', marginBottom: '4px' }}>Макс. отклонение</div>
-                            <div style={{ fontFamily: 'var(--serif)', fontSize: '18px', fontVariantNumeric: 'lining-nums', fontFeatureSettings: '"lnum" 1' }}>{(data.stability_metrics.max_deviation * 100).toFixed(1)}%</div>
+                            <div style={{ fontFamily: 'var(--display)', fontSize: '18px', fontVariantNumeric: 'lining-nums', fontFeatureSettings: '"lnum" 1' }}>{(data.stability_metrics.max_deviation * 100).toFixed(1)}%</div>
                         </div>
                     </div>
                 </div>

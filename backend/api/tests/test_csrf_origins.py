@@ -24,9 +24,9 @@ class TrustedOriginsTests(TestCase):
         client.force_login(user)
         client.get('/parser/csrf/')  # эндпоинт, из которого фронт берёт csrftoken
 
-        response = client.patch(
-            '/api/auth/home/',
-            data='{"pinnedPaths": []}',
+        response = client.post(
+            '/api/auth/track/',
+            data='{"path": "/inventory", "name": "Инвентаризация", "duration": 5}',
             content_type='application/json',
             HTTP_ORIGIN=f'https://{PROD_HOST}',
             HTTP_X_CSRFTOKEN=client.cookies['csrftoken'].value,

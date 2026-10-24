@@ -116,6 +116,16 @@ def page_by_key(key):
     return _PAGES_BY_KEY.get(key)
 
 
+_ROUTES_BY_LENGTH = sorted(((p['route'], p['key']) for p in PAGES), key=lambda pair: len(pair[0]), reverse=True)
+
+
+def page_key_for_route(path):
+    for route, key in _ROUTES_BY_LENGTH:
+        if path == route or path.startswith(f'{route}/'):
+            return key
+    return None
+
+
 def label_for_route(route):
     """Актуальная подпись страницы по её маршруту.
 

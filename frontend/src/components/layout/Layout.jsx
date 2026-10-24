@@ -198,7 +198,7 @@ const Layout = ({ children }) => {
                             style={{ color: 'var(--primary)', '--logo-mark-width': '20px', '--logo-mark-height': '12px' }}
                             aria-hidden="true"
                         />
-                        <span style={{ fontFamily: 'var(--serif)', fontSize: '15px', color: 'var(--ink)' }}>
+                        <span style={{ fontFamily: 'var(--display)', fontSize: '15px', color: 'var(--ink)' }}>
                             HorseBio Insights
                         </span>
                         <NotificationsBarButton />

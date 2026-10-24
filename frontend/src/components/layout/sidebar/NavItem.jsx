@@ -2,7 +2,6 @@ import { useState, useRef } from 'react';
 import { Link } from 'react-router-dom';
 import PropTypes from 'prop-types';
 import { m } from 'motion/react';
-import { Star } from 'lucide-react';
 // Классы значков (.nt-badge / .nt-dot) живут вместе с уведомлениями
 import '../../notifications/notifications.css';
 
@@ -34,7 +33,7 @@ const tooltipStyle = (top) => ({
  */
 const NavItem = ({
     path, label, icon: Icon, expanded, active, onNavigate, hovered, onHover,
-    pinned, pinDisabled, onTogglePin, unread = 0, unreadTone = 'info',
+    unread = 0, unreadTone = 'info',
 }) => {
     const [tipTop, setTipTop] = useState(0);
     const ref = useRef(null);
@@ -60,7 +59,7 @@ const NavItem = ({
                     alignItems: 'center',
                     justifyContent: expanded ? 'flex-start' : 'center',
                     gap: expanded ? 10 : 0,
-                    padding: expanded ? '7px 34px 7px 10px' : '7px 10px',
+                    padding: '7px 10px',
                     margin: '1px 6px',
                     borderRadius: 8,
                     textDecoration: 'none',
@@ -86,7 +85,7 @@ const NavItem = ({
                 <Icon style={{
                     position: 'relative',
                     width: 16, height: 16, flexShrink: 0,
-                    color: active ? 'var(--primary)' : 'var(--on-dark-soft)',
+                    color: active ? 'var(--on-dark-accent)' : 'var(--on-dark-soft)',
                     transition: 'color 150ms ease',
                 }} />
                 <span style={{
@@ -111,39 +110,6 @@ const NavItem = ({
                     />
                 )}
             </Link>
-            {expanded && onTogglePin && (
-                <button
-                    type="button"
-                    onClick={(event) => {
-                        event.preventDefault();
-                        event.stopPropagation();
-                        onTogglePin(path);
-                    }}
-                    disabled={pinDisabled}
-                    aria-label={pinned ? `Открепить ${label}` : `Закрепить ${label}`}
-                    title={pinned ? 'Открепить от главной' : pinDisabled ? 'Сначала открепите один из трёх разделов' : 'Закрепить на главной'}
-                    style={{
-                        alignItems: 'center',
-                        background: 'transparent',
-                        border: 0,
-                        color: pinned ? 'var(--primary)' : 'var(--on-dark-soft)',
-                        cursor: pinDisabled ? 'not-allowed' : 'pointer',
-                        display: 'flex',
-                        height: 26,
-                        justifyContent: 'center',
-                        opacity: pinned ? 1 : hovered ? 0.8 : 0.35,
-                        padding: 0,
-                        position: 'absolute',
-                        right: 10,
-                        top: '50%',
-                        transform: 'translateY(-50%)',
-                        width: 24,
-                        zIndex: 2,
-                    }}
-                >
-                    <Star size={13} fill={pinned ? 'currentColor' : 'none'} />
-                </button>
-            )}
             {!expanded && hovered && (
                 <m.div
                     initial={{ opacity: 0, x: -4 }}
@@ -167,9 +133,6 @@ NavItem.propTypes = {
     onNavigate: PropTypes.func,
     hovered: PropTypes.bool.isRequired,
     onHover: PropTypes.func.isRequired,
-    pinned: PropTypes.bool.isRequired,
-    pinDisabled: PropTypes.bool.isRequired,
-    onTogglePin: PropTypes.func,
     unread: PropTypes.number,
     unreadTone: PropTypes.oneOf(['critical', 'warning', 'info']),
 };

@@ -8,6 +8,7 @@ from core.models import (
     Supply
 )
 from api.exceptions import DataProcessingError
+from api.services.data_freshness import latest_document_update
 
 import logging
 logger = logging.getLogger(__name__)
@@ -102,25 +103,7 @@ def get_stats(request):
         # Fallback логика: если нет ручного обновления, ищем время последней отгрузки/приемки
         if not last_manual_update:
             try:
-                last_shipment = Shipment.objects.order_by('-moysklad_updated').first()
-                last_supply = Supply.objects.order_by('-moysklad_updated').first()
-                
-                fallback_time = None
-                if last_shipment and last_supply:
-                    if last_shipment.moysklad_updated and last_supply.moysklad_updated:
-                        fallback_time = max(last_shipment.moysklad_updated, last_supply.moysklad_updated)
-                    elif last_shipment.moysklad_updated:
-                        fallback_time = last_shipment.moysklad_updated
-                    elif last_supply.moysklad_updated:
-                        fallback_time = last_supply.moysklad_updated
-                elif last_shipment and last_shipment.moysklad_updated:
-                    fallback_time = last_shipment.moysklad_updated
-                elif last_supply and last_supply.moysklad_updated:
-                    fallback_time = last_supply.moysklad_updated
-                
-                # Используем fallback как ручное обновление
-                if fallback_time:
-                    last_manual_update = fallback_time
+                last_manual_update = latest_document_update()
             except Exception as e:
                 # В случае ошибки устанавливаем None
                 last_manual_update = None

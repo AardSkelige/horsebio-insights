@@ -196,7 +196,7 @@ function Section({ config, rows, isMobile }) {
                 borderBottom: '1px solid var(--hairline)',
             }}>
                 <span style={{ width: 8, height: 8, borderRadius: '50%', backgroundColor: config.dot, flexShrink: 0 }} />
-                <span style={{ fontFamily: 'var(--serif)', fontSize: '18px', fontWeight: 400, letterSpacing: '-0.02em', color: 'var(--ink)' }}>
+                <span style={{ fontFamily: 'var(--display)', fontSize: '18px', fontWeight: 400, letterSpacing: '-0.02em', color: 'var(--ink)' }}>
                     {config.label}
                 </span>
                 <span style={{ fontFamily: 'var(--sans)', fontSize: '12px', color: 'var(--muted)', marginLeft: '4px' }}>

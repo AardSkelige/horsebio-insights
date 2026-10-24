@@ -91,7 +91,7 @@ export default function CheckDetail({ scriptId, initial, onBack, backLabel = 'В
                 <div className="check-detail__title-group">
                     <Icon size={20} style={{ color: 'var(--muted)', flexShrink: 0, marginTop: 4 }} />
                     <div style={{ minWidth: 0, flex: 1 }}>
-                        <div style={{ display: 'flex', alignItems: 'center', gap: 9, flexWrap: 'wrap', fontFamily: 'var(--serif)', fontSize: 24, fontWeight: 600, color: 'var(--ink)', lineHeight: 1.15 }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 9, flexWrap: 'wrap', fontFamily: 'var(--display)', fontSize: 24, fontWeight: 600, color: 'var(--ink)', lineHeight: 1.15 }}>
                             {initial?.name || scriptId}
                             {meta.hint && <InfoTip text={meta.hint} width={310} />}
                         </div>

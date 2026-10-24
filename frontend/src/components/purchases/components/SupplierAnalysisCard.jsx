@@ -21,7 +21,7 @@ const SwitchToggle = ({ checked, onChange, label }) => (
         <span style={{ position: 'relative', display: 'inline-block', width: '34px', height: '18px', flexShrink: 0 }}>
             <input type="checkbox" checked={checked} onChange={e => onChange(e.target.checked)} style={{ position: 'absolute', opacity: 0, width: 0, height: 0 }} />
             <span style={{ position: 'absolute', inset: 0, borderRadius: '9px', backgroundColor: checked ? 'var(--primary)' : 'var(--surface-cream-strong)', transition: 'background-color 200ms' }} />
-            <span style={{ position: 'absolute', top: '2px', left: checked ? '18px' : '2px', width: '14px', height: '14px', borderRadius: '50%', backgroundColor: 'var(--on-primary)', transition: 'left 200ms', boxShadow: 'var(--shadow-card)' }} />
+            <span style={{ position: 'absolute', top: '2px', left: checked ? '18px' : '2px', width: '14px', height: '14px', borderRadius: '50%', backgroundColor: 'var(--on-fill)', transition: 'left 200ms', boxShadow: 'var(--shadow-card)' }} />
         </span>
         <span style={{ fontFamily: 'var(--sans)', fontSize: '13px', color: 'var(--muted)' }}>{label}</span>
     </label>
@@ -65,7 +65,7 @@ const CollapsibleSection = ({ title, defaultOpen = false, children, rightSlot })
                 className="no-tap-scale"
                 style={{ width: '100%', display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '16px 20px', background: 'none', border: 'none', cursor: 'pointer', textAlign: 'left' }}
             >
-                <span style={{ fontFamily: 'var(--serif)', fontSize: '18px', fontWeight: 400, color: 'var(--ink)' }}>{title}</span>
+                <span style={{ fontFamily: 'var(--display)', fontSize: '18px', fontWeight: 400, color: 'var(--ink)' }}>{title}</span>
                 <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexShrink: 0 }}>
                     {!open && rightSlot}
                     {open ? <ChevronUp style={{ width: 16, height: 16, color: 'var(--muted)', flexShrink: 0 }} /> : <ChevronDown style={{ width: 16, height: 16, color: 'var(--muted)', flexShrink: 0 }} />}
@@ -208,7 +208,7 @@ const SupplierAnalysisCard = ({ suppliers, material, activityThreshold, setActiv
                                             </div>
                                         </td>
                                         <td>
-                                            <div style={{ fontSize: '18px', fontFamily: 'var(--serif)', color: s.delivery_reliability >= 0.95 ? 'var(--success-ink)' : 'var(--warning-ink)', fontVariantNumeric: 'lining-nums' }}>
+                                            <div style={{ fontSize: '18px', fontFamily: 'var(--display)', color: s.delivery_reliability >= 0.95 ? 'var(--success-ink)' : 'var(--warning-ink)', fontVariantNumeric: 'lining-nums' }}>
                                                 {(s.delivery_reliability * 100).toFixed(0)}%
                                             </div>
                                             <div style={{ fontSize: '12px', color: 'var(--muted)', marginTop: 4 }}>Всего: {s.total_orders} · Выполнено: {s.completed_orders}</div>

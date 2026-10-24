@@ -21,7 +21,7 @@ const RECOMMENDATIONS = [
 ];
 
 const sectionCard    = { backgroundColor: 'var(--canvas)', border: '1px solid var(--hairline)', borderRadius: '10px', padding: '24px' };
-const sectionHeading = { fontFamily: 'var(--serif)', fontSize: '22px', fontWeight: 400, letterSpacing: '-0.02em', color: 'var(--ink)', margin: '0 0 16px' };
+const sectionHeading = { fontFamily: 'var(--display)', fontSize: '22px', fontWeight: 400, letterSpacing: '-0.02em', color: 'var(--ink)', margin: '0 0 16px' };
 const labelStyle     = { fontFamily: 'var(--sans)', fontSize: '11px', fontWeight: 600, letterSpacing: '0.06em', textTransform: 'uppercase', color: 'var(--muted)', marginBottom: '12px' };
 
 export const ABCAnalysis = () => {

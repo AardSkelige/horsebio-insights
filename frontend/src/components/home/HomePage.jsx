@@ -1,212 +1,99 @@
-import { useState, useEffect } from 'react';
-import FeatureCard from './components/FeatureCard';
-import PersonalWorkspace from './components/PersonalWorkspace';
+import { useEffect, useMemo, useState } from 'react';
+import { Link } from 'react-router-dom';
+import { ArrowRight } from 'lucide-react';
+import PulseChart from './components/PulseChart';
 import { FadeRise } from '../ui/motion';
-import NAV_GROUPS, { NAV_PATHS } from '../layout/sidebar/navGroups';
+import { ErrorState } from '../ui';
 import { authApi } from '../../api/authApi';
-import { getAuthStatus } from '../../utils/authSession';
+import { useAuthStatus } from '../../hooks/useAuthStatus';
 import { useLoading } from '../../contexts/LoadingContext';
-import {
-    HOME_PREFERENCES_EVENT,
-    MAX_PINNED_SECTIONS,
-    publishHomePreferences,
-} from '../../utils/homePreferences';
+import { useNotifications } from '../../contexts/NotificationsContext';
+import { greeting, headlineDetails, quietLead, today, updatedLabel } from './homeText';
+import { pickSections } from './homeSections';
+import { pickHeadline, readSummary } from './homeHeadline';
+import { pluralWith } from '../../utils/formatters';
 import './HomePage.css';
 
-// Сидим начальный auth из общего кэша (как сайдбар) — чтобы на обновлении
-// страницы права были известны с первого рендера и не мелькали недоступные
-// пункты до ответа authApi.check.
-const seedAuth = () => {
-    const c = getAuthStatus();
-    return {
-        isSuperuser: c.isSuperuser === true,
-        username: c.username || '',
-        firstName: c.firstName || '',
-        allowedPages: Array.isArray(c.allowedPages) ? c.allowedPages : null,
-    };
-};
-
-const HomePage = () => {
-    const [auth, setAuth] = useState(seedAuth);
-    const [homeData, setHomeData] = useState(null);
-    const [saveError, setSaveError] = useState('');
-    const { isLoading, syncVersion } = useLoading();
+export default function HomePage() {
+    const auth = useAuthStatus();
+    const { syncVersion } = useLoading();
+    const { bySource, openPanel, items, complete, loaded } = useNotifications();
+    const [home, setHome] = useState(null);
+    const [failed, setFailed] = useState(false);
+    const [attempt, setAttempt] = useState(0);
+    const [now] = useState(() => new Date());
 
     useEffect(() => {
         const controller = new AbortController();
-
-        Promise.all([
-            authApi.check(controller.signal),
-            authApi.home(controller.signal),
-        ]).then(([authResult, homeResult]) => {
-            setAuth({
-                isSuperuser: Boolean(authResult.isSuperuser),
-                username: authResult.username || '',
-                firstName: authResult.firstName || '',
-                allowedPages: Array.isArray(authResult.allowedPages) ? authResult.allowedPages : null,
-            });
-            setHomeData(homeResult.data);
-        }).catch((error) => {
-            if (error.name !== 'AbortError') setSaveError('Не удалось загрузить персональные настройки');
-        });
-
+        setFailed(false);
+        authApi.home(controller.signal)
+            .then((result) => setHome(result.data))
+            .catch((error) => { if (error.name !== 'AbortError') setFailed(true); });
         return () => controller.abort();
-    }, [syncVersion]);
+    }, [syncVersion, attempt]);
 
-    useEffect(() => {
-        const handlePreferences = (event) => {
-            if (!Array.isArray(event.detail?.pinnedPaths)) return;
-            setHomeData((current) => current ? {
-                ...current,
-                pinnedPaths: event.detail.pinnedPaths,
-            } : current);
-        };
-        window.addEventListener(HOME_PREFERENCES_EVENT, handlePreferences);
-        return () => window.removeEventListener(HOME_PREFERENCES_EVENT, handlePreferences);
-    }, []);
+    const sections = useMemo(() => pickSections(auth, home?.frequentPaths), [auth, home]);
+    const headline = useMemo(() => pickHeadline(items, home?.sectionVisits), [items, home]);
 
-    const sections = NAV_GROUPS
-        .filter((group) => group.label)
-        .map((group) => ({
-            title: group.label,
-            items: group.items
-                .filter((item) => {
-                    if (item.superuserOnly) return auth.isSuperuser;
-                    if (auth.isSuperuser) return true;
-                    // фильтр по постраничным правам; пока не загружены — показываем
-                    if (item.pageKey && Array.isArray(auth.allowedPages)) return auth.allowedPages.includes(item.pageKey);
-                    return true;
-                })
-                .map((item) => ({
-                    icon: item.icon,
-                    title: item.label,
-                    description: item.description,
-                    link: item.path,
-                })),
-        }))
-        .filter((section) => section.items.length);
-    const workspaceItems = sections.flatMap((section) => section.items.map((item) => ({
-        ...item,
-        label: item.title,
-        path: item.link,
-        section: section.title,
-    })));
-    // Секция «Аналитика» может отсутствовать, если у пользователя нет её страниц.
-    // Тогда analyticsIndex === -1 — не срезаем по нему (иначе теряем секции и
-    // падаем на analyticsSection.items).
-    const analyticsIndex = sections.findIndex((section) => section.title === 'Аналитика');
-    const hasAnalytics = analyticsIndex !== -1;
-    const workSections = hasAnalytics ? sections.slice(0, analyticsIndex) : sections;
-    const analyticsSection = hasAnalytics ? sections[analyticsIndex] : null;
-    const systemSections = hasAnalytics ? sections.slice(analyticsIndex + 1) : [];
+    if (failed && !home) {
+        return (
+            <div className="home">
+                <ErrorState title="Не удалось загрузить главную" onRetry={() => setAttempt((n) => n + 1)} />
+            </div>
+        );
+    }
+    if (!home || !loaded) return <div className="home" aria-busy="true" />;
 
-    const handleTogglePin = async (path) => {
-        // Считаем и сохраняем только актуальные пути — «мёртвые» пины
-        // (после переименования маршрутов) не занимают слоты и вычищаются.
-        const previous = (homeData?.pinnedPaths || []).filter((p) => NAV_PATHS.has(p));
-        const isPinned = previous.includes(path);
-        if (!isPinned && previous.length >= MAX_PINNED_SECTIONS) {
-            setSaveError(`Можно закрепить не больше ${MAX_PINNED_SECTIONS} разделов`);
-            return;
-        }
-
-        const next = isPinned
-            ? previous.filter((item) => item !== path)
-            : [...previous, path];
-        setSaveError('');
-        setHomeData((current) => ({ ...current, pinnedPaths: next }));
-        publishHomePreferences(next);
-
-        try {
-            const result = await authApi.updateHome(next);
-            setHomeData(result.data);
-            publishHomePreferences(result.data.pinnedPaths);
-        } catch {
-            setHomeData((current) => ({ ...current, pinnedPaths: previous }));
-            publishHomePreferences(previous);
-            setSaveError('Не удалось сохранить закреплённые разделы');
-        }
-    };
+    const name = auth.firstName || auth.username || '';
+    const more = headline?.more || 0;
+    const quiet = headline ? null : quietLead({ complete, read: readSummary(items) });
 
     return (
-        <div className="home-dashboard">
+        <div className="home">
+            {home.pulse && <PulseChart points={home.pulse.points} unit={home.pulse.unit} label={home.pulse.label} />}
 
-            {homeData && (
-                <PersonalWorkspace
-                    auth={auth}
-                    data={homeData}
-                    items={workspaceItems}
-                    isSyncing={isLoading}
-                    onTogglePin={handleTogglePin}
-                    saveError={saveError}
-                    syncVersion={syncVersion}
-                />
-            )}
+            <FadeRise className="home__lead">
+                <p className="home__hello">{greeting(now)}{name ? `, ${name}` : ''}. Сегодня {today(now)}</p>
+                <h1 className="home__title">{headline ? headline.title : quiet.title}</h1>
+                <p className="home__sub">{headline ? headlineDetails(headline) : quiet.sub}</p>
+                {(headline || quiet.showRead) && (
+                    <div className="home__actions">
+                        {headline && (
+                            <Link className="home__cta" to={headline.route}>
+                                Открыть: {headline.source_label}
+                                <ArrowRight size={18} aria-hidden="true" />
+                            </Link>
+                        )}
+                        {more > 0 && (
+                            <button type="button" className="home__more" onClick={openPanel}>
+                                Ещё {pluralWith(more, 'дело', 'дела', 'дел')}
+                            </button>
+                        )}
+                        {quiet?.showRead && (
+                            <button type="button" className="home__more" onClick={() => openPanel({ showRead: true })}>
+                                Показать прочитанные
+                            </button>
+                        )}
+                    </div>
+                )}
+            </FadeRise>
 
-            <div className="home-dashboard__work-grid">
-                {workSections.map((section, index) => {
-                    const isWide = section.items.length > 2;
-                    const sectionId = `home-work-section-${index}`;
-
-                    return (
-                        <FadeRise
-                            className={isWide ? 'home-dashboard__group home-dashboard__group--wide' : 'home-dashboard__group'}
-                            delay={index * 0.025}
-                            key={section.title}
-                        >
-                            <section aria-labelledby={sectionId}>
-                                <div className="home-dashboard__heading">
-                                    <h2 id={sectionId}>{section.title}</h2>
-                                    <span />
-                                </div>
-                                <div className={isWide ? 'home-dashboard__links home-dashboard__links--two-columns' : 'home-dashboard__links'}>
-                                    {section.items.map((item) => (
-                                        <FeatureCard key={item.link} {...item} compact />
-                                    ))}
-                                </div>
-                            </section>
-                        </FadeRise>
-                    );
-                })}
-            </div>
-
-            {analyticsSection && (
-                <FadeRise className="home-dashboard__group" delay={0.1}>
-                    <section aria-labelledby="home-analytics-title">
-                        <div className="home-dashboard__heading">
-                            <h2 id="home-analytics-title">Аналитика</h2>
-                            <span />
-                        </div>
-                        <div className="home-dashboard__links home-dashboard__links--analytics">
-                            {analyticsSection.items.map((item) => (
-                                <FeatureCard key={item.link} {...item} compact />
-                            ))}
-                        </div>
-                    </section>
-                </FadeRise>
-            )}
-
-            {systemSections.length > 0 && (
-                <div className="home-dashboard__system-grid">
-                    {systemSections.map((section, index) => (
-                        <FadeRise className="home-dashboard__group" delay={0.125 + index * 0.025} key={section.title}>
-                            <section aria-labelledby={`home-system-section-${index}`}>
-                                <div className="home-dashboard__heading">
-                                    <h2 id={`home-system-section-${index}`}>{section.title}</h2>
-                                    <span />
-                                </div>
-                                <div className="home-dashboard__links">
-                                    {section.items.map((item) => (
-                                        <FeatureCard key={item.link} {...item} compact />
-                                    ))}
-                                </div>
-                            </section>
-                        </FadeRise>
-                    ))}
-                </div>
-            )}
+            <FadeRise className="home__foot" delay={0.08}>
+                <nav className="home__sections" aria-label="Мои разделы">
+                    {sections.map((item) => {
+                        const total = bySource[item.pageKey]?.total || 0;
+                        return (
+                            <Link key={item.path} to={item.path} className="home__section">
+                                <b>{item.label}</b>
+                                <span>{total ? pluralWith(total, 'дело', 'дела', 'дел') : item.description}</span>
+                            </Link>
+                        );
+                    })}
+                </nav>
+                <span className={home.dataUpdatedAt ? 'home__fresh home__fresh--ok' : 'home__fresh'}>
+                    {updatedLabel(home.dataUpdatedAt)}
+                </span>
+            </FadeRise>
         </div>
     );
-};
-
-export default HomePage;
+}

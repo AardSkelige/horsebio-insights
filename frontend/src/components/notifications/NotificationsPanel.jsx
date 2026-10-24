@@ -35,10 +35,12 @@ const groupBySource = (items) => {
  */
 export default function NotificationsPanel() {
     const {
-        items, counts, loading, error, panelOpen, closePanel, reload, setRead,
+        items, counts, complete, loading, error, panelOpen, showRead, setShowRead, closePanel, reload, setRead,
     } = useNotifications();
 
-    const groups = useMemo(() => groupBySource(items), [items]);
+    const readCount = items.length - counts.unseen;
+    const visible = useMemo(() => (showRead ? items : items.filter((item) => !item.seen)), [items, showRead]);
+    const groups = useMemo(() => groupBySource(visible), [visible]);
 
     return (
         <DrawerShell open={panelOpen} onClose={closePanel} label="Уведомления">
@@ -59,16 +61,24 @@ export default function NotificationsPanel() {
                 <CloseButton onClick={closePanel} />
             </div>
 
-            {counts.unseen > 0 && (
+            {(counts.unseen > 0 || readCount > 0) && (
                 <div className="nt-panel__bar">
-                    <button type="button" className="nt-panel__all" onClick={() => setRead([], true)}>
-                        Прочитать всё
-                    </button>
+                    {counts.unseen > 0 && (
+                        <button type="button" className="nt-panel__all" onClick={() => setRead([], true)}>
+                            Прочитать всё
+                        </button>
+                    )}
+                    {readCount > 0 && (
+                        <button type="button" className="nt-panel__all" onClick={() => setShowRead(!showRead)}>
+                            {showRead ? 'Скрыть прочитанные' : `Показать прочитанные (${readCount})`}
+                        </button>
+                    )}
                 </div>
             )}
 
             <div className="ui-drawer__body">
                 {error && <Notice tone="error">{error}</Notice>}
+                {!complete && !error && <Notice tone="warning">Не все разделы ответили, список может быть неполным</Notice>}
 
                 {loading && items.length === 0 && !error && (
                     <div style={{ display: 'flex', flexDirection: 'column', gap: 10, paddingTop: 14 }}>
@@ -77,8 +87,12 @@ export default function NotificationsPanel() {
                     </div>
                 )}
 
-                {!loading && items.length === 0 && !error && (
+                {!loading && items.length === 0 && complete && (
                     <p className="nt-panel__empty">Ничего не требует внимания</p>
+                )}
+
+                {!loading && items.length > 0 && visible.length === 0 && !error && (
+                    <p className="nt-panel__empty">Новых нет</p>
                 )}
 
                 {groups.map((group) => (

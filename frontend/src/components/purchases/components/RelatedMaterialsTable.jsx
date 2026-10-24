@@ -96,7 +96,7 @@ const RelatedMaterialsTable = ({ relatedData, suppliers, activityThreshold, show
                 style={{ width: '100%', display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '16px 20px', background: 'none', border: 'none', cursor: 'pointer', textAlign: 'left' }}
             >
                 <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-                    <span style={{ fontFamily: 'var(--serif)', fontSize: '18px', fontWeight: 400, color: 'var(--ink)' }}>Связанные материалы</span>
+                    <span style={{ fontFamily: 'var(--display)', fontSize: '18px', fontWeight: 400, color: 'var(--ink)' }}>Связанные материалы</span>
                     {hiddenCount > 0 && (
                         <span style={{ fontFamily: 'var(--sans)', fontSize: '12px', color: 'var(--muted)' }}>Скрыто неактивных: {hiddenCount}</span>
                     )}

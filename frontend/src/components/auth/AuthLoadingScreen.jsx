@@ -21,7 +21,7 @@ const AuthLoadingScreen = () => (
                 aria-hidden="true"
             />
             <span style={{
-                fontFamily: 'var(--serif)',
+                fontFamily: 'var(--display)',
                 fontSize: 22,
                 fontWeight: 400,
                 color: 'var(--ink)',

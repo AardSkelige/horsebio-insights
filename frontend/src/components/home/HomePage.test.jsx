@@ -1,30 +1,55 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { act, fireEvent, render, screen } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
 import HomePage from './HomePage';
 import { authApi } from '../../api/authApi';
-import { inventoryApi } from '../../api/inventoryApi';
-import { checksApi } from '../checks/checksShared';
+
+const openPanel = vi.fn();
+let auth;
+let notifications;
 
 vi.mock('../../api/authApi', () => ({
-    authApi: { check: vi.fn(), home: vi.fn(), updateHome: vi.fn() },
+    authApi: { home: vi.fn() },
 }));
 
-vi.mock('../../api/inventoryApi', () => ({
-    inventoryApi: { getCurrent: vi.fn() },
+vi.mock('../../hooks/useAuthStatus', () => ({
+    useAuthStatus: () => auth,
 }));
 
-vi.mock('../../api/deadlinesApi', () => ({
-    deadlinesApi: { get: vi.fn() },
-}));
-
-vi.mock('../checks/checksShared', () => ({
-    checksApi: { overview: vi.fn() },
+vi.mock('../../contexts/NotificationsContext', () => ({
+    useNotifications: () => ({ ...notifications, openPanel }),
 }));
 
 vi.mock('../../contexts/LoadingContext', () => ({
     useLoading: () => ({ isLoading: false, syncVersion: 0 }),
 }));
+
+vi.mock('./components/PulseChart', () => ({
+    default: ({ label }) => <div data-testid="pulse">{label}</div>,
+}));
+
+const item = (overrides = {}) => ({
+    key: 'raw:1',
+    source: 'raw-materials',
+    source_label: 'Склад сырья',
+    route: '/raw-materials',
+    level: 'critical',
+    title: 'Серия Л-0912 просрочена',
+    body: 'На ячейке Б-14 лежит 6,4 кг',
+    action: 'Спишите серию.',
+    seen: false,
+    ...overrides,
+});
+
+const homeData = (overrides = {}) => ({
+    data: {
+        sectionVisits: {},
+        pulse: { label: 'Отгрузки за 30 дней', unit: '₽', points: [] },
+        frequentPaths: ['/inventory'],
+        dataUpdatedAt: '2026-10-24T14:20:00+03:00',
+        ...overrides,
+    },
+});
 
 const renderPage = () => render(
     <MemoryRouter>
@@ -34,77 +59,114 @@ const renderPage = () => render(
 
 describe('HomePage', () => {
     beforeEach(() => {
-        authApi.check.mockResolvedValue({
-            isSuperuser: false,
-            username: 'lilia',
-            firstName: 'Лиля',
-        });
-        authApi.home.mockResolvedValue({
-            data: {
-                pinnedPaths: [],
-                recentPaths: ['/inventory', '/analysis/abc'],
-                dataUpdatedAt: '2026-07-18T09:00:00+03:00',
-            },
-        });
-        authApi.updateHome.mockImplementation((pinnedPaths) => Promise.resolve({
-            data: { pinnedPaths, recentPaths: [], dataUpdatedAt: null },
-        }));
-        inventoryApi.getCurrent.mockResolvedValue({
-            status: 'success',
-            data: { inventoried: 18, total: 24 },
-        });
-        checksApi.overview.mockResolvedValue({ scripts: [] });
+        auth = { isSuperuser: false, firstName: 'Иван', allowedPages: ['raw-materials', 'inventory', 'protocols'] };
+        notifications = {
+            items: [
+                item(),
+                item({ key: 'd:1', source: 'deadlines', source_label: 'Сроки оплаты', route: '/deadlines', level: 'warning', title: 'Оплата скоро' }),
+                item({ key: 'd:2', source: 'deadlines', level: 'info', title: 'К сведению' }),
+            ],
+            bySource: {},
+            complete: true,
+            loaded: true,
+        };
+        openPanel.mockClear();
+        authApi.home.mockResolvedValue(homeData());
     });
 
-    it('сохраняет визуальное деление ссылок по рабочим разделам', async () => {
+    it('показывает самое серьёзное непрочитанное и ведёт в его раздел', async () => {
         renderPage();
 
-        // Разделы названы по источнику данных: всё из МойСклад в одном, всё
-        // связанное с horse-bio.ru — в другом, аналитика сквозная
-        expect(screen.getByRole('heading', { level: 2, name: 'МойСклад' })).toBeInTheDocument();
-        expect(screen.getByRole('heading', { level: 2, name: 'Сайт' })).toBeInTheDocument();
-        expect(screen.getByRole('heading', { level: 2, name: 'Аналитика' })).toBeInTheDocument();
-        expect(await screen.findByRole('heading', { level: 1, name: /Лиля/ })).toBeInTheDocument();
-        expect(screen.getAllByRole('link')).toHaveLength(27);
-        expect(screen.getAllByRole('link', { name: /Товары/ })[0]).toHaveAttribute('href', '/shipments/products');
-        expect(screen.getAllByRole('link', { name: /ABC Анализ/ })[0]).toHaveAttribute('href', '/analysis/abc');
-        expect(await screen.findByText('Поставщики')).toBeInTheDocument();
-        expect(await screen.findByText('18 из 24 позиций · 75%')).toBeInTheDocument();
+        expect(await screen.findByRole('heading', { level: 1, name: 'Серия Л-0912 просрочена' })).toBeInTheDocument();
+        expect(screen.getByText('На ячейке Б-14 лежит 6,4 кг. Спишите серию.')).toBeInTheDocument();
+        expect(screen.getByRole('link', { name: /Открыть: Склад сырья/ })).toHaveAttribute('href', '/raw-materials');
+
+        fireEvent.click(screen.getByRole('button', { name: 'Ещё 2 дела' }));
+        expect(openPanel).toHaveBeenCalled();
     });
 
-    it('добавляет проверки только суперпользователю', async () => {
-        authApi.check.mockResolvedValue({ isSuperuser: true, allowedPages: [] });
+    it('при равной серьёзности берёт раздел, который человек открывает чаще', async () => {
+        notifications.items = [
+            item({ level: 'warning', title: 'Приёмка без серий' }),
+            item({ key: 'd:1', source: 'deadlines', level: 'warning', title: 'Оплата скоро' }),
+        ];
+        authApi.home.mockResolvedValue(homeData({ sectionVisits: { deadlines: 5, 'raw-materials': 1 } }));
         renderPage();
 
-        expect((await screen.findAllByRole('link', { name: /Проверки/ }))[0]).toHaveAttribute('href', '/checks');
-        expect(screen.getByRole('link', { name: /Активность/ })).toHaveAttribute('href', '/system/analytics');
-        expect(screen.getAllByRole('link')).toHaveLength(30);
+        expect(await screen.findByRole('heading', { level: 1, name: 'Оплата скоро' })).toBeInTheDocument();
     });
 
-    it('не падает, когда у пользователя нет страниц «Аналитики»', async () => {
-        authApi.check.mockResolvedValue({
-            isSuperuser: false,
-            username: 'lilia',
-            firstName: 'Лиля',
-            allowedPages: ['shipments-products', 'shipments-materials'],
-        });
+    it('прочитанное сразу уходит из главной фразы', async () => {
+        notifications.items[0] = item({ seen: true });
         renderPage();
 
-        // Главная рендерится, доступные разделы видны
-        expect(await screen.findByRole('heading', { level: 2, name: 'МойСклад' })).toBeInTheDocument();
-        // Секция «Аналитика» отсутствует — и это не роняет страницу
-        expect(screen.queryByRole('heading', { level: 2, name: 'Аналитика' })).not.toBeInTheDocument();
-        expect(screen.getAllByRole('link', { name: /Товары/ })[0]).toHaveAttribute('href', '/shipments/products');
+        expect(await screen.findByRole('heading', { level: 1, name: 'Оплата скоро' })).toBeInTheDocument();
+        expect(screen.getByRole('button', { name: 'Ещё 1 дело' })).toBeInTheDocument();
     });
 
-    it('закрепляет раздел в персональной главной', async () => {
+    it('в спокойный день говорит, что ничего не горит', async () => {
+        notifications.items = [];
         renderPage();
 
-        fireEvent.click(await screen.findByRole('button', { name: 'Закрепить Инвентаризация' }));
+        expect(await screen.findByRole('heading', { level: 1, name: 'Сегодня ничего не горит' })).toBeInTheDocument();
+        expect(screen.queryByRole('link', { name: /Открыть:/ })).not.toBeInTheDocument();
+    });
 
-        await waitFor(() => {
-            expect(authApi.updateHome).toHaveBeenCalledWith(['/inventory']);
-        });
-        expect(screen.getByRole('button', { name: 'Открепить Инвентаризация' })).toBeInTheDocument();
+    it('прочитанное не прячет нерешённое', async () => {
+        notifications.items = notifications.items.map((one) => ({ ...one, seen: true }));
+        renderPage();
+
+        expect(await screen.findByRole('heading', { level: 1, name: 'Новых дел нет' })).toBeInTheDocument();
+        expect(screen.getByText('Прочитанные ещё не решены: 3, из них критичных 1.')).toBeInTheDocument();
+        fireEvent.click(screen.getByRole('button', { name: 'Показать прочитанные' }));
+        expect(openPanel).toHaveBeenCalledWith({ showRead: true });
+    });
+
+    it('если раздел не ответил, не говорит, что всё спокойно', async () => {
+        notifications.items = [];
+        notifications.complete = false;
+        renderPage();
+
+        expect(await screen.findByRole('heading', { level: 1, name: 'Не все разделы ответили' })).toBeInTheDocument();
+    });
+
+    it('пока уведомления не пришли, ничего не утверждает', async () => {
+        notifications.items = [];
+        notifications.loaded = false;
+        const { container } = renderPage();
+
+        await act(async () => {});
+        expect(authApi.home).toHaveBeenCalled();
+        expect(screen.queryByRole('heading', { level: 1 })).not.toBeInTheDocument();
+        expect(container.querySelector('[aria-busy="true"]')).toBeInTheDocument();
+    });
+
+    it('рисует пульс, только когда сервер его отдал', async () => {
+        authApi.home.mockResolvedValue(homeData({ pulse: null }));
+        renderPage();
+
+        await screen.findByRole('heading', { level: 1 });
+        expect(screen.queryByTestId('pulse')).not.toBeInTheDocument();
+    });
+
+    it('внизу частые разделы, добранные доступными до трёх', async () => {
+        notifications.bySource = { inventory: { total: 4 } };
+        renderPage();
+
+        const nav = await screen.findByRole('navigation', { name: 'Мои разделы' });
+        const links = nav.querySelectorAll('a');
+        expect([...links].map((link) => link.getAttribute('href'))).toEqual(['/inventory', '/raw-materials', '/protocols']);
+        expect(screen.getByText('4 дела')).toBeInTheDocument();
+    });
+
+    it('при ошибке не делает вид, что всё спокойно', async () => {
+        authApi.home.mockRejectedValueOnce(new Error('500'));
+        renderPage();
+
+        expect(await screen.findByText('Не удалось загрузить главную')).toBeInTheDocument();
+        expect(screen.queryByText('Сегодня ничего не горит')).not.toBeInTheDocument();
+
+        fireEvent.click(screen.getByRole('button', { name: /Попробовать ещё раз/ }));
+        expect(await screen.findByRole('heading', { level: 1, name: 'Серия Л-0912 просрочена' })).toBeInTheDocument();
     });
 });

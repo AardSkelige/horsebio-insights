@@ -4,40 +4,43 @@
 
 /* ── Design System Tokens ────────────────────────────────── */
 :root {
-  --canvas:                #faf9f5;
-  --surface-soft:          #f5f0e8;
-  --surface-card:          #efe9de;
-  --surface-cream-strong:  #e8e0d2;
-  --surface-dark:          #181715;
-  --surface-dark-elevated: #252320;
-  --surface-dark-soft:     #1f1e1b;
+  --canvas:                #f4f5f2;
+  --surface-soft:          #eceee9;
+  --surface-card:          #e3e6df;
+  --surface-cream-strong:  #d7dbd2;
+  --surface-dark:          #1d2420;
+  --surface-dark-elevated: #29312c;
+  --surface-dark-soft:     #222a25;
 
-  --ink:          #141413;
-  --body:         #3d3d3a;
-  --muted:        #6c6a64;
-  --muted-soft:   #8e8b82;
-  --on-dark:      #faf9f5;
-  --on-dark-soft: #a09d96;
+  --ink:          #18201c;
+  --body:         #39423d;
+  --muted:        #5c655f;
+  --muted-soft:   #8b948e;
+  --on-dark:      #eef1ec;
+  --on-dark-soft: #9aa49d;
   --on-primary:   #ffffff;
 
-  --hairline:      #e6dfd8;
-  --hairline-soft: #ebe6df;
+  --hairline:      #d6dbd3;
+  --hairline-soft: #e1e5de;
 
-  --primary:        #cc785c;
-  --primary-active: #a9583e;
+  --primary:        #8a4a24;
+  --primary-active: #6c3717;
+  --accent-glow:    #e9a46f;
+  --on-dark-accent: #d08a5c;
+  --on-fill:        #ffffff;
 
   /* Семантика статусов.
      base — заливки, индикаторы, полосы графиков;
      ink  — текст: base слишком светлый на кремовом фоне и не проходит по контрасту,
             поэтому раньше затемнённые оттенки хардкодились по компонентам. */
-  --success:     #5db872;
-  --success-ink: #3a7c4a;
-  --warning:     #d4a017;
-  --warning-ink: #7a6010;
-  --error:       #c64545;
-  --error-ink:   #a03a3a;
-  --info:        #5c8acc;
-  --info-ink:    #3a68a0;
+  --success:     #3f9a62;
+  --success-ink: #2b6e45;
+  --warning:     #c9961a;
+  --warning-ink: #77590c;
+  --error:       #c4473b;
+  --error-ink:   #a1362b;
+  --info:        #4f7fb8;
+  --info-ink:    #335f93;
 
   /* Тональная плашка статуса (бейдж, подсвеченная строка). Считается от base,
      поэтому в тёмной теме не переопределяется — color-mix пересчитает сам. */
@@ -135,6 +138,7 @@
   --size-lg:      16px;
   --size-xl:      22px;
   --size-display: 32px;
+  --size-hero:    clamp(36px, 4.6vw, 64px);
 
   --radius-sm:   6px;
   --radius-md:   8px;
@@ -152,38 +156,40 @@
   --control-pad-x:  12px;
   --control-height: 34px;
 
-  --serif: 'Cormorant Garamond', 'Tiempos Headline', Georgia, serif;
-  --sans:  'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  --display: 'Onest', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  --sans:  'Onest', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
   --mono:  'JetBrains Mono', 'Courier New', monospace;
 }
 
 [data-theme="dark"] {
-  --canvas:                #181715;
-  --surface-soft:          #1f1e1b;
-  --surface-card:          #252320;
-  --surface-cream-strong:  #2e2c29;
-  --surface-dark:          #252320;
-  --surface-dark-elevated: #2e2c29;
-  --surface-dark-soft:     #252320;
+  --canvas:                #151a17;
+  --surface-soft:          #1b211d;
+  --surface-card:          #222924;
+  --surface-cream-strong:  #2b332d;
+  --surface-dark:          #1f2622;
+  --surface-dark-elevated: #2b332d;
+  --surface-dark-soft:     #1f2622;
 
-  --ink:          #faf9f5;
-  --body:         #c8c4bc;
-  --muted:        #a09d96;
-  --muted-soft:   #6c6a64;
-  --on-dark:      #faf9f5;
-  --on-dark-soft: #a09d96;
+  --ink:          #edf1ec;
+  --body:         #ccd3cd;
+  --muted:        #96a098;
+  --muted-soft:   #747e77;
+  --on-dark:      #eef1ec;
+  --on-dark-soft: #9aa49d;
 
-  --hairline:      #252320;
-  --hairline-soft: #2e2c29;
+  --hairline:      #2e3731;
+  --hairline-soft: #252c27;
 
-  --primary:        #cc785c;
-  --primary-active: #a9583e;
+  --primary:        #d08a5c;
+  --primary-active: #e2a378;
+  --accent-glow:    #d08a5c;
+  --on-primary:     #1a120c;
 
   /* На тёмном фоне текст статуса должен светлеть, а не темнеть */
-  --success-ink: #7fcf92;
-  --warning-ink: #e0b84a;
-  --error-ink:   #e08585;
-  --info-ink:    #8fb4e0;
+  --success-ink: #84cf9f;
+  --warning-ink: #e6c35c;
+  --error-ink:   #ec8f84;
+  --info-ink:    #96b8e4;
 
   /* В тёмной теме тень на тёмном фоне почти не читается — усиливаем */
   --shadow-hairline: 0 1px 2px rgba(0, 0, 0, 0.35);

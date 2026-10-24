@@ -80,7 +80,7 @@ const ProductDetailsModal = ({ product, visible, onClose, dateRange, salesChanne
                 {/* Header */}
                 <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', padding: '20px 24px 16px', borderBottom: '1px solid var(--hairline)', flexShrink: 0 }}>
                     <div style={{ display: 'flex', alignItems: 'baseline', gap: 10, minWidth: 0 }}>
-                        <h2 style={{ fontFamily: 'var(--serif)', fontSize: 22, fontWeight: 400, letterSpacing: '-0.02em', color: 'var(--ink)', margin: 0, lineHeight: 1.2 }}>{product?.name}</h2>
+                        <h2 style={{ fontFamily: 'var(--display)', fontSize: 22, fontWeight: 400, letterSpacing: '-0.02em', color: 'var(--ink)', margin: 0, lineHeight: 1.2 }}>{product?.name}</h2>
                         {product?.subgroup && <span style={{ fontFamily: 'var(--sans)', fontSize: 12, color: 'var(--muted)' }}>{product.subgroup}</span>}
                     </div>
                     <CloseButton onClick={onClose} />

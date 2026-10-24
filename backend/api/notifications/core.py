@@ -262,6 +262,7 @@ def collect(user, refresh=False):
         },
         'by_source': by_source,
         'generated_at': timezone.now().isoformat(timespec='seconds'),
+        'complete': healthy,
     }
 
 

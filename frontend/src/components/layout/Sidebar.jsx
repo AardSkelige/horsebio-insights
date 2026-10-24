@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState } from 'react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
 import PropTypes from 'prop-types';
 import { PanelLeftClose, PanelLeftOpen, X, RefreshCw, ChevronDown } from 'lucide-react';
@@ -11,12 +11,7 @@ import NotificationsBell from '../notifications/NotificationsBell';
 import NavItem from './sidebar/NavItem';
 import UtilBtn from './sidebar/UtilBtn';
 import UserMenu from './sidebar/UserMenu';
-import NAV_GROUPS, { NAV_PATHS, navSection } from './sidebar/navGroups';
-import {
-    HOME_PREFERENCES_EVENT,
-    MAX_PINNED_SECTIONS,
-    publishHomePreferences,
-} from '../../utils/homePreferences';
+import NAV_GROUPS, { navSection } from './sidebar/navGroups';
 
 const W_OPEN = 240;
 const W_CLOSED = 52;
@@ -30,7 +25,6 @@ export const Sidebar = ({ expanded, onToggle, isMobile, mobileOpen, onMobileClos
     const auth = useAuthStatus();
     const isSuperuser = auth.isSuperuser === true;
     const allowedPages = auth.allowedPages;
-    const [pinnedPaths, setPinnedPaths] = useState([]);
     // Ховер живёт на уровне сайдбара: одна layoutId-пилюля перетекает между пунктами
     const [hovPath, setHovPath] = useState(null);
     // Свёрнутые категории меню — по label группы, запоминаем в браузере (как тему и
@@ -47,25 +41,6 @@ export const Sidebar = ({ expanded, onToggle, isMobile, mobileOpen, onMobileClos
             return next;
         });
     };
-
-    useEffect(() => {
-        let active = true;
-        // Отсекаем «мёртвые» пути (после переименования маршрутов), чтобы они не
-        // занимали слоты и не блокировали звёздочки закрепления.
-        const prune = (arr) => (arr || []).filter((p) => NAV_PATHS.has(p));
-        authApi.home()
-            .then((result) => { if (active) setPinnedPaths(prune(result.data.pinnedPaths)); })
-            .catch(() => {});
-
-        const handlePreferences = (event) => {
-            if (Array.isArray(event.detail?.pinnedPaths)) setPinnedPaths(prune(event.detail.pinnedPaths));
-        };
-        window.addEventListener(HOME_PREFERENCES_EVENT, handlePreferences);
-        return () => {
-            active = false;
-            window.removeEventListener(HOME_PREFERENCES_EVENT, handlePreferences);
-        };
-    }, []);
 
     const activePath = navSection(location.pathname);
     const isActive = (path) => path === activePath;
@@ -87,29 +62,6 @@ export const Sidebar = ({ expanded, onToggle, isMobile, mobileOpen, onMobileClos
             clearAuthStatus();
             sessionStorage.clear();
             navigate('/login', { replace: true });
-        }
-    };
-
-    const handleTogglePin = async (path) => {
-        // Только актуальные пути — «мёртвые» пины не занимают слоты избранного
-        const previous = pinnedPaths.filter((p) => NAV_PATHS.has(p));
-        const isPinned = previous.includes(path);
-        if (!isPinned && previous.length >= MAX_PINNED_SECTIONS) return;
-
-        const next = isPinned
-            ? previous.filter((item) => item !== path)
-            : [...previous, path];
-        setPinnedPaths(next);
-        publishHomePreferences(next);
-
-        try {
-            const result = await authApi.updateHome(next);
-            const saved = (result.data.pinnedPaths || []).filter((p) => NAV_PATHS.has(p));
-            setPinnedPaths(saved);
-            publishHomePreferences(saved);
-        } catch {
-            setPinnedPaths(previous);
-            publishHomePreferences(previous);
         }
     };
 
@@ -158,10 +110,10 @@ export const Sidebar = ({ expanded, onToggle, isMobile, mobileOpen, onMobileClos
                     >
                         <span
                             className="app-logo-mark"
-                            style={{ color: 'var(--primary)', '--logo-mark-width': '20px', '--logo-mark-height': '12px', flexShrink: 0 }}
+                            style={{ color: 'var(--on-dark-accent)', '--logo-mark-width': '20px', '--logo-mark-height': '12px', flexShrink: 0 }}
                             aria-hidden="true"
                         />
-                        <span style={{ fontFamily: 'var(--serif)', fontSize: '15px', color: 'var(--on-dark)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                        <span style={{ fontFamily: 'var(--display)', fontSize: '15px', color: 'var(--on-dark)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
                             HorseBio Insights
                         </span>
                     </Link>
@@ -261,9 +213,6 @@ export const Sidebar = ({ expanded, onToggle, isMobile, mobileOpen, onMobileClos
                                         onNavigate={mobileNavigate}
                                         hovered={hovPath === item.path}
                                         onHover={setHovPath}
-                                        pinned={pinnedPaths.includes(item.path)}
-                                        pinDisabled={!pinnedPaths.includes(item.path) && pinnedPaths.length >= MAX_PINNED_SECTIONS}
-                                        onTogglePin={item.path === '/' ? undefined : handleTogglePin}
                                         unread={bySource[item.pageKey]?.unseen || 0}
                                         unreadTone={bySource[item.pageKey]?.level || 'info'}
                                     />

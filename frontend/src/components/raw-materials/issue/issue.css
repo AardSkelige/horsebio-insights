@@ -232,7 +232,7 @@
 
 .issue-cart__done-title {
     margin: 0;
-    font-family: var(--serif);
+    font-family: var(--display);
     font-size: var(--size-xl);
     color: var(--ink);
 }

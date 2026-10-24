@@ -225,6 +225,7 @@ class CoreTest(TestCase):
 
         data = self._collect([_position(state=STATE_DELIST, days_left=30)])
         self.assertEqual(data['counts']['total'], 1)
+        self.assertFalse(data['complete'])
 
     def test_reading_clears_the_unread_counter_but_keeps_the_notification(self):
         """Прочитанное не исчезает: дело осталось, просто человек о нём знает."""
