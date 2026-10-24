@@ -7,7 +7,7 @@ import { useAuthStatus } from '../../hooks/useAuthStatus';
 import { authApi } from '../../api/authApi';
 import { useDataPanel } from '../../contexts/DataPanelContext';
 import { leaveApp, smoothNavigate } from '../ui/motion';
-import { usePageLayer } from '../ui/motion/usePageLayer';
+import { useHeldLayer, usePageLayer } from '../ui/motion/usePageLayer';
 import { unsubscribeDevice } from '../../hooks/usePush';
 import { useNotifications } from '../../contexts/NotificationsContext';
 import NotificationsBell from '../notifications/NotificationsBell';
@@ -66,13 +66,16 @@ export const Sidebar = ({ expanded, onToggle, isMobile, mobileOpen, onMobileClos
         smoothNavigate(navigate, '/login', { replace: true, slow: true });
     };
 
-    const layer = usePageLayer(Boolean(isMobile && mobileOpen));
+    const [place, releasePlace] = useHeldLayer(usePageLayer(Boolean(isMobile && mobileOpen)));
 
     const asideStyle = isMobile
         ? {
-            position: 'fixed', top: 0, left: 0, height: '100%',
-            ...layer?.panel,
-            ...(layer && { height: layer.panel.height - layer.extra }),
+            position: 'absolute', top: 0, left: 0, height: '100%',
+            ...place?.panel,
+            ...(place && {
+                top: `calc(${place.panel.top}px + var(--app-drawer-top))`,
+                height: `calc(${place.panel.height - place.extra}px - var(--app-drawer-top))`,
+            }),
             width: W_OPEN, minWidth: W_OPEN,
             backgroundColor: 'var(--surface-dark)',
             display: 'flex', flexDirection: 'column',
@@ -80,7 +83,7 @@ export const Sidebar = ({ expanded, onToggle, isMobile, mobileOpen, onMobileClos
             zIndex: mobileOpen ? 9996 : 72,
             borderRadius: '0 22px 22px 0',
             transform: `translateX(${mobileOpen ? 0 : -W_OPEN}px)`,
-            transition: 'transform 220ms ease',
+            transition: mobileOpen ? 'transform 220ms ease' : 'transform 220ms ease, z-index 0s linear 220ms',
         }
         : {
             width: expanded ? W_OPEN : W_CLOSED,
@@ -94,14 +97,20 @@ export const Sidebar = ({ expanded, onToggle, isMobile, mobileOpen, onMobileClos
         };
 
     return (
-        <aside className="app-sidebar" style={asideStyle}>
+        <aside
+            className="app-sidebar"
+            style={asideStyle}
+            onTransitionEnd={(event) => {
+                if (event.target === event.currentTarget && event.propertyName === 'transform' && !mobileOpen) releasePlace();
+            }}
+        >
 
             {/* Logo + toggle */}
             <div style={{
-                height: isMobile ? 'calc(56px + env(safe-area-inset-top, 0px))' : 56,
+                height: isMobile ? 'calc(56px + var(--app-head-top) - var(--app-drawer-top))' : 56,
                 display: 'flex', alignItems: 'center',
                 padding: showExpanded ? '0 10px 0 14px' : '0',
-                paddingTop: isMobile ? 'env(safe-area-inset-top, 0px)' : 0,
+                paddingTop: isMobile ? 'calc(var(--app-head-top) - var(--app-drawer-top))' : 0,
                 justifyContent: showExpanded ? 'space-between' : 'center',
                 flexShrink: 0,
                 borderBottom: '1px solid var(--on-dark-wash)',
@@ -223,6 +232,7 @@ export const Sidebar = ({ expanded, onToggle, isMobile, mobileOpen, onMobileClos
                                         unread={bySource[item.pageKey]?.unseen || 0}
                                         unreadTone={bySource[item.pageKey]?.level || 'info'}
                                         order={order++}
+                                        flyingPill={!isMobile}
                                     />
                                 ))}
                             </div>
@@ -249,7 +259,7 @@ export const Sidebar = ({ expanded, onToggle, isMobile, mobileOpen, onMobileClos
                 <UserMenu
                     expanded={showExpanded}
                     theme={theme}
-                    onToggleTheme={onToggleTheme}
+                    onToggleTheme={isMobile ? undefined : onToggleTheme}
                     onLogout={handleLogout}
                     onProfile={() => (mobileNavigate ? mobileNavigate('/profile') : navigate('/profile'))}
                 />

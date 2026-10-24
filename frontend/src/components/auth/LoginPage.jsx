@@ -1,45 +1,80 @@
 // frontend/src/components/auth/LoginPage.jsx
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
-import { AlertCircle, ArrowRight, Database, FileSpreadsheet, LockKeyhole, PackageSearch, Sparkles } from 'lucide-react';
+import { AnimatePresence, m, useAnimate, useReducedMotion } from 'motion/react';
+import { UserRound } from 'lucide-react';
 import './LoginPage.css';
+import LoginField from './LoginField';
+import LoginThreads from './LoginThreads';
 import { setAuthStatus } from '../../utils/authSession';
 import { authApi } from '../../api/authApi';
-import { smoothNavigate, switchTheme, ThemeIcon } from '../ui/motion';
+import { useIsMobile } from '../../hooks/useIsMobile';
+import { smoothNavigate, Stagger, StaggerItem, switchTheme, ThemeIcon } from '../ui/motion';
 
 const LoginPage = () => {
     const [username, setUsername] = useState('');
     const [password, setPassword] = useState('');
+    const [step, setStep] = useState('user');
     const [errorMessage, setErrorMessage] = useState('');
     const [isLoading, setIsLoading] = useState(false);
     const [theme, setTheme] = useState(() => localStorage.getItem('theme') || 'light');
+    const usernameRef = useRef(null);
+    const passwordRef = useRef(null);
+    const [fieldRef, animate] = useAnimate();
+    const reduceMotion = useReducedMotion();
+    const isMobile = useIsMobile();
     const navigate = useNavigate();
     const location = useLocation();
     const from = location.state?.from?.pathname || '/';
+    const onPassword = step === 'password';
+    const ready = onPassword ? password.length > 0 : username.trim().length > 0;
 
     useEffect(() => {
         document.documentElement.setAttribute('data-theme', theme);
         localStorage.setItem('theme', theme);
     }, [theme]);
 
+    const shake = () => {
+        if (reduceMotion || !fieldRef.current) return;
+        animate(fieldRef.current, { x: [0, -8, 8, -5, 5, 0] }, { duration: 0.4, ease: 'easeOut' });
+    };
+
+    const editUser = () => {
+        setStep('user');
+        setErrorMessage('');
+        usernameRef.current?.focus({ preventScroll: true });
+    };
+
     const handleSubmit = async (e) => {
         e.preventDefault();
+        if (!ready) {
+            shake();
+            return;
+        }
+        if (!onPassword) {
+            setErrorMessage('');
+            setStep('password');
+            passwordRef.current?.focus({ preventScroll: true });
+            return;
+        }
+
         setErrorMessage('');
         setIsLoading(true);
-
         try {
-            const data = await authApi.login(username, password);
+            const data = await authApi.login(username.trim(), password);
 
             if (data.status === 'success') {
                 setAuthStatus({ isAuthenticated: true });
                 smoothNavigate(navigate, from, { replace: true, slow: true });
             } else {
                 setErrorMessage(data.message || 'Ошибка входа в систему');
+                shake();
             }
         } catch (error) {
             if (!error.status) setErrorMessage('Нет связи с сервером');
             else if (error.status >= 500) setErrorMessage('Сервер временно недоступен, попробуйте позже');
             else setErrorMessage(error.data?.message || 'Не удалось войти');
+            shake();
         } finally {
             setIsLoading(false);
         }
@@ -47,123 +82,77 @@ const LoginPage = () => {
 
     return (
         <main className="login-page">
+            {!isMobile && <LoginThreads />}
             <button
                 type="button"
                 className="login-theme-toggle"
                 onClick={(event) => switchTheme(theme === 'dark' ? 'light' : 'dark', setTheme, event)}
-                title={theme === 'dark' ? 'Светлая тема' : 'Темная тема'}
+                title={theme === 'dark' ? 'Светлая тема' : 'Тёмная тема'}
             >
                 <ThemeIcon dark={theme === 'dark'} size={16} />
             </button>
 
-            <section className="login-shell">
-                <div className="login-brand">
-                    <div className="login-wordmark">
-                        <span className="app-logo-mark login-wordmark__mark" aria-hidden="true" />
-                        HorseBio Insights
+            <Stagger className="login-column">
+                <StaggerItem>
+                    <span className="app-logo-mark login-mark" aria-hidden="true" />
+                </StaggerItem>
+                <StaggerItem>
+                    <h1 className="login-title">Вход в Insights</h1>
+                    <div className="login-subtitle">
+                        <p data-off={onPassword || undefined} aria-hidden={onPassword || undefined}>Система аналитики HorseBio</p>
+                        <p data-off={!onPassword || undefined} aria-hidden={!onPassword || undefined}>Введите пароль</p>
                     </div>
-                    <div>
-                        <p className="login-kicker">
-                            <Sparkles size={14} />
-                            Операционная аналитика
-                        </p>
-                        <h1>Панель управления HorseBio</h1>
-                        <p className="login-lead">
-                            Отчеты, синхронизации, закупки и маркетплейс-аналитика в одном рабочем контуре.
-                        </p>
-                    </div>
+                </StaggerItem>
 
-                    <div className="login-product-panel login-data-map" aria-label="Схема потоков данных">
-                        <div className="login-product-panel__header">
-                            <span>Потоки данных</span>
-                            <span>Рабочий контур</span>
-                        </div>
+                <StaggerItem className="login-form-wrap">
+                    <AnimatePresence initial={false}>
+                        {onPassword && (
+                            <m.div
+                                className="login-who-row"
+                                initial={{ height: 0, opacity: 0 }}
+                                animate={{ height: 'auto', opacity: 1 }}
+                                exit={{ height: 0, opacity: 0 }}
+                                transition={{ duration: 0.25, ease: 'easeOut' }}
+                            >
+                                <span className="login-who">
+                                    <UserRound size={14} aria-hidden="true" />
+                                    <span className="login-who__name">{username.trim()}</span>
+                                    <button type="button" onClick={editUser}>Изменить</button>
+                                </span>
+                            </m.div>
+                        )}
+                    </AnimatePresence>
 
-                        <div className="login-data-map__canvas">
-                            <svg className="login-flow-svg" viewBox="0 0 520 250" preserveAspectRatio="none" aria-hidden="true">
-                                <path className="login-flow-path" d="M370 78 H150" />
-                                <path className="login-flow-path" d="M150 138 L260 184" />
-                                <path className="login-flow-path" d="M370 138 L260 184" />
-                                <path className="login-flow-path-active login-flow-path-active--one" d="M370 78 H150" />
-                                <path className="login-flow-path-active login-flow-path-active--two" d="M150 138 L260 184" />
-                                <path className="login-flow-path-active login-flow-path-active--three" d="M370 138 L260 184" />
-                            </svg>
-
-                            <div className="login-data-node login-data-node--source">
-                                <span><Database size={17} /></span>
-                                <strong>МойСклад</strong>
-                                <small>продажи<br />и остатки</small>
-                            </div>
-
-                            <div className="login-data-node login-data-node--market">
-                                <span><PackageSearch size={17} /></span>
-                                <strong>OZON</strong>
-                                <small>реклама<br />и FBO</small>
-                            </div>
-
-                            <div className="login-data-node login-data-node--report">
-                                <span><FileSpreadsheet size={17} /></span>
-                                <strong>HorseBio Insights</strong>
-                                <small>аналитика<br />и решения</small>
-                            </div>
-                        </div>
-
-                        <div className="login-data-map__footer">
-                            <span className="login-process-dot" />
-                            Данные из МойСклад и OZON собираются в HorseBio Insights
-                        </div>
-                    </div>
-                </div>
-
-                <form className="login-card" onSubmit={handleSubmit}>
-                    <div className="login-card__icon">
-                        <LockKeyhole size={18} />
-                    </div>
-                    <div className="login-card__heading">
-                        <h2>Авторизация</h2>
-                        <p>Введите учетные данные для доступа к панели.</p>
-                    </div>
-
-                    <div className="login-fields">
-                        <label>
-                            <span>Имя пользователя</span>
-                            <input
-                                id="username"
-                                name="username"
-                                type="text"
-                                required
-                                value={username}
-                                onChange={(e) => setUsername(e.target.value)}
-                                placeholder="Имя пользователя"
-                            />
-                        </label>
-                        <label>
-                            <span>Пароль</span>
-                            <input
-                                id="password"
-                                name="password"
-                                type="password"
-                                required
-                                value={password}
-                                onChange={(e) => setPassword(e.target.value)}
-                                placeholder="Пароль"
-                            />
-                        </label>
-                    </div>
-
-                    {errorMessage && (
-                        <div className="login-error">
-                            <AlertCircle size={16} />
-                            <span>{errorMessage}</span>
-                        </div>
-                    )}
-
-                    <button type="submit" disabled={isLoading} className="login-submit">
-                        {isLoading ? 'Вход...' : 'Войти'}
-                        <ArrowRight size={16} />
-                    </button>
-                </form>
-            </section>
+                    <form onSubmit={handleSubmit} noValidate>
+                        <LoginField
+                            fieldRef={fieldRef}
+                            usernameRef={usernameRef}
+                            passwordRef={passwordRef}
+                            step={step}
+                            username={username}
+                            password={password}
+                            onUsernameChange={setUsername}
+                            onPasswordChange={setPassword}
+                            ready={ready}
+                            busy={isLoading}
+                        />
+                        <AnimatePresence>
+                            {errorMessage && (
+                                <m.p
+                                    className="login-error"
+                                    role="alert"
+                                    initial={{ height: 0, opacity: 0 }}
+                                    animate={{ height: 'auto', opacity: 1 }}
+                                    exit={{ height: 0, opacity: 0 }}
+                                    transition={{ duration: 0.2, ease: 'easeOut' }}
+                                >
+                                    {errorMessage}
+                                </m.p>
+                            )}
+                        </AnimatePresence>
+                    </form>
+                </StaggerItem>
+            </Stagger>
         </main>
     );
 };

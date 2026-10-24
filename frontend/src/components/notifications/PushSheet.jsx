@@ -3,7 +3,7 @@ import { createPortal } from 'react-dom';
 import { useNavigate } from 'react-router-dom';
 import PropTypes from 'prop-types';
 import { AnimatePresence, m } from 'motion/react';
-import { BellOff, BellRing, CircleAlert, Menu, Share, SquarePlus, Trash2 } from 'lucide-react';
+import { BellOff, BellRing, CircleAlert, Menu, Share, SquarePlus, ToggleRight, Trash2 } from 'lucide-react';
 import { Button } from '../ui';
 import { usePageLayer } from '../ui/motion/usePageLayer';
 import { pushApi } from '../../api/pushApi';
@@ -110,8 +110,9 @@ export default function PushSheet({ quiet = false }) {
                     <ol className="nt-sheet__steps">
                         <li><Trash2 size={18} aria-hidden="true" />Если иконка HorseBio уже есть, удалите её</li>
                         <li><Menu size={18} aria-hidden="true" />Нажмите три полоски в строке адреса внизу</li>
-                        <li><Share size={18} aria-hidden="true" />Выберите «Поделиться»</li>
-                        <li><SquarePlus size={18} aria-hidden="true" />Затем «На экран „Домой“»</li>
+                        <li><Share size={18} aria-hidden="true" />Выберите «Поделиться», затем «Показать больше»</li>
+                        <li><SquarePlus size={18} aria-hidden="true" />Выберите Добавить на экран «Домой»</li>
+                        <li><ToggleRight size={18} aria-hidden="true" />Не выключайте «Открыть как веб-приложение» и нажмите «Добавить»</li>
                         <li><BellRing size={18} aria-hidden="true" />Откройте HorseBio с новой иконки и включите уведомления</li>
                     </ol>
                     <Button variant="primary" size="lg" block onClick={close}>Понятно</Button>

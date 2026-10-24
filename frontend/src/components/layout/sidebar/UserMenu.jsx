@@ -118,7 +118,7 @@ const UserMenu = ({ expanded, theme, onToggleTheme, onLogout, onProfile }) => {
                     )}
                 </button>
 
-                {expanded && (
+                {expanded && onToggleTheme && (
                     <button
                         onClick={(e) => { e.stopPropagation(); onToggleTheme(e); }}
                         onMouseEnter={() => setThemeHov(true)}
@@ -175,16 +175,18 @@ const UserMenu = ({ expanded, theme, onToggleTheme, onLogout, onProfile }) => {
                         <span style={{ fontFamily: 'var(--sans)', fontSize: '13px' }}>Личный кабинет</span>
                     </button>
 
-                    <button
-                        onMouseEnter={() => setHovItem('theme')} onMouseLeave={() => setHovItem(null)}
-                        onClick={(e) => { onToggleTheme(e); setOpen(false); }}
-                        style={menuItemStyle(hovItem === 'theme')}
-                    >
-                        <ThemeIcon dark={theme === 'dark'} size={15} />
-                        <span style={{ fontFamily: 'var(--sans)', fontSize: '13px' }}>
-                            {theme === 'dark' ? 'Светлая тема' : 'Тёмная тема'}
-                        </span>
-                    </button>
+                    {onToggleTheme && (
+                        <button
+                            onMouseEnter={() => setHovItem('theme')} onMouseLeave={() => setHovItem(null)}
+                            onClick={(e) => { onToggleTheme(e); setOpen(false); }}
+                            style={menuItemStyle(hovItem === 'theme')}
+                        >
+                            <ThemeIcon dark={theme === 'dark'} size={15} />
+                            <span style={{ fontFamily: 'var(--sans)', fontSize: '13px' }}>
+                                {theme === 'dark' ? 'Светлая тема' : 'Тёмная тема'}
+                            </span>
+                        </button>
+                    )}
 
                     <div style={{ height: 1, margin: '2px 0', backgroundColor: 'var(--on-dark-wash)' }} />
 
@@ -205,7 +207,7 @@ const UserMenu = ({ expanded, theme, onToggleTheme, onLogout, onProfile }) => {
 UserMenu.propTypes = {
     expanded: PropTypes.bool.isRequired,
     theme: PropTypes.string.isRequired,
-    onToggleTheme: PropTypes.func.isRequired,
+    onToggleTheme: PropTypes.func,
     onLogout: PropTypes.func.isRequired,
     onProfile: PropTypes.func.isRequired,
 };

@@ -58,6 +58,12 @@ export const usePageLayer = (open, { tinted = true } = {}) => {
     return layer;
 };
 
+export const useHeldLayer = (layer) => {
+    const [held, setHeld] = useState(null);
+    if (layer && layer !== held) setHeld(layer);
+    return [layer ?? held, () => setHeld(null)];
+};
+
 const subscribeTint = (listener) => {
     tintListeners.add(listener);
     return () => tintListeners.delete(listener);

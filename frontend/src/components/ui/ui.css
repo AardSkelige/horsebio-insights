@@ -1281,7 +1281,7 @@
     box-shadow: var(--shadow-menu);
     /* Панель едет от верхнего края экрана — на телефоне её шапка иначе уходит
        под статус-бар, а низ содержимого за нижний край */
-    padding-top: env(safe-area-inset-top, 0px);
+    padding-top: var(--app-head-top);
     will-change: transform;
 }
 

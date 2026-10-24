@@ -43,6 +43,13 @@
   <meta name="mobile-web-app-capable" content="yes" />
   <meta name="theme-color" content="#1d2420" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+  <script>
+    try { if (localStorage.getItem('theme') === 'dark') document.documentElement.setAttribute('data-theme', 'dark'); } catch (e) {}
+  </script>
+  <style>
+    html { background-color: #f4f5f2; }
+    html[data-theme="dark"] { background-color: #151a17; }
+  </style>
   <title>HorseBio Insights</title>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>

@@ -34,7 +34,7 @@ const tooltipStyle = (top) => ({
  */
 const NavItem = ({
     path, label, icon: Icon, expanded, active, onNavigate, hovered, onHover,
-    unread = 0, unreadTone = 'info', order = 0,
+    unread = 0, unreadTone = 'info', order = 0, flyingPill = true,
 }) => {
     const [tipTop, setTipTop] = useState(0);
     const ref = useRef(null);
@@ -87,7 +87,7 @@ const NavItem = ({
                 {/* Активная пилюля: перелетает к выбранному пункту при навигации */}
                 {active && (
                     <m.span
-                        layoutId="sidebar-active-pill"
+                        layoutId={flyingPill ? 'sidebar-active-pill' : undefined}
                         transition={{ type: 'spring', stiffness: 450, damping: 38 }}
                         style={{ position: 'absolute', inset: 0, borderRadius: 8, backgroundColor: 'var(--on-dark-hairline)' }}
                     />
@@ -146,6 +146,7 @@ NavItem.propTypes = {
     unread: PropTypes.number,
     unreadTone: PropTypes.oneOf(['critical', 'warning', 'info']),
     order: PropTypes.number,
+    flyingPill: PropTypes.bool,
 };
 
 export default NavItem;

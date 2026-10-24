@@ -9,10 +9,11 @@ import { useDataPanel } from '../../contexts/DataPanelContext';
 import { NotificationsProvider } from '../../contexts/NotificationsContext';
 import { NotificationsBarButton, NotificationsPanel, PushSheet } from '../notifications';
 import Sidebar from './Sidebar';
+import { IconButton } from '../ui';
 import { usePageTracking } from '../../hooks/usePageTracking';
 import { useAuthStatus, useSuperuser } from '../../hooks/useAuthStatus';
 import { navSection } from './sidebar/navGroups';
-import { endIntro, introFor, introFull, switchTheme, useIntro, useLeaving } from '../ui/motion';
+import { endIntro, introFor, introFull, switchTheme, ThemeIcon, useIntro, useLeaving } from '../ui/motion';
 import { usePageLayer, usePageTint } from '../ui/motion/usePageLayer';
 import { canSeePulse } from '../home/homeSections';
 
@@ -151,7 +152,7 @@ const Layout = ({ children }) => {
                     onClick={() => setMobileOpen(false)}
                     onTouchMove={e => e.preventDefault()}
                     style={{
-                        position: 'absolute', inset: 0, ...backdropLayer?.scrim, zIndex: 34,
+                        position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, ...backdropLayer?.scrim, zIndex: 34,
                         backgroundColor: 'var(--scrim)',
                         opacity: mobileOpen ? 1 : 0,
                         pointerEvents: mobileOpen ? 'auto' : 'none',
@@ -179,11 +180,9 @@ const Layout = ({ children }) => {
                 {isMobile && (
                     <div className="intro-bar app-topbar" style={{
                         position: 'sticky', top: 0, zIndex: 20,
-                        height: 'calc(52px + env(safe-area-inset-top, 0px))',
                         backgroundColor: tinted ? 'var(--scrim-solid)' : 'var(--canvas)',
                         borderBottom: '1px solid var(--hairline)',
                         display: 'flex', alignItems: 'center', gap: 12,
-                        paddingTop: 'env(safe-area-inset-top, 0px)',
                         paddingLeft: 16, paddingRight: 16,
                         boxSizing: 'border-box',
                         flexShrink: 0,
@@ -210,6 +209,13 @@ const Layout = ({ children }) => {
                             HorseBio Insights
                         </span>
                         <NotificationsBarButton />
+                        <IconButton
+                            className="app-topbar__btn"
+                            label={theme === 'dark' ? 'Светлая тема' : 'Тёмная тема'}
+                            onClick={(event) => switchTheme(theme === 'light' ? 'dark' : 'light', setTheme, event)}
+                        >
+                            <ThemeIcon dark={theme === 'dark'} size={18} />
+                        </IconButton>
                     </div>
                 )}
 
@@ -248,7 +254,7 @@ const Layout = ({ children }) => {
                     // Панель выезжает от самого верха экрана, поэтому на телефоне
                     // её шапка уходила под статус-бар, а длинное содержимое —
                     // за нижний край без возможности доскроллить
-                    paddingTop: 'env(safe-area-inset-top, 0px)',
+                    paddingTop: 'var(--app-head-top)',
                     maxHeight: '100dvh',
                     overflowY: 'auto',
                     overscrollBehavior: 'contain',
@@ -275,7 +281,7 @@ const Layout = ({ children }) => {
 
             <FloatingLoadingCard />
             <NotificationsPanel />
-            <PushSheet quiet={intro || leaving} />
+            <PushSheet quiet={intro || leaving || mobileOpen} />
         </div>
         </NotificationsProvider>
     );

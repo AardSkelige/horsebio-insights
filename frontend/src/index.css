@@ -318,6 +318,33 @@ button:active:not(:disabled):not(.no-tap-scale):not([style*="width: 100%"]):not(
   }
 }
 
+:root {
+  --app-head-top: env(safe-area-inset-top, 0px);
+  --app-drawer-top: 0px;
+}
+
+@media (display-mode: standalone) and (max-width: 767px) {
+  :root {
+    --app-head-top: calc(16px + env(safe-area-inset-top, 0px));
+    --app-drawer-top: env(safe-area-inset-top, 0px);
+  }
+}
+
+.app-topbar {
+  height: calc(52px + var(--app-head-top));
+  padding-top: var(--app-head-top);
+  transition: background-color 200ms ease, z-index 0s linear 220ms;
+}
+
+.app-topbar > * {
+  transition: filter 200ms ease;
+}
+
+.app-topbar__btn {
+  width: 32px;
+  height: 32px;
+}
+
 html.page-layer-tinted .app-shell {
   isolation: auto;
   background-color: transparent;
@@ -331,6 +358,7 @@ html.page-layer-tinted .app-topbar {
   z-index: 9995 !important;
   border-color: transparent !important;
   pointer-events: none;
+  transition: background-color 200ms ease;
 }
 
 html.page-layer-tinted .app-topbar > * {

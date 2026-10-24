@@ -6,7 +6,7 @@ import { X } from 'lucide-react';
  *
  * `label` обязателен — он уходит в `aria-label`. Иконка без текста для
  * скринридера немая, а такие кнопки в приложении часто единственный способ
- * закрыть диалог.
+ * закрыть диалог. `children` вместо `icon` — для иконки со своим состоянием.
  */
 export default function IconButton({
     icon: Icon,
@@ -15,10 +15,11 @@ export default function IconButton({
     tone = 'muted',
     as = 'button',
     className = '',
+    children,
     ...rest
 }) {
     const classes = ['ui-icon-btn', `ui-icon-btn--${tone}`, className].filter(Boolean).join(' ');
-    const content = <Icon size={size} aria-hidden="true" />;
+    const content = children ?? <Icon size={size} aria-hidden="true" />;
 
     // Внешняя ссылка выглядит так же, как кнопка: в таблицах рядом стоят
     // и переходы в МойСклад, и действия вроде удаления
@@ -38,12 +39,13 @@ export default function IconButton({
 }
 
 IconButton.propTypes = {
-    icon: PropTypes.elementType.isRequired,
+    icon: PropTypes.elementType,
     label: PropTypes.string.isRequired,
     size: PropTypes.number,
     tone: PropTypes.oneOf(['muted', 'ink', 'danger']),
     as: PropTypes.oneOf(['button', 'a']),
     className: PropTypes.string,
+    children: PropTypes.node,
 };
 
 /** Закрытие диалога — тот же примитив с закреплённой иконкой и подписью. */
