@@ -11,6 +11,7 @@ import LoginPage from './components/auth/LoginPage';
 import ProtectedRoute from './components/auth/ProtectedRoute';
 import SuperuserRoute from './components/auth/SuperuserRoute';
 import PageAccessGuard from './components/auth/PageAccessGuard';
+import ViewportDebug from './components/common/ViewportDebug';
 
 const LayoutWrapper = ({ children }) => <Layout><PageAccessGuard>{children}</PageAccessGuard></Layout>;
 
@@ -465,6 +466,7 @@ function App() {
         <Router>
           <AppRoutes />
         </Router>
+        <ViewportDebug />
         </DataPanelProvider>
       </LoadingProvider>
     </MotionProvider>

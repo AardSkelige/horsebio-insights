@@ -164,7 +164,7 @@ const Layout = ({ children }) => {
                     onClick={() => setMobileOpen(false)}
                     onTouchMove={e => e.preventDefault()}
                     style={{
-                        position: 'fixed', inset: 0, zIndex: 34,
+                        position: 'fixed', inset: 0, bottom: 'calc(0px - var(--vp-fix, 0px))', zIndex: 34,
                         backgroundColor: 'var(--scrim)',
                         opacity: mobileOpen ? 1 : 0,
                         pointerEvents: mobileOpen ? 'auto' : 'none',
@@ -190,7 +190,7 @@ const Layout = ({ children }) => {
 
                 {/* Mobile top bar */}
                 {isMobile && (
-                    <div className="intro-bar" style={{
+                    <div className="intro-bar app-topbar" style={{
                         position: 'sticky', top: 0, zIndex: 20,
                         height: 'calc(52px + env(safe-area-inset-top, 0px))',
                         backgroundColor: 'var(--canvas)',
@@ -219,7 +219,7 @@ const Layout = ({ children }) => {
                             style={{ color: 'var(--primary)', '--logo-mark-width': '20px', '--logo-mark-height': '12px' }}
                             aria-hidden="true"
                         />
-                        <span style={{ fontFamily: 'var(--display)', fontSize: '15px', color: 'var(--ink)' }}>
+                        <span data-debug-tap style={{ fontFamily: 'var(--display)', fontSize: '15px', color: 'var(--ink)' }}>
                             HorseBio Insights
                         </span>
                         <NotificationsBarButton />

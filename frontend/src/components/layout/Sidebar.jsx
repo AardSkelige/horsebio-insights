@@ -67,7 +67,7 @@ export const Sidebar = ({ expanded, onToggle, isMobile, mobileOpen, onMobileClos
 
     const asideStyle = isMobile
         ? {
-            position: 'fixed', top: 0, left: 0, height: '100%',
+            position: 'fixed', top: 0, left: 0, height: 'calc(100% + var(--vp-fix, 0px))',
             width: W_OPEN, minWidth: W_OPEN,
             backgroundColor: 'var(--surface-dark)',
             display: 'flex', flexDirection: 'column',

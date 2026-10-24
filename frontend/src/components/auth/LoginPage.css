@@ -3,7 +3,7 @@
   background: var(--canvas);
   color: var(--ink);
   display: flex;
-  inset: 0;
+  inset: 0 0 calc(0px - var(--vp-fix, 0px));
   overflow-y: auto;
   overscroll-behavior: contain;
   padding: 32px;

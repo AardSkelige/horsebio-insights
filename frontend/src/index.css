@@ -221,6 +221,10 @@
 
 /* ── Base ────────────────────────────────────────────────── */
 @layer base {
+  html {
+    background-color: var(--canvas);
+  }
+
   body {
     background-color: var(--canvas);
     color: var(--ink);
@@ -272,7 +276,7 @@ button:active:not(:disabled):not(.no-tap-scale):not([style*="width: 100%"]):not(
 
 .app-shell {
   position: fixed;
-  inset: 0;
+  inset: 0 0 calc(0px - var(--vp-fix, 0px));
   display: flex;
   overflow: hidden;
   background-color: var(--canvas);
@@ -511,3 +515,24 @@ button:active:not(:disabled):not(.no-tap-scale):not([style*="width: 100%"]):not(
   from { opacity: 0; transform: translateY(8px); }
   to   { opacity: 1; transform: translateY(0); }
 }
+
+.vp-debug__panel {
+  position: fixed;
+  top: 50%;
+  left: 8px;
+  right: 8px;
+  z-index: 10000;
+  margin: 0;
+  padding: 8px;
+  border-radius: 8px;
+  background: rgba(0, 0, 0, 0.78);
+  color: #7CFC9A;
+  font: 11px/1.45 ui-monospace, monospace;
+  white-space: pre-wrap;
+  pointer-events: none;
+}
+
+.vp-debug .app-shell { outline: 3px solid red; outline-offset: -3px; }
+.vp-debug .app-topbar { outline: 3px solid #2f7bff; outline-offset: -3px; }
+.vp-debug .login-page { outline: 3px solid red; outline-offset: -3px; }
+.vp-debug body { box-shadow: inset 0 0 0 6px #ffcc00; }

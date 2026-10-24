@@ -134,6 +134,19 @@ export default function PushSheet({ quiet = false }) {
         <AnimatePresence>
             {open && (
                 <m.div
+                    key="scrim"
+                    className="nt-sheet__scrim"
+                    onClick={busy ? undefined : close}
+                    initial={{ opacity: 0 }}
+                    animate={{ opacity: 1 }}
+                    exit={{ opacity: 0 }}
+                    transition={{ duration: 0.2 }}
+                />
+            )}
+            {open && (
+                <m.div
+                    key="sheet"
+                    aria-modal="true"
                     className="nt-sheet"
                     role="dialog"
                     aria-label="Уведомления"
