@@ -36,8 +36,8 @@ const LoginPage = () => {
             } else {
                 setErrorMessage(data.message || 'Ошибка входа в систему');
             }
-        } catch {
-            setErrorMessage('Ошибка соединения с сервером');
+        } catch (error) {
+            setErrorMessage(error.status ? (error.message || 'Не удалось войти') : 'Нет связи с сервером');
         } finally {
             setIsLoading(false);
         }

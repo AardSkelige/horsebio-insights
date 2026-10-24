@@ -426,8 +426,23 @@
 
 @media (max-width: 560px) {
   .login-page {
-    align-items: center;
-    padding: 24px 20px;
+    --login-top: calc(env(safe-area-inset-top, 0px) + 8vh);
+    align-items: flex-start;
+    padding: var(--login-top) 20px 32px;
+  }
+
+  .login-page .login-shell {
+    margin: 0 auto;
+  }
+
+  .login-theme-toggle {
+    top: var(--login-top);
+    right: 20px;
+  }
+
+  .login-wordmark {
+    min-height: 38px;
+    padding-right: 48px;
   }
 
   .login-shell {
