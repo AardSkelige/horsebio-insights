@@ -13,6 +13,7 @@ from .views.discounted import (
 )
 from .views import delivery
 from .views.notifications import notifications_list, notifications_read
+from .views.push import push_key, push_subscribe, push_test, push_unsubscribe
 from .views.home import home_view
 
 
@@ -127,6 +128,10 @@ urlpatterns = [
     # Уведомления разделов: что требует внимания (см. api/notifications/)
     path('notifications/', notifications_list, name='notifications_list'),
     path('notifications/read/', notifications_read, name='notifications_read'),
+    path('push/', push_key, name='push_key'),
+    path('push/subscribe/', push_subscribe, name='push_subscribe'),
+    path('push/unsubscribe/', push_unsubscribe, name='push_unsubscribe'),
+    path('push/test/', push_test, name='push_test'),
 
     # Калькулятор стоимости доставки (раскладка по коробкам + тарифы ПЭК/СДЭК)
     path('delivery/estimate/', delivery.estimate, name='delivery_estimate'),

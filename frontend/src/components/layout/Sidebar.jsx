@@ -7,6 +7,7 @@ import { useAuthStatus } from '../../hooks/useAuthStatus';
 import { authApi } from '../../api/authApi';
 import { useDataPanel } from '../../contexts/DataPanelContext';
 import { leaveApp, smoothNavigate } from '../ui/motion';
+import { unsubscribeDevice } from '../../hooks/usePush';
 import { useNotifications } from '../../contexts/NotificationsContext';
 import NotificationsBell from '../notifications/NotificationsBell';
 import NavItem from './sidebar/NavItem';
@@ -56,7 +57,8 @@ export const Sidebar = ({ expanded, onToggle, isMobile, mobileOpen, onMobileClos
         : undefined;
 
     const handleLogout = async () => {
-        authApi.logout().catch((e) => console.error(e));
+        const unsubscribed = Promise.race([unsubscribeDevice().catch(() => {}), new Promise((resolve) => { setTimeout(resolve, 1500); })]);
+        unsubscribed.finally(() => authApi.logout().catch((e) => console.error(e)));
         await leaveApp();
         clearAuthStatus();
         sessionStorage.clear();

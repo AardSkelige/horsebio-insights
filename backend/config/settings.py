@@ -134,6 +134,10 @@ SITE_CML_PASSWORD = os.getenv('SITE_CML_PASSWORD', '')
 # Scripts monitor settings
 SCRIPTS_LOGS_DIR = os.getenv('SCRIPTS_LOGS_DIR', '/app/scripts_logs')
 
+VAPID_PUBLIC_KEY = os.getenv('VAPID_PUBLIC_KEY', '')
+VAPID_PRIVATE_KEY = os.getenv('VAPID_PRIVATE_KEY', '')
+VAPID_SUBJECT = os.getenv('VAPID_SUBJECT', 'https://insight.horse-bio.ru')
+
 # Обновленные CORS настройки
 _BASE_CORS_ORIGINS = [
     "http://localhost:5173",

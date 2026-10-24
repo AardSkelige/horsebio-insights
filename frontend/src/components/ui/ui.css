@@ -45,6 +45,14 @@
     min-height: var(--control-height);
 }
 
+.ui-btn--lg {
+    font-size: var(--size-lg);
+    font-weight: 600;
+    padding: 12px 20px;
+    min-height: 48px;
+    border-radius: var(--radius-lg);
+}
+
 .ui-btn--sm {
     font-size: var(--size-sm);
     padding: 5px 10px;

@@ -218,6 +218,41 @@ class NotificationState(models.Model):
         return f'{self.user} → {self.key} ({"прочитано" if self.seen_at else "новое"})'
 
 
+class PushSubscription(models.Model):
+    user = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.CASCADE,
+        related_name='push_subscriptions',
+    )
+    endpoint = models.URLField(max_length=1000, unique=True)
+    p256dh = models.CharField(max_length=200)
+    auth = models.CharField(max_length=100)
+    user_agent = models.CharField(max_length=300, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    def __str__(self):
+        return f'{self.user} → {self.user_agent[:40] or self.endpoint[:40]}'
+
+
+class PushDelivery(models.Model):
+    user = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.CASCADE,
+        related_name='push_deliveries',
+    )
+    key = models.CharField(max_length=200)
+    fingerprint = models.CharField(max_length=100, blank=True)
+    sent_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        constraints = [
+            models.UniqueConstraint(fields=['user', 'key'], name='uniq_push_delivery'),
+        ]
+
+    def __str__(self):
+        return f'{self.user} → {self.key}'
+
+
 class CdekWaybillState(models.Model):
     """Состояние робота накладных СДЭК: по записи на заказ сайта.
 

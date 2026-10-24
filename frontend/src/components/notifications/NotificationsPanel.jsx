@@ -6,6 +6,7 @@ import { CloseButton, IconButton, Notice, Skeleton } from '../ui';
 import { DrawerShell } from '../ui/motion';
 import { useNotifications } from '../../contexts/NotificationsContext';
 import NotificationItem from './NotificationItem';
+import PushPanelAction from './PushPanelAction';
 import './notifications.css';
 
 /** Уведомления по разделам, в порядке от самого серьёзного. */
@@ -15,7 +16,7 @@ const groupBySource = (items) => {
     items.forEach((item) => {
         if (!index.has(item.source)) {
             index.set(item.source, groups.length);
-            groups.push({ source: item.source, label: item.source_label, route: item.route, items: [] });
+            groups.push({ source: item.source, label: item.source_label, route: item.source_route || item.route, items: [] });
         }
         groups[index.get(item.source)].items.push(item);
     });
@@ -77,6 +78,7 @@ export default function NotificationsPanel() {
             )}
 
             <div className="ui-drawer__body">
+                <PushPanelAction />
                 {error && <Notice tone="error">{error}</Notice>}
                 {!complete && !error && <Notice tone="warning">Не все разделы ответили, список может быть неполным</Notice>}
 

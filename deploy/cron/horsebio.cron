@@ -5,7 +5,7 @@
 # одно ядро), и переезд на manage.py — не повод их пересматривать.
 #
 # Устанавливается вручную: crontab -l > /tmp/c && cat horsebio.cron >> /tmp/c && crontab /tmp/c
-# Проверить: crontab -l | grep -c '^[^#].*horsebio-check'   → должно быть 27
+# Проверить: crontab -l | grep -c '^[^#].*horsebio-check'   → должно быть 29
 # (счёт только по рабочим строкам: этот комментарий тоже попадёт в crontab)
 
 # ─── Себестоимость ───────────────────────────────────────────────────────────
@@ -65,6 +65,9 @@
 40 6 * * * /root/horsebio/deploy/cron/horsebio-check.sh horsebio_production_plan_sales
 25 9 * * * /root/horsebio/deploy/cron/horsebio-check.sh horsebio_inventory_check
 0 11 * * * /root/horsebio/deploy/cron/horsebio-check.sh horsebio_data_sync
+
+# ─── Уведомления ─────────────────────────────────────────────────────────────
+7,22,37,52 * * * * /root/horsebio/deploy/cron/horsebio-check.sh horsebio_push
 
 # ─── Сохранность ─────────────────────────────────────────────────────────────
 # Сам бэкап делает /root/backup/backup.sh в 3:30 — это проверка, что он идёт.

@@ -7,7 +7,7 @@ import FloatingLoadingCard from '../common/FloatingLoadingCard';
 import DataManagementCard from '../home/components/DataManagementCard';
 import { useDataPanel } from '../../contexts/DataPanelContext';
 import { NotificationsProvider } from '../../contexts/NotificationsContext';
-import { NotificationsBarButton, NotificationsPanel } from '../notifications';
+import { NotificationsBarButton, NotificationsPanel, PushSheet } from '../notifications';
 import Sidebar from './Sidebar';
 import { usePageTracking } from '../../hooks/usePageTracking';
 import { useAuthStatus, useSuperuser } from '../../hooks/useAuthStatus';
@@ -289,6 +289,7 @@ const Layout = ({ children }) => {
 
             <FloatingLoadingCard />
             <NotificationsPanel />
+            <PushSheet quiet={intro || leaving} />
         </div>
         </NotificationsProvider>
     );

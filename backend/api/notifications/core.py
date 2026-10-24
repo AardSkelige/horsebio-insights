@@ -88,6 +88,7 @@ class Notification:
     action: str = ''
     fingerprint: str = ''
     links: list = field(default_factory=list)
+    route: str = ''
     # Проставляется реестром из ключа провайдера — руками задавать не нужно
     source: str = ''
 
@@ -188,7 +189,8 @@ def _serialize(notification, state):
         'key': notification.key,
         'source': notification.source,
         'source_label': page.get('label', notification.source),
-        'route': page.get('route', ''),
+        'route': notification.route or page.get('route', ''),
+        'source_route': page.get('route', ''),
         'level': notification.level,
         'title': notification.title,
         'body': notification.body,
@@ -234,7 +236,7 @@ def collect(user, refresh=False):
     for item in payload:
         stats = by_source.setdefault(item['source'], {
             'label': item['source_label'],
-            'route': item['route'],
+            'route': item['source_route'],
             'total': 0,
             'unseen': 0,
             'level': None,

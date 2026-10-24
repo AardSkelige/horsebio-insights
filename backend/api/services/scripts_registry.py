@@ -314,6 +314,16 @@ SCRIPTS_CONFIG = [
         'structured': True,
     },
     {
+        'id': 'horsebio_push',
+        'topic': 'Уведомления',
+        'name': 'Пуш-уведомления',
+        'account': 'HorseBio',
+        'schedule': 'Каждые 15 мин',
+        'description': 'Шлёт на телефоны пуши о новых делах из колокольчика, по правам каждого человека (Django-команда send_push)',
+        'script': '/app/manage.py',
+        'args': ['send_push'],
+    },
+    {
         'id': 'horsebio_prune_check_runs',
         'topic': 'Сохранность',
         'name': 'Чистка журнала проверок',

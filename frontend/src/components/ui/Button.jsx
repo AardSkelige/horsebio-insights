@@ -46,7 +46,7 @@ export default function Button({
         className,
     ].filter(Boolean).join(' ');
 
-    const iconSize = size === 'sm' ? 13 : 14;
+    const iconSize = size === 'sm' ? 13 : size === 'lg' ? 18 : 14;
 
     // Иконка загрузки подменяет собой обычную: так ширина кнопки не прыгает
     const leading = loading
@@ -96,7 +96,7 @@ export default function Button({
 Button.propTypes = {
     variant: PropTypes.oneOf(['primary', 'secondary', 'soft', 'subtle', 'ghost', 'link', 'quiet', 'danger']),
     tone: PropTypes.oneOf(['accent', 'danger']),
-    size: PropTypes.oneOf(['sm', 'md']),
+    size: PropTypes.oneOf(['sm', 'md', 'lg']),
     loading: PropTypes.bool,
     loadingLabel: PropTypes.node,
     block: PropTypes.bool,
