@@ -1,4 +1,4 @@
-import { useLayoutEffect, useState } from 'react';
+import { useLayoutEffect, useState, useSyncExternalStore } from 'react';
 
 const UNDER_BARS = 140;
 const PHONE = '(max-width: 767px)';
@@ -15,24 +15,52 @@ const measure = () => {
 };
 
 let locks = 0;
+let tints = 0;
+const tintListeners = new Set();
+const notifyTint = () => tintListeners.forEach((listener) => listener());
 
-const lockPage = () => {
+const lockPage = (tinted) => {
+    const root = document.documentElement;
     locks += 1;
-    document.documentElement.style.overflow = 'hidden';
+    root.style.overflow = 'hidden';
+    if (tinted) {
+        tints += 1;
+        root.classList.add('page-layer-tinted');
+        notifyTint();
+    }
     return () => {
         locks -= 1;
-        if (locks === 0) document.documentElement.style.overflow = '';
+        if (locks === 0) root.style.overflow = '';
+        if (tinted) {
+            tints -= 1;
+            if (tints === 0) root.classList.remove('page-layer-tinted');
+            notifyTint();
+        }
     };
 };
 
-export const usePageLayer = (open) => {
+export const usePageLayer = (open, { tinted = true } = {}) => {
     const [layer, setLayer] = useState(null);
 
     useLayoutEffect(() => {
         if (!open) return undefined;
-        setLayer(measure());
-        return lockPage();
-    }, [open]);
+        const update = () => setLayer(measure());
+        update();
+        window.addEventListener('resize', update);
+        const unlock = lockPage(tinted);
+        return () => {
+            window.removeEventListener('resize', update);
+            unlock();
+            setLayer(null);
+        };
+    }, [open, tinted]);
 
     return layer;
 };
+
+const subscribeTint = (listener) => {
+    tintListeners.add(listener);
+    return () => tintListeners.delete(listener);
+};
+
+export const usePageTint = () => useSyncExternalStore(subscribeTint, () => tints > 0);

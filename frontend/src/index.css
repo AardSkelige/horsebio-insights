@@ -127,6 +127,8 @@
 
   /* Затемнение под модальным окном и выдвижной панелью */
   --scrim:        rgba(var(--shadow-tint), 0.45);
+  --scrim-solid:  #868785;
+  --scrim-dim:    0.55;
   --scrim-soft:   rgba(var(--shadow-tint), 0.25);
 
   /* Шкалы. Дубликат `src/theme/tokens.js` — там те же значения для JS.
@@ -199,6 +201,8 @@
   --shadow-float:    0 10px 32px rgba(0, 0, 0, 0.55);
   --shadow-menu:     0 8px 40px rgba(0, 0, 0, 0.6);
   --scrim:           rgba(0, 0, 0, 0.6);
+  --scrim-solid:     #080a09;
+  --scrim-dim:       0.4;
   --scrim-soft:      rgba(0, 0, 0, 0.4);
 
   /* То же правило для категорий */
@@ -312,6 +316,25 @@ button:active:not(:disabled):not(.no-tap-scale):not([style*="width: 100%"]):not(
   textarea {
     font-size: max(16px, 1em) !important;
   }
+}
+
+html.page-layer-tinted .app-shell {
+  isolation: auto;
+  background-color: transparent;
+}
+
+html.page-layer-tinted body {
+  background-color: transparent;
+}
+
+html.page-layer-tinted .app-topbar {
+  z-index: 9995 !important;
+  border-color: transparent !important;
+  pointer-events: none;
+}
+
+html.page-layer-tinted .app-topbar > * {
+  filter: brightness(var(--scrim-dim));
 }
 
 .home-glow {
@@ -533,23 +556,3 @@ button:active:not(:disabled):not(.no-tap-scale):not([style*="width: 100%"]):not(
   to   { opacity: 1; transform: translateY(0); }
 }
 
-.vp-debug__panel {
-  position: fixed;
-  top: 50%;
-  left: 8px;
-  right: 8px;
-  z-index: 10000;
-  margin: 0;
-  padding: 8px;
-  border-radius: 8px;
-  background: rgba(0, 0, 0, 0.78);
-  color: #7CFC9A;
-  font: 11px/1.45 ui-monospace, monospace;
-  white-space: pre-wrap;
-  pointer-events: none;
-}
-
-.vp-debug .app-shell { outline: 3px solid red; outline-offset: -3px; }
-.vp-debug .app-topbar { outline: 3px solid #2f7bff; outline-offset: -3px; }
-.vp-debug .login-page { outline: 3px solid red; outline-offset: -3px; }
-.vp-debug body { box-shadow: inset 0 0 0 6px #ffcc00; }

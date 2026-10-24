@@ -37,7 +37,9 @@ const LoginPage = () => {
                 setErrorMessage(data.message || 'Ошибка входа в систему');
             }
         } catch (error) {
-            setErrorMessage(error.status ? (error.message || 'Не удалось войти') : 'Нет связи с сервером');
+            if (!error.status) setErrorMessage('Нет связи с сервером');
+            else if (error.status >= 500) setErrorMessage('Сервер временно недоступен, попробуйте позже');
+            else setErrorMessage(error.data?.message || 'Не удалось войти');
         } finally {
             setIsLoading(false);
         }

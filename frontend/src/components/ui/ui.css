@@ -1273,7 +1273,7 @@
     top: 0;
     right: 0;
     bottom: 0;
-    z-index: 60;
+    z-index: 9998;
     display: flex;
     flex-direction: column;
     background: var(--canvas);
@@ -1288,7 +1288,7 @@
 .ui-drawer__scrim {
     position: fixed;
     inset: 0;
-    z-index: 59;
+    z-index: 9997;
     background: var(--scrim-soft);
 }
 

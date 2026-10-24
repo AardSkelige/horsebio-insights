@@ -47,7 +47,8 @@ export default function PushSheet({ quiet = false }) {
     }, [quiet]);
 
     const open = ready && !quiet && (outcome !== null || (!push.dismissed && canOffer(push)));
-    const scrimLayer = usePageLayer(open);
+    const [phone] = useState(() => window.matchMedia?.('(max-width: 767px)').matches ?? false);
+    const scrimLayer = usePageLayer(open && phone);
 
     const enable = async () => {
         setBusy(true);
@@ -134,7 +135,7 @@ export default function PushSheet({ quiet = false }) {
 
     return createPortal(
         <AnimatePresence>
-            {open && (
+            {open && phone && (
                 <m.div
                     key="scrim"
                     className="nt-sheet__scrim"
@@ -149,7 +150,7 @@ export default function PushSheet({ quiet = false }) {
             {open && (
                 <m.div
                     key="sheet"
-                    aria-modal="true"
+                    aria-modal={phone ? 'true' : undefined}
                     className="nt-sheet"
                     role="dialog"
                     aria-label="Уведомления"

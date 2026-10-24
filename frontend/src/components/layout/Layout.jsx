@@ -13,7 +13,7 @@ import { usePageTracking } from '../../hooks/usePageTracking';
 import { useAuthStatus, useSuperuser } from '../../hooks/useAuthStatus';
 import { navSection } from './sidebar/navGroups';
 import { endIntro, introFor, introFull, switchTheme, useIntro, useLeaving } from '../ui/motion';
-import { usePageLayer } from '../ui/motion/usePageLayer';
+import { usePageLayer, usePageTint } from '../ui/motion/usePageLayer';
 import { canSeePulse } from '../home/homeSections';
 
 const MOBILE_BP = 768;
@@ -46,6 +46,7 @@ const Layout = ({ children }) => {
     const [isMobile, setIsMobile] = useState(() => window.innerWidth < MOBILE_BP);
     const [mobileOpen, setMobileOpen] = useState(false);
     const backdropLayer = usePageLayer(isMobile && mobileOpen);
+    const tinted = usePageTint();
 
     useEffect(() => {
         document.documentElement.setAttribute('data-theme', theme);
@@ -70,22 +71,6 @@ const Layout = ({ children }) => {
 
     // Close mobile sidebar on navigation
     useEffect(() => { setMobileOpen(false); }, [location.pathname]);
-
-    // Lock body scroll when mobile sidebar is open (prevents background scroll on iOS)
-    useEffect(() => {
-        if (!isMobile) return;
-        if (mobileOpen) {
-            document.body.style.overflow = 'hidden';
-            document.body.style.touchAction = 'none';
-        } else {
-            document.body.style.overflow = '';
-            document.body.style.touchAction = '';
-        }
-        return () => {
-            document.body.style.overflow = '';
-            document.body.style.touchAction = '';
-        };
-    }, [mobileOpen, isMobile]);
 
     // Swipe left to close sidebar. Opening is via the burger button only:
     // the left screen edge is reserved by the iOS back gesture, an edge-swipe
@@ -195,8 +180,7 @@ const Layout = ({ children }) => {
                     <div className="intro-bar app-topbar" style={{
                         position: 'sticky', top: 0, zIndex: 20,
                         height: 'calc(52px + env(safe-area-inset-top, 0px))',
-                        backgroundColor: mobileOpen ? 'var(--surface-dark)' : 'var(--canvas)',
-                        transition: 'background-color 220ms ease',
+                        backgroundColor: tinted ? 'var(--scrim-solid)' : 'var(--canvas)',
                         borderBottom: '1px solid var(--hairline)',
                         display: 'flex', alignItems: 'center', gap: 12,
                         paddingTop: 'env(safe-area-inset-top, 0px)',
@@ -222,7 +206,7 @@ const Layout = ({ children }) => {
                             style={{ color: 'var(--primary)', '--logo-mark-width': '20px', '--logo-mark-height': '12px' }}
                             aria-hidden="true"
                         />
-                        <span data-debug-tap style={{ fontFamily: 'var(--display)', fontSize: '15px', color: 'var(--ink)' }}>
+                        <span style={{ fontFamily: 'var(--display)', fontSize: '15px', color: 'var(--ink)' }}>
                             HorseBio Insights
                         </span>
                         <NotificationsBarButton />
@@ -240,7 +224,7 @@ const Layout = ({ children }) => {
 
             {/* Data panel backdrop */}
             <div style={{
-                position: 'fixed', inset: 0, zIndex: 39,
+                position: 'fixed', inset: 0, zIndex: open ? 9997 : 39,
                 backgroundColor: 'var(--scrim-soft)',
                 opacity: open ? 1 : 0,
                 pointerEvents: open ? 'auto' : 'none',
@@ -256,7 +240,7 @@ const Layout = ({ children }) => {
                 animate={open ? { y: 0, opacity: 1 } : { y: -12, opacity: 0 }}
                 transition={{ type: 'spring', stiffness: 380, damping: 32 }}
                 style={{
-                    position: 'fixed', top: 0, left: 0, right: 0, zIndex: 40,
+                    position: 'fixed', top: 0, left: 0, right: 0, zIndex: open ? 9998 : 40,
                     backgroundColor: 'var(--canvas)',
                     borderBottom: '1px solid var(--hairline)',
                     boxShadow: 'var(--shadow-soft)',

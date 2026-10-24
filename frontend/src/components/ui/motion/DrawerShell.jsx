@@ -17,7 +17,7 @@ import { usePageLayer } from './usePageLayer';
  * иначе панель приходится «искать, чем закрыть».
  */
 const DrawerShell = ({ open, onClose, label, width = 400, children }) => {
-    const layer = usePageLayer(open);
+    const layer = usePageLayer(open, { tinted: false });
     useEffect(() => {
         if (!open) return undefined;
         const onKeyDown = (event) => { if (event.key === 'Escape') onClose(); };

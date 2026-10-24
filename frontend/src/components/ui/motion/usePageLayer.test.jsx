@@ -15,8 +15,10 @@ describe('usePageLayer', () => {
     });
 
     it('отдаёт слою текущую прокрутку и высоту экрана', () => {
+        const before = window.scrollY;
         window.scrollY = 300;
         const { result } = renderHook(() => usePageLayer(true));
+        window.scrollY = before;
 
         expect(result.current.panel.top).toBe(300);
         expect(result.current.panel.height).toBe(window.innerHeight + result.current.extra);

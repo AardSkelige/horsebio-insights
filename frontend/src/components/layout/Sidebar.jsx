@@ -72,12 +72,13 @@ export const Sidebar = ({ expanded, onToggle, isMobile, mobileOpen, onMobileClos
         ? {
             position: 'fixed', top: 0, left: 0, height: '100%',
             ...layer?.panel,
-            paddingBottom: layer?.extra,
+            ...(layer && { height: layer.panel.height - layer.extra }),
             width: W_OPEN, minWidth: W_OPEN,
             backgroundColor: 'var(--surface-dark)',
             display: 'flex', flexDirection: 'column',
             overflow: 'hidden', flexShrink: 0,
-            zIndex: 35,
+            zIndex: mobileOpen ? 9996 : 72,
+            borderRadius: '0 22px 22px 0',
             transform: `translateX(${mobileOpen ? 0 : -W_OPEN}px)`,
             transition: 'transform 220ms ease',
         }

@@ -24,7 +24,7 @@ const ModalShell = ({ open, onClose, children, maxWidth = 1000 }) => {
                 animate={{ opacity: 1 }}
                 exit={{ opacity: 0 }}
                 transition={{ duration: 0.2 }}
-                style={{ ...(layer ? layer.scrim : { position: 'fixed', inset: 0 }), zIndex: 9998, background: 'var(--scrim)' }}
+                style={{ ...(layer ? layer.scrim : { position: 'fixed', inset: 0 }), zIndex: 9990, background: 'var(--scrim)' }}
             />
         )}
         {open && (
