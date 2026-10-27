@@ -14,6 +14,7 @@
     в корзине осталось меньше веса одного тяжёлого запроса — так до 429 обычно
     просто не доходит;
   * повторяет запрос при обрыве связи и таймауте;
+  * повторяет GET, когда МойСклад на секунды отвечает 502/503/504;
   * замолкает совсем, если 429 идут подряд и не кончаются: вежливость отдельного
     запроса не спасает, когда таких запросов сотни (см. предохранитель ниже).
 
@@ -62,6 +63,10 @@ MAX_ATTEMPTS = 6
 MAX_SLEEP_S = 30.0
 
 DEFAULT_TIMEOUT = 60
+
+# Только чтение: запись могла пройти до ответа 503, и повтор её задвоит или упадёт
+UNAVAILABLE = {502, 503, 504}
+UNAVAILABLE_RETRIES = 3
 
 # ─── Предохранитель ───────────────────────────────────────────────────────────
 #
@@ -272,6 +277,14 @@ def request(method: str, url: str, **kwargs) -> requests.Response:
             continue
 
         _note_success()
+        if response.status_code in UNAVAILABLE and method == "GET" and attempt < UNAVAILABLE_RETRIES:
+            delay = 2 ** attempt
+            logger.warning(
+                "МойСклад: %d, повтор %d/%d через %d с",
+                response.status_code, attempt + 1, UNAVAILABLE_RETRIES, delay,
+            )
+            time.sleep(delay)
+            continue
         _note_remaining(response)
         return response
 

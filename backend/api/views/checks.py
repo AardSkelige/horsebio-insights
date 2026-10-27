@@ -162,9 +162,16 @@ def _recent_changes(script_id):
     from django.utils import timezone
 
     since = timezone.now() - timedelta(days=RECENT_CHANGES_DAYS)
-    runs = (CheckRunResult.objects
-            .filter(script_id=script_id, finished_at__gte=since)
-            .order_by('-finished_at')[:60])
+    runs = list(CheckRunResult.objects
+                .filter(script_id=script_id, finished_at__gte=since)
+                .order_by('-finished_at')[:60])
+    last_ok = next((r for r in runs if r.exit_code == 0), None)
+    resolvable = set(SCRIPTS_BY_ID.get(script_id, {}).get('resolvable', [])) if last_ok else set()
+    current = {
+        (cat.get('key'), it.get('object', ''), it.get('detail', ''))
+        for cat in (last_ok.findings or [] if last_ok else []) if cat.get('key') in resolvable
+        for it in cat.get('items', [])
+    }
     merged = {}
     order = []
     seen = set()
@@ -183,14 +190,18 @@ def _recent_changes(script_id):
                 if dedup in seen:
                     continue
                 seen.add(dedup)
-                merged[key]['items'].append({
-                    **it,
-                    # Подписываем явно: это дата запуска, в котором находка встретилась
-                    # последний раз, а не дата самого события (заказа, документа и т.п.)
-                    'detail': f"проверка от {day} · {it.get('detail', '')}" if day else it.get('detail', ''),
-                })
+                # Подписываем явно: это дата запуска, в котором находка встретилась
+                # последний раз, а не дата самого события (заказа, документа и т.п.)
+                item = {**it, 'detail': f"проверка от {day} · {it.get('detail', '')}" if day else it.get('detail', '')}
+                if key in resolvable and dedup not in current:
+                    item.pop('delete_action', None)
+                    item.update(severity='info', detail=f"прошло само · {item['detail']}")
+                merged[key]['items'].append(item)
     out = []
     _rank = {'critical': 3, 'important': 2, 'warning': 1}
+    for key in order:
+        if key in resolvable and all(it['severity'] == 'info' for it in merged[key]['items']):
+            merged[key]['severity'] = 'info'
     for key in sorted(order, key=lambda k: -_rank.get(merged[k]['severity'], 0)):
         cat = merged[key]
         cat['items'] = cat['items'][:100]

@@ -140,9 +140,9 @@ class RecentChangesTests(TestCase):
         self.admin = User.objects.create_superuser('admin', 'admin@test.ru', 'pass')
         self.client.force_login(self.admin)
 
-    def _mk_run(self, run_id, days_ago, findings):
+    def _mk_run(self, run_id, days_ago, findings, script_id='horsebio_buy_prices', exit_code=0):
         r = CheckRunResult.objects.create(
-            script_id='horsebio_buy_prices', run_id=run_id, exit_code=0,
+            script_id=script_id, run_id=run_id, exit_code=exit_code,
             summary={'critical': 0, 'important': 0, 'warnings': 0, 'ok': 0,
                      'stats': [{'label': 'Обновлено', 'value': len(findings), 'tone': 'neutral'}]},
             findings=findings,
@@ -166,6 +166,36 @@ class RecentChangesTests(TestCase):
         objects = [i['object'] for i in recent[0]['items']]
         self.assertEqual(objects, ['Товар А', 'Товар Б'])  # свежие сверху, r3 за окном
         self.assertRegex(recent[0]['items'][0]['detail'], r'^проверка от \d{2}\.\d{2} · ')
+
+    def test_error_absent_from_last_run_is_marked_resolved(self):
+        sid = 'horsebio_order_email_create'
+        err = lambda *orders, detail='503': [{'key': 'errors', 'title': 'Ошибки заведения', 'severity': 'critical', 'items': [
+            {'key': o, 'object': f'Заказ {o}', 'severity': 'critical', 'detail': detail,
+             'delete_action': {'url': f'/x/{o}'}} for o in orders]}]
+        self._mk_run('e1', 1, err('1', '2'), sid)
+        self._mk_run('e2', 0, err('2'), sid)
+
+        recent = self.client.get(reverse('api:checks_results', args=[sid])).json()['results']['recent_changes']
+        items = {i['key']: i for i in recent[0]['items']}
+        self.assertEqual(items['2']['severity'], 'critical')
+        self.assertIn('delete_action', items['2'])
+        self.assertEqual(items['1']['severity'], 'info')
+        self.assertTrue(items['1']['detail'].startswith('прошло само · '))
+        self.assertNotIn('delete_action', items['1'])
+        self.assertEqual(recent[0]['severity'], 'critical')
+
+        self._mk_run('e3', 0, [], sid, exit_code=1)
+        recent = self.client.get(reverse('api:checks_results', args=[sid])).json()['results']['recent_changes']
+        self.assertEqual(recent[0]['severity'], 'critical')
+
+        self._mk_run('e4', 0, err('2', detail='404'), sid)
+        recent = self.client.get(reverse('api:checks_results', args=[sid])).json()['results']['recent_changes']
+        severities = sorted((i['key'], i['detail'].split(' · ')[-1], i['severity']) for i in recent[0]['items'])
+        self.assertEqual(severities, [('1', '503', 'info'), ('2', '404', 'critical'), ('2', '503', 'info')])
+
+        self._mk_run('e5', 0, [], sid)
+        recent = self.client.get(reverse('api:checks_results', args=[sid])).json()['results']['recent_changes']
+        self.assertEqual(recent[0]['severity'], 'info')
 
     def test_health_check_has_no_recent_changes(self):
         CheckRunResult.objects.create(

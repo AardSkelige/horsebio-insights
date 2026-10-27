@@ -53,6 +53,19 @@ from order_email_utils import (
 # Черновик без оплаты дольше этого срока — удаляется из МойСклад автоматически
 CANCEL_AFTER_HOURS = 24
 
+# Дальше заказ закрыт, а оплату после отмены ловит ветка по письмам
+RECHECK_CANCELLED_DAYS = 7
+
+
+def _cancel_settled(ms: dict) -> bool:
+    cancelled_at = ms.get("cancelled_at")
+    if not cancelled_at:
+        return False
+    try:
+        return (datetime.now() - datetime.fromisoformat(cancelled_at)).days >= RECHECK_CANCELLED_DAYS
+    except ValueError:
+        return False
+
 
 class OrderCreationError(Exception):
     """Не удалось создать заказ — текст исключения сохраняется в ms['last_error']
@@ -431,10 +444,7 @@ class OrderCreator:
         try:
             self.helper._delete(f"/entity/customerorder/{live_id}")
         except Exception as e:
-            print(f"    ERROR: не удалось удалить черновик {order_id}: {e}")
-            ms["last_error"] = f"Не удалось удалить неоплаченный черновик: {e}"
-            ms["last_error_at"] = datetime.now().isoformat()
-            return False
+            raise OrderCreationError(f"Не удалось удалить неоплаченный черновик: {e}") from e
         # Синхронизируем state с тем, что реально удалили (в журнале /checks
         # покажется корректный номер), и ставим cancelled_at — если оплата всё же
         # придёт позже, run_once заведёт заказ заново с нуля (см. ниже).
@@ -472,10 +482,14 @@ class OrderCreator:
 
                 # 24ч без оплаты — сверяемся с реальностью в МойСклад (по externalCode)
                 # и удаляем зависший черновик. Триггерим для любого неоплаченного
-                # заказа — даже если в state уже стоит cancelled_at: так подхватывается
-                # «осиротевший» черновик, пересозданный при рассинхроне state (сверка
-                # идемпотентна — если в МойСклад пусто, метод просто вернёт False).
-                if not latest.get("paid"):
+                # заказа — даже если в state уже стоит cancelled_at (первые
+                # RECHECK_CANCELLED_DAYS дней): так подхватывается «осиротевший» черновик,
+                # пересозданный при рассинхроне state (сверка идемпотентна — если
+                # в МойСклад пусто, метод просто вернёт False).
+                if not latest.get("paid") and _cancel_settled(ms):
+                    ms.pop("last_error", None)
+                    ms.pop("last_error_at", None)
+                elif not latest.get("paid"):
                     try:
                         if self._maybe_cancel_stale_draft(order_id, ms):
                             counts["orders_cancelled"] += 1
@@ -579,13 +593,18 @@ def _export_results(counts, state, path):
         site_link = (latest.get("order_link") or "").strip()
         if site_link:
             links.append({"href": site_link, "label": "Заказ на сайте"})
-        if ms.get("customerorder_id"):
+        # У отменённого черновик удалён, ссылка вела бы на пустую страницу
+        if ms.get("customerorder_id") and not ms.get("cancelled_at"):
             links.append({
                 "href": f"https://online.moysklad.ru/app/#customerorder/edit?id={ms['customerorder_id']}",
                 "label": "МойСклад",
             })
+        try:
+            object_date = _dt.strptime(latest.get("created") or "", "%Y-%m-%d %H:%M:%S").strftime("%d.%m")
+        except ValueError:
+            object_date = ""
         return {
-            "key": order_id, "ms_id": "", "object": label, "severity": severity,
+            "key": order_id, "ms_id": "", "object": label, "object_date": object_date, "severity": severity,
             "detail": detail, "links": links,
             "delete_action": build_order_delete_action(order_id, label),
         }

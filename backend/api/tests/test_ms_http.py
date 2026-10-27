@@ -175,6 +175,35 @@ class MsHttpTests(SimpleTestCase):
         self.assertEqual(mock_request.call_count, 1)
 
     @patch("msapi.http.requests.request")
+    def test_unavailable_is_retried_for_reads(self, mock_request):
+        mock_request.side_effect = [_response(status=503), _response(status=502), _response(status=200)]
+
+        response = ms_http.get("https://api.moysklad.ru/api/remap/1.2/entity/customerorder")
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(mock_request.call_count, 3)
+        self.assertEqual(self.waited, 1 + 2)
+
+    @patch("msapi.http.requests.request")
+    def test_unavailable_returned_after_retries(self, mock_request):
+        mock_request.return_value = _response(status=503)
+
+        response = ms_http.get("https://api.moysklad.ru/api/remap/1.2/entity/customerorder")
+
+        self.assertEqual(response.status_code, 503)
+        self.assertEqual(mock_request.call_count, ms_http.UNAVAILABLE_RETRIES + 1)
+
+    @patch("msapi.http.requests.request")
+    def test_unavailable_writes_are_not_repeated(self, mock_request):
+        mock_request.return_value = _response(status=503)
+
+        for func in (ms_http.post, ms_http.put, ms_http.delete):
+            mock_request.reset_mock()
+            response = func("https://api.moysklad.ru/api/remap/1.2/entity/customerorder/x")
+            self.assertEqual(response.status_code, 503)
+            self.assertEqual(mock_request.call_count, 1)
+
+    @patch("msapi.http.requests.request")
     def test_timeout_default_is_set(self, mock_request):
         mock_request.return_value = _response()
 

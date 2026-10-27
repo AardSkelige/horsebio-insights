@@ -139,6 +139,8 @@ SCRIPTS_CONFIG = [
         'script': '/app/moysklad/horsebio/01_daemons/06_order_email_sync/scripts/02_create_orders.py',
         'args': [],
         'structured': True,
+        # Ошибки, которых нет в последнем успешном запуске, показываются как прошедшие
+        'resolvable': ['errors'],
     },
     {
         'id': 'horsebio_cdek_waybills',

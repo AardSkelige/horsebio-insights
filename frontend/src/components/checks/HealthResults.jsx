@@ -317,9 +317,10 @@ function FindingRow({ cat, item, excepted, prevReason, prevExtra, onAdded, onDel
     return (
         <div className="finding-row">
             <div className="finding-row__text">
-                <span style={{ width: 7, height: 7, borderRadius: 999, background: c.color, flexShrink: 0 }} />
-                <span style={{ fontSize: 13, lineHeight: 1.4, minWidth: 0 }}>
+                <span style={{ width: 7, height: 7, borderRadius: 999, background: c.color, flexShrink: 0, alignSelf: 'flex-start', marginTop: 6 }} />
+                <span style={{ fontSize: 13, lineHeight: 1.4, minWidth: 0, flex: '1 1 200px' }}>
                     <span style={{ fontWeight: 600, color: 'var(--ink)' }}>{item.object}</span>
+                    {item.object_date && <span style={{ color: 'var(--body)' }}> от {item.object_date}</span>}
                     {item.detail && <span style={{ color: 'var(--body)' }}> · {item.detail}</span>}
                 </span>
                 {prevReason && (
