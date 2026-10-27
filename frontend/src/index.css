@@ -470,10 +470,6 @@ html.page-layer-tinted:not(.page-layer-untinting) .app-topbar > * {
   mix-blend-mode: normal;
 }
 
-:root[data-transition] .route-transition {
-  animation: none;
-}
-
 :root[data-transition="slow"]::view-transition-old(root),
 :root[data-transition="slow"]::view-transition-new(root) {
   animation-duration: 600ms;

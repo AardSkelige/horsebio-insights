@@ -25,11 +25,12 @@ const Layout = ({ children }) => {
     const entered = useRef(false);
     const introOnEnter = introFor(location.pathname, !entered.current);
     entered.current = true;
-    const visited = useRef({ path: location.pathname, section, same: false, intro: introOnEnter });
+    const smooth = Boolean(document.documentElement.dataset.transition);
+    const visited = useRef({ path: location.pathname, section, same: false, intro: introOnEnter, smooth });
     if (visited.current.path !== location.pathname) {
-        visited.current = { path: location.pathname, section, same: visited.current.section === section, intro: introOnEnter };
+        visited.current = { path: location.pathname, section, same: visited.current.section === section, intro: introOnEnter, smooth };
     }
-    const calmEnter = visited.current.same || visited.current.intro;
+    const calmEnter = visited.current.same || visited.current.intro || visited.current.smooth;
     const intro = useIntro();
     const leaving = useLeaving();
     const quickIntro = !canSeePulse(useAuthStatus());
