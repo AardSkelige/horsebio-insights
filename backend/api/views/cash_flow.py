@@ -60,7 +60,7 @@ def cash_flow_report(request):
         expense_items_dict = get_expense_items()
 
         # Анализируем расходы
-        expense_categories, excluded_categories, expense_categories_with_ids, excluded_categories_with_ids = get_expense_categories_by_api(operations_data, expense_items_dict)
+        expense_categories, excluded_categories, expense_categories_with_ids, _ = get_expense_categories_by_api(operations_data, expense_items_dict)
 
         # Рассчитываем итоги
         total_income = 0
@@ -126,20 +126,6 @@ def cash_flow_report(request):
                 'expense_item_id': expense_item_id
             }
 
-        # Генерируем ссылки для исключенных категорий
-        excluded_categories_with_links = {}
-        for category, amount in excluded_categories.items():
-            expense_item_id = excluded_categories_with_ids.get(category)
-            moysklad_link = None
-            if expense_item_id:
-                moysklad_link = generate_moysklad_link(date_from, date_to, expense_item_id, category)
-
-            excluded_categories_with_links[category] = {
-                'amount': amount,
-                'moysklad_link': moysklad_link,
-                'expense_item_id': expense_item_id
-            }
-
         response_data = {
             'success': True,
             'data': {
@@ -160,7 +146,6 @@ def cash_flow_report(request):
                     'categories': expense_categories_with_links,
                     'groups': expense_groups
                 },
-                'excluded': excluded_categories_with_links,
                 'net_cash_flow': net_cash_flow,
                 'profit': profit,
                 'final_balance': final_balance

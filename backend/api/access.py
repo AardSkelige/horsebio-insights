@@ -53,7 +53,6 @@ PAGES = [
     {'key': 'ozon-fbo-converter',       'label': 'FBO Конвертер',            'group': 'Аналитика',         'route': '/ozon/fbo-converter',          'api_prefixes': ['/api/ozon/fbo-converter/']},
     {'key': 'ozon',                     'label': 'Ozon',                     'group': 'Аналитика',         'route': '/analysis/ozon',               'api_prefixes': ['/api/ozon/']},
     {'key': 'cash-flow',                'label': 'ДДС',                      'group': 'Аналитика',         'route': '/analysis/cash-flow',          'api_prefixes': ['/api/analysis/cash-flow/']},
-    {'key': 'cash-flow-v2',             'label': 'ДДС · новая',              'group': 'Аналитика',         'route': '/analysis/cash-flow-v2',       'api_prefixes': ['/api/analysis/cash-flow/']},
 
     # Только для суперпользователя — в UI доступов не показываются
     {'key': 'checks',                   'label': 'Проверки',                 'group': 'Администрирование', 'route': '/checks',                      'api_prefixes': ['/api/checks/'], 'superuser': True},
