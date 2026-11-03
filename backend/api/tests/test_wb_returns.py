@@ -7,7 +7,8 @@ from django.test import SimpleTestCase
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', '..', 'moysklad', 'horsebio',
                                 '01_daemons', '03_returns', 'scripts'))
 
-import wb_returns  # noqa: E402
+with mock.patch.dict(os.environ, {'MOYSKLAD_TOKEN': os.environ.get('MOYSKLAD_TOKEN') or 'test-token'}):
+    import wb_returns  # noqa: E402
 
 ROW = {'orderId': 101, 'shkId': 5, 'stickerId': '7', 'srid': 's', 'nmId': 12862181,
        'returnStatus': 'В пути в пвз', 'returnType': 'Возврат товара, который приехал по МП, продавцу',
