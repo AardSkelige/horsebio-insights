@@ -3,7 +3,7 @@
 Возвраты Вайлдберриз: источник данных для статусов черновиков.
 
 Долгое время считалось, что из API ВБ маршрут возврата не достать и остаётся
-верить, что «всё доезжало». Это уже не так: отчёт /api/v1/analytics/goods-return
+верить, что «всё доезжало». Это уже не так: отчёт /api/analytics/v1/item-returns
 отдаёт по каждому возврату физический статус, адрес пункта выдачи и даты — то же
 самое, что Ozon отдаёт в /v1/returns/list.
 
@@ -22,7 +22,10 @@ import requests as _requests
 
 from return_states import IN_TRANSIT, AT_PICKUP, AT_OUR_SITE, STUCK
 
-GOODS_RETURN_URL = 'https://seller-analytics-api.wildberries.ru/api/v1/analytics/goods-return'
+GOODS_RETURN_URL = 'https://seller-analytics-api.wildberries.ru/api/analytics/v1/item-returns'
+
+STATUSES = ('active', 'archive')
+PAGE_SIZE = 1000
 
 # Отчёт отдаётся окнами не больше 31 дня — ходим несколькими запросами.
 WINDOW_DAYS = 30
@@ -63,32 +66,46 @@ def fetch_returns(days_back: int = 90) -> list:
         date_from = (datetime.now() - timedelta(days=back + WINDOW_DAYS)).strftime('%Y-%m-%d')
         date_to = (datetime.now() - timedelta(days=back)).strftime('%Y-%m-%d')
         print(f"  окно {i}/{len(windows)}: {date_from}…{date_to}", flush=True)
-        rows = _get_window(headers, date_from, date_to)
+        rows = []
+        for status in STATUSES:
+            rows.extend(_get_window(headers, date_from, date_to, status))
+            time.sleep(1)
         for x in rows:
             key = (x.get('orderId'), x.get('shkId'))
             if key in seen:
                 continue
             seen.add(key)
             out.append(_normalize(x))
-        time.sleep(1)
     return out
 
 
-def _get_window(headers: dict, date_from: str, date_to: str, tries: int = 4) -> list:
-    """Одно окно отчёта. ВБ щедр на 429 — уважаем лимит и ждём."""
+def _get_window(headers: dict, date_from: str, date_to: str, status: str) -> list:
+    rows, offset = [], 0
+    while True:
+        page = _get_page(headers, {'dateFrom': date_from, 'dateTo': date_to, 'status': status,
+                                   'limit': PAGE_SIZE, 'offset': offset})
+        if page is None:
+            raise RuntimeError(f"Wildberries не отдал отчёт {date_from}…{date_to} ({status}) "
+                               f"с {offset + 1}-й строки: лимит запросов")
+        rows.extend(page)
+        if len(page) < PAGE_SIZE:
+            return rows
+        offset += PAGE_SIZE
+
+
+def _get_page(headers: dict, params: dict, tries: int = 4) -> list | None:
     for attempt in range(1, tries + 1):
-        r = _requests.get(GOODS_RETURN_URL, headers=headers,
-                          params={'dateFrom': date_from, 'dateTo': date_to}, timeout=120)
+        r = _requests.get(GOODS_RETURN_URL, headers=headers, params=params, timeout=120)
         if r.status_code == 429:
             wait = int(r.headers.get('X-Ratelimit-Retry', 20)) + 2
             print(f"    лимит Wildberries, ждём {wait}с (попытка {attempt}/{tries})", flush=True)
             time.sleep(wait)
             continue
+        if r.status_code == 204:
+            return []
         r.raise_for_status()
-        body = r.json()
-        return (body.get('report') if isinstance(body, dict) else body) or []
-    print(f"    окно {date_from}…{date_to} пропущено: Wildberries так и не ответил", flush=True)
-    return []
+        return r.json().get('report') or []
+    return None
 
 
 def _normalize(x: dict) -> dict:
@@ -98,11 +115,11 @@ def _normalize(x: dict) -> dict:
         'sticker_id':  x.get('stickerId', ''),
         'srid':        x.get('srid', ''),
         'nm_id':       x.get('nmId'),          # артикул ВБ — по нему ищется карточка
-        'status':      x.get('status', ''),
+        'status':      x.get('returnStatus', ''),
         'return_type': x.get('returnType', ''),
         'office':      x.get('dstOfficeAddress', ''),
         'product':     x.get('subjectName', ''),
-        'barcode':     x.get('barcode', ''),
+        'barcode':     x.get('sku', ''),
         'return_date': (x.get('orderDt') or '')[:10],       # когда возврат начался
         'ready_at':    (x.get('readyToReturnDt') or '')[:10],  # приехал в ПВЗ
         'issued_at':   (x.get('completedDt') or '')[:10],   # выдан нам

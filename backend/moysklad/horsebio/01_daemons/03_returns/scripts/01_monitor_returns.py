@@ -529,6 +529,8 @@ class ReturnsMonitor:
         except Exception as e:
             print(f"  ERROR: не удалось получить возвраты {source.LABEL}: {e}")
             counts["error"] += 1
+            details.setdefault("fetch_failed", []).append({
+                "object": f"{source.LABEL}: не получил список возвратов", "detail": str(e)[:200]})
             return counts, details
 
         wanted = {}
@@ -577,6 +579,9 @@ class ReturnsMonitor:
                 continue
             if demand_detail is None:
                 counts["error"] += 1
+                details.setdefault("error", []).append({
+                    "order_name": order_name, "agent": source.LABEL,
+                    "order_date": (order.get("moment") or "")[:10]})
                 continue
 
             print(f"  CREATE: {order_name} ({source.LABEL}, {head['status']}) → отгрузка "
@@ -586,6 +591,9 @@ class ReturnsMonitor:
                                                    note=source.draft_note(key, infos))
                 if result is None:
                     counts["error"] += 1
+                    details.setdefault("error", []).append({
+                        "order_name": order_name, "agent": source.LABEL,
+                        "order_date": (order.get("moment") or "")[:10]})
                     continue
                 print(f"  ✅ Создан черновик возврата {result.get('name', '?')} для заказа {order_name}")
                 counts["return_created"] += 1
@@ -596,6 +604,9 @@ class ReturnsMonitor:
             except Exception as e:
                 print(f"  ERROR: {order_name} — создание возврата: {e}")
                 counts["error"] += 1
+                details.setdefault("error", []).append({
+                    "order_name": order_name, "agent": source.LABEL,
+                    "order_date": (order.get("moment") or "")[:10]})
 
         return counts, details
 
@@ -695,7 +706,9 @@ def _export_results(counts, details, path):
     from datetime import datetime as _dt
 
     created = details.get('return_created') or []
-    errors = details.get('error') or []
+    errors = list({d.get('order_name'): d for d in details.get('error') or []}.values())
+    fetch_failed = details.get('fetch_failed') or []
+    critical = len(errors) + len(fetch_failed)
     no_order = details.get('no_order') or []
 
     stats = [
@@ -705,9 +718,9 @@ def _export_results(counts, details, path):
         {"label": "Возврат не нужен", "value": counts.get("no_demand", 0), "tone": "neutral"},
         {"label": "Заказ не найден", "value": len(no_order),
          "tone": "warning" if no_order else "neutral", **({"cat": "no_order"} if no_order else {})},
-        {"label": "Ошибки", "value": counts.get("error", 0),
-         "tone": "critical" if counts.get("error") else "ok",
-         **({"cat": "errors"} if errors else {})},
+        {"label": "Ошибки", "value": critical,
+         "tone": "critical" if critical else "ok",
+         **({"cat": "fetch_failed"} if fetch_failed else {"cat": "errors"} if errors else {})},
     ]
 
     def cat(key, title, sev, src_items, detail, note=""):
@@ -721,6 +734,11 @@ def _export_results(counts, details, path):
                           for d in src_items]}
 
     categories = [c for c in [
+        cat("fetch_failed", "Маркетплейс не отдал список возвратов", "critical", fetch_failed,
+            lambda d: d.get("detail", ""),
+            note="Робот не смог получить возвраты у маркетплейса, поэтому по нему ничего не завёл. "
+                 "Документы руками заводить не нужно: проверь ключ API и ответ маркетплейса в логе "
+                 "запуска, после починки робот догонит пропущенное сам."),
         cat("errors", "Не смог завести документ", "critical",
             [{**d, "object": f"Заказ №{d['order_name']}"} for d in errors],
             lambda d: f"{d.get('agent', '')} · заказ от {d.get('order_date', '')}",
@@ -744,7 +762,7 @@ def _export_results(counts, details, path):
 
     payload = {
         "generated_at": _dt.now().isoformat(timespec="seconds"), "params": {},
-        "summary": {"critical": counts.get("error", 0), "important": len(no_order),
+        "summary": {"critical": critical, "important": len(no_order),
                     "warnings": 0, "ok": len(created), "stats": stats,
                     # Показываем последний прогон, а не слепок за 14 дней: иначе цифры
                     # в плитках расходятся со списками, а старые записи висят неделями.
