@@ -58,7 +58,7 @@ export default function DiscountedCard({ position, delistMonths, discountRate, o
     const [error, setError] = useState(null);
 
     const { text, hot } = term(position);
-    const canDelist = position.state === 'expired' || position.state === 'delist';
+    const canDelist = (position.state === 'expired' || position.state === 'delist') && position.published !== false;
 
     const handleDelist = async () => {
         setBusy(true);
