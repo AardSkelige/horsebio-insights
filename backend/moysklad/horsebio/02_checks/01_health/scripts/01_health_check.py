@@ -18,6 +18,7 @@
 13. Коды товаров: без кода, дубли, аномалии (Материалы, Товары, Этикетки)
 14. Возвраты от покупателей с нулевой себестоимостью — занижают FIFO-себестоимость готовой продукции (всегда)
 15. Оприходования с нулевой ценой позиций — занижают FIFO-себестоимость любого товара (всегда)
+16. Зависшие производственные задания — план прошёл больше месяца назад, а ожидание или резерв висят (всегда)
 
 Использование:
     python3 01_health_check.py                           # Проверка с порогом 5%
@@ -48,9 +49,10 @@ from health_config import DEFAULT_STORES, TARGET_GROUPS, SLOT_STORES, NORMAL_MOV
 from health_docs import DocumentChecksMixin
 from health_prices import PriceChecksMixin
 from health_report import ReportingMixin
+from health_production import ProductionChecksMixin
 
 
-class CostHealthCheck(DocumentChecksMixin, PriceChecksMixin, ReportingMixin):
+class CostHealthCheck(DocumentChecksMixin, PriceChecksMixin, ProductionChecksMixin, ReportingMixin):
     """Проверка здоровья себестоимости"""
 
     def __init__(self, helper, threshold=5.0, supply_threshold=15.0, prev_count=3,
@@ -105,6 +107,7 @@ class CostHealthCheck(DocumentChecksMixin, PriceChecksMixin, ReportingMixin):
             'code_duplicates': {},        # {code: [products]} — дублирующиеся коды
             'code_suspect': [],           # Товары с кодом-аномалией (не соответствует паттерну группы)
             'stale_drafts': [],           # Непроведённые документы старше порога [{type, doc_name, age_days}]
+            'stuck_production': [],
         }
 
     def _elapsed_str(self):
@@ -494,7 +497,7 @@ def main():
 
     # Устанавливаем общее количество проверок для счётчика "Проверка N/M"
     # Фиксированные: по одной на каждый склад + 11 обязательных
-    checker._total_checks = len(stores) + 12 + (1 if args.full else 0)
+    checker._total_checks = len(stores) + 11 + (1 if args.full else 0)
 
     # 1. Проверяем оприходования на каждом складе
     for store_id, store_name in stores.items():
@@ -562,6 +565,11 @@ def main():
         checker.check_stale_drafts()
     except Exception as e:
         print(f"❌ Ошибка при проверке черновиков: {e}\n")
+
+    try:
+        checker.check_stuck_production()
+    except Exception as e:
+        print(f"❌ Ошибка при проверке производственных заданий: {e}\n")
 
     # 11. Полный режим: скачки цен в приёмках
     if args.full:

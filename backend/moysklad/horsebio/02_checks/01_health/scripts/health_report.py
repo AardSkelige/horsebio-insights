@@ -2,6 +2,8 @@
 import json
 from datetime import datetime
 
+from health_production import rows_detail
+
 
 class ReportingMixin:
     """Формирование отчётов CostHealthCheck (используется как примесь)."""
@@ -418,6 +420,11 @@ class ReportingMixin:
             print(f"  🕐 Незавершённых черновиков: {stale_cnt} — не проведены дольше порога")
         else:
             print(f"  ✅ Незавершённых черновиков не найдено")
+        stuck_cnt = len(self.stats['stuck_production'])
+        if stuck_cnt:
+            print(f"  🏭 Зависших производственных заданий: {stuck_cnt}")
+        else:
+            print(f"  ✅ Зависших производственных заданий не найдено")
         print("="*70 + "\n")
 
     # ─── Стандартизированный JSON результатов (для страницы /checks) ──────────
@@ -690,6 +697,14 @@ class ReportingMixin:
             for it in self.stats['stale_drafts']
         ])
 
+        add('stuck_production', 'Зависшие производственные задания', None, None, [
+            {'key': '', 'ms_id': it['doc_id'], 'ms_href': it['href'],
+             'object': f"№{it['doc_name']}", 'severity': 'warning',
+             'detail': f"план {it['planned']} ({it['age_days']} дн) · висит {' и '.join(it['flags'])} · "
+                       + rows_detail(it['rows'])}
+            for it in self.stats['stuck_production']
+        ])
+
         # Сетка статусов всех проверок, включая чистые (для деталки /checks).
         # Одна плитка = одна проверка; cats — ключи категорий с её находками.
         _CHECKS_GRID = [
@@ -705,6 +720,7 @@ class ReportingMixin:
             ('supply_jumps',      'Скачки цен в приёмках',        ['supply_jumps']),
             ('codes',             'Коды товаров',                 ['code_no_code', 'code_duplicates', 'code_suspect']),
             ('stale_drafts',      'Незавершённые черновики',      ['stale_drafts']),
+            ('stuck_production',  'Зависшие производственные задания', ['stuck_production']),
         ]
         cat_by_key = {c['key']: c for c in categories}
         checks_grid = []
