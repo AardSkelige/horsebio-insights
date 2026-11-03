@@ -700,9 +700,14 @@ class ReportingMixin:
         add('stuck_production', 'Зависшие производственные задания', None, None, [
             {'key': '', 'ms_id': it['doc_id'], 'ms_href': it['href'],
              'object': f"№{it['doc_name']}", 'severity': 'warning',
-             'detail': f"план {it['planned']} ({it['age_days']} дн) · висит {' и '.join(it['flags'])} · "
+             'detail': f"{it['date_label']} {it['planned']} ({it['age_days']} дн) · висит {' и '.join(it['flags'])} · "
                        + rows_detail(it['rows'])}
             for it in self.stats['stuck_production']
+        ] + [
+            {'key': '', 'ms_id': it['doc_id'], 'ms_href': it['href'],
+             'object': f"№{it['doc_name']}", 'severity': 'warning',
+             'detail': f"не удалось проверить: {it['error']}"}
+            for it in self.stats['stuck_production_failed']
         ])
 
         # Сетка статусов всех проверок, включая чистые (для деталки /checks).

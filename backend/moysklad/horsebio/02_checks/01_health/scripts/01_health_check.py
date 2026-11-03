@@ -108,6 +108,7 @@ class CostHealthCheck(DocumentChecksMixin, PriceChecksMixin, ProductionChecksMix
             'code_suspect': [],           # Товары с кодом-аномалией (не соответствует паттерну группы)
             'stale_drafts': [],           # Непроведённые документы старше порога [{type, doc_name, age_days}]
             'stuck_production': [],
+            'stuck_production_failed': [],
         }
 
     def _elapsed_str(self):

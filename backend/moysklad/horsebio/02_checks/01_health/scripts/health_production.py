@@ -69,6 +69,9 @@ class ProductionChecksMixin:
             except Exception as e:
                 failed.append(task.get('name', '?'))
                 print(f"  ❌ №{task.get('name', '?')}: не удалось прочитать этапы ({e})")
+                self.stats['stuck_production_failed'].append({
+                    'doc_id': task['id'], 'doc_name': task.get('name', '?'),
+                    'href': task['meta'].get('uuidHref', ''), 'error': str(e)[:200]})
                 continue
             rows = undone_rows(stages, products)
             if not rows:
@@ -76,6 +79,7 @@ class ProductionChecksMixin:
             flags = [label for key, label in (('awaiting', 'ожидание'), ('reserve', 'резерв')) if task.get(key)]
             planned = _planned(task)[:10]
             item = {
+                'date_label': 'план' if task.get('deliveryPlannedMoment') else 'создано',
                 'doc_id': task['id'],
                 'doc_name': task.get('name', '?'),
                 'href': task['meta'].get('uuidHref', ''),
@@ -85,7 +89,8 @@ class ProductionChecksMixin:
                 'rows': rows,
             }
             self.stats['stuck_production'].append(item)
-            print(f"  ⚠️  №{item['doc_name']}  план {planned} ({item['age_days']} дн.)  висит: {', '.join(flags)}")
+            print(f"  ⚠️  №{item['doc_name']}  {item['date_label']} {planned} ({item['age_days']} дн.)  "
+                  f"висит: {', '.join(flags)}")
             for r in rows:
                 print(f"      • {r['name']}: сделано {r['done']:g} из {r['total']:g}")
         if failed:
