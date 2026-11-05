@@ -26,6 +26,7 @@ class ExpiredBatchNotificationTests(TestCase):
         self.assertEqual(items[0].key, f'raw-materials:expired:{expired.id}')
         self.assertEqual(items[1].title, 'Витаминная смесь (Мультикальций) — срок подходит к концу')
         self.assertEqual(items[0].title, 'Витаминная смесь (Мультикальций) — просрочено')
+        self.assertEqual(items[0].action, 'Решите с Арсением: выдать в производство или списать в МойСклад')
         self.assertEqual(items[0].body, 'Серия 119 · годен до 11.08.2026 · на полке 25 кг · ячейка B2')
 
     def test_names_every_shelf_and_small_remainders_exactly(self):

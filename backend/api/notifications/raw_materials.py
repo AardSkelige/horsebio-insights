@@ -60,7 +60,7 @@ def expiring_batches():
             title=f'{batch.material.name} — {"просрочено" if expired else "срок подходит к концу"}',
             body=_facts(batch),
             action=(
-                'Проверьте, лежит ли серия на полке, и спишите её в МойСклад' if expired
+                'Решите с Арсением: выдать в производство или списать в МойСклад' if expired
                 else 'Выдавайте эту серию в первую очередь'
             ),
             fingerprint=f'{batch.series}:{batch.expiry_date}',
