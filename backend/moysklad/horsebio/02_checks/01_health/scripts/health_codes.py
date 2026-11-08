@@ -174,3 +174,48 @@ class CodeChecksMixin:
 
         if not no_code and not duplicates and not suspect:
             print("  ✅ Коды товаров в порядке\n")
+
+    def summary_codes(self):
+        no_code_cnt = len(self.stats['code_no_code'])
+        dup_cnt = len(self.stats['code_duplicates'])
+        suspect_cnt = len(self.stats['code_suspect'])
+        if no_code_cnt or dup_cnt or suspect_cnt:
+            print(f"  🏷️  Коды товаров: без кода {no_code_cnt}, дублей {dup_cnt}, аномалий {suspect_cnt}")
+        else:
+            print(f"  ✅ Коды товаров — всё в порядке")
+
+    def summary_enter_zero(self):
+        ez_cnt = len(self.stats['enter_zero_prices'])
+        if ez_cnt:
+            total_pos = sum(len(i['positions']) for i in self.stats['enter_zero_prices'])
+            print(f"  ❌ Оприходований с нулевой ценой: {ez_cnt} документа(ов), {total_pos} позиций — занижают FIFO-себестоимость!")
+        else:
+            print(f"  ✅ Нулевых цен в оприходованиях не найдено")
+
+    def export_enter_zero(self, add):
+        add('enter_zero_prices', 'Оприходования с нулевой ценой', 'enter_zero', 'enter', [
+            {
+                'key': it['doc_id'], 'ms_id': it['doc_id'],
+                'object': f"№{it['doc_name']}", 'severity': 'critical',
+                'detail': f"{it.get('doc_date', '')} · {len(it['positions'])} поз. с ценой 0"
+                          + (f" · {it['doc_desc']}" if it.get('doc_desc') else ''),
+            }
+            for it in self.stats['enter_zero_prices']
+        ])
+
+    def export_codes(self, add):
+        add('code_no_code', 'Товары без кода', None, None, [
+            {'key': '', 'ms_id': '', 'object': it['name'], 'severity': 'warning',
+             'detail': it.get('group', '')}
+            for it in self.stats['code_no_code']
+        ])
+        add('code_duplicates', 'Дубли кодов', None, None, [
+            {'key': '', 'ms_id': '', 'object': f"код {code}", 'severity': 'warning',
+             'detail': ', '.join(p.get('name', '?') for p in products)}
+            for code, products in self.stats['code_duplicates'].items()
+        ])
+        add('code_suspect', 'Аномальные коды', None, None, [
+            {'key': '', 'ms_id': '', 'object': it['name'], 'severity': 'warning',
+             'detail': f"код {it.get('code', '')} · {it.get('group', '')}"}
+            for it in self.stats['code_suspect']
+        ])

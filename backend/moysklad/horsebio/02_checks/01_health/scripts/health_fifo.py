@@ -1,6 +1,8 @@
 import os
 import json
 
+from health_format import money
+
 
 class FifoChecksMixin:
     def _load_deviations_notes(self):
@@ -206,7 +208,6 @@ class FifoChecksMixin:
         current = result['current_cost']
         deviation = result['deviation_pct']
 
-        # Критичные проблемы
         if current == 0:
             return 'critical', "ЦЕНА 0.00"
         if self._within_supply_range(result):
@@ -297,3 +298,177 @@ class FifoChecksMixin:
                         self.stats['ok'] += 1
 
         print(f"  [{total}/{total}] Готово." + " " * 60)
+
+    def report_fifo(self):
+        # Критичные проблемы
+        if self.stats['critical']:
+            print(f"❌ КРИТИЧНЫЕ ПРОБЛЕМЫ ({len(self.stats['critical'])}):")
+            print("-" * 70)
+            for item in self.stats['critical']:
+                article_str = f"  код: {item['product_code']}" if item.get('product_code') else ''
+                print(f"  {item['product_name']}{article_str}")
+                print(f"    Склад: {item['store_name']}")
+                print(f"    Проблема: {item['message']}")
+                print(f"    FIFO-себест.:    {item['current_cost']:.4f} руб")
+                print(f"    Последняя приёмка: {item['last_supply_cost']:.4f} руб ({item['last_supply_date']})")
+                print()
+
+        # Важные проблемы
+        if self.stats['important']:
+            # Разделяем на необъяснённые и объяснённые (статус "норма")
+            _notes_map = self.deviations_notes_map
+            _unknown   = [i for i in self.stats['important'] if not self._is_normal_deviation(i)]
+            _explained = [i for i in self.stats['important'] if self._is_normal_deviation(i)]
+
+            # Ширины колонок таблицы
+            W_CODE  = 7
+            W_NAME  = 42
+            W_FIFO  = 9
+            W_SUPP  = 9
+            W_DEV   = 7
+            W_STOCK = 12
+            W_SEP   = W_CODE + 2 + W_NAME + 2 + W_FIFO + 2 + W_SUPP + 2 + W_DEV + 2 + W_STOCK
+            note_indent = "  " + " " * (W_CODE + 2)
+
+            if _unknown:
+                print(f"\n⚠️  ВАЖНЫЕ ПРОБЛЕМЫ — FIFO vs приёмка ({len(_unknown)}):")
+                print(f"  {'Код':<{W_CODE}}  {'Товар':<{W_NAME}}  "
+                      f"{'FIFO':>{W_FIFO}}  {'Приёмка':>{W_SUPP}}  "
+                      f"{'Δ%':>{W_DEV}}  {'Запас':<{W_STOCK}}")
+                print("  " + "─" * W_SEP)
+
+                for item in _unknown:
+                    fifo      = item['current_cost']
+                    supply    = item['last_supply_cost']
+                    stock     = item.get('stock', 0)
+                    code      = (item.get('product_code') or '')[:W_CODE]
+                    raw_name  = item['product_name']
+                    name      = raw_name[:W_NAME - 1] + '…' if len(raw_name) > W_NAME else raw_name
+                    dev_sign  = '+' if fifo > supply else '-'
+                    dev_str   = f"{dev_sign}{item['deviation_pct']:.1f}%"
+                    print(f"  {code:<{W_CODE}}  {name:<{W_NAME}}  "
+                          f"{fifo:.2f}р{' ':>{W_FIFO - len(f'{fifo:.2f}р')}}  "
+                          f"{supply:.2f}р{' ':>{W_SUPP - len(f'{supply:.2f}р')}}  "
+                          f"{dev_str:>{W_DEV}}  {stock:,.0f} ед")
+                    note = _notes_map.get(item.get('product_code', ''))
+                    if note:
+                        status = note.get('status', '')
+                        icon = {'исправлено': '🔧', 'ошибка-некритично': '⚠️'}.get(status, 'ℹ️')
+                        print(f"{note_indent}{icon} {note['note']}")
+                    print()
+
+            if _explained:
+                codes_str = ', '.join(i.get('product_code', '?') for i in _explained)
+                print(f"\n✅ Объяснённые отклонения FIFO ({len(_explained)}) — норма, не требуют действий: {codes_str}")
+
+    def report_enter_prices(self):
+        if self.stats['enter_price_issues']:
+            issues = self.stats['enter_price_issues']
+            zero_issues = [i for i in issues if i['enter_cost'] == 0]
+            price_issues = [i for i in issues if i['enter_cost'] != 0]
+
+            print(f"\n🔧 ОПРИХОДОВАНИЯ С НЕПРАВИЛЬНОЙ ЦЕНОЙ ({len(issues)}):")
+            print(f"   ↳ Цена в оприходовании не совпадает с приёмкой на тот момент → скорее всего ошибка ввода")
+            print("-" * 70)
+
+            if zero_issues:
+                print(f"  ❌ Нулевая цена ({len(zero_issues)}) — разрушает себестоимость:")
+                for item in zero_issues:
+                    print(f"    • {item['product_name'][:50]}")
+                    print(f"      Оприходование №{item['enter_doc']} от {item['enter_date']}: цена 0.00")
+                    print(f"      Последняя приёмка на тот момент ({item['supply_date']}): {item['supply_cost']:.4f} руб")
+
+            if price_issues:
+                print(f"  ⚠️  Неверная цена ({len(price_issues)}) — проверь документы:")
+                for item in price_issues:
+                    direction = "дешевле" if item['enter_cost'] < item['supply_cost'] else "дороже"
+                    print(f"    • {item['product_name'][:50]}  {item['deviation_pct']:>6.1f}%")
+                    print(f"      Оприход. №{item['enter_doc']} ({item['enter_date']}): {item['enter_cost']:.4f} руб")
+                    print(f"      Приёмка на тот момент ({item['supply_date']}):    {item['supply_cost']:.4f} руб  [{direction}]")
+
+    def summary_fifo(self):
+        scanned = self.stats['scanned']
+        if scanned:
+            total_scanned = sum(scanned.values())
+            stores_str = ', '.join(f"{name.split()[0]}: {n}" for name, n in scanned.items())
+            print(f"  Отсканировано товаров на складах: {total_scanned}  ({stores_str})")
+        else:
+            print(f"  Всего проверено: {self.stats['total']}")
+        has_cost_issues = self.stats['critical'] or self.stats['important']
+        if has_cost_issues:
+            print(f"  ❌ Критичные (FIFO vs приёмка): {len(self.stats['critical'])}")
+            print(f"  ⚠️  Важные (FIFO vs приёмка): {len(self.stats['important'])}")
+        else:
+            print(f"  ✅ FIFO-себестоимость близка к ценам приёмок — отклонений не найдено")
+
+    def summary_enter_prices(self):
+        enter_issues_cnt = len(self.stats['enter_price_issues'])
+        if enter_issues_cnt:
+            zero_cnt = sum(1 for i in self.stats['enter_price_issues'] if i['enter_cost'] == 0)
+            print(f"  🔧 Оприходования с неправильной ценой: {enter_issues_cnt} (нулевых: {zero_cnt})")
+        else:
+            print(f"  ✅ Свежих оприходований с неправильной ценой не найдено")
+
+    def _is_normal_deviation(self, it):
+        # Норма действует, пока отклонение не выросло в 1,5 раза плюс 2 п.п. с момента разбора
+        note = self.deviations_notes_map.get(it.get('product_code', ''), {})
+        if note.get('status') != 'норма':
+            return False
+        ref = note.get('deviation_pct')
+        if ref:
+            try:
+                if abs(it['deviation_pct']) > abs(float(ref)) * 1.5 + 2:
+                    return False
+            except (TypeError, ValueError):
+                pass
+        return True
+
+    def export_fifo(self, add):
+        # Позиции, помеченные «норма» (исключение), не исчезают из отчёта по логике скрипта —
+        # выносим их в отдельную тихую группу, чтобы «Критичные/Важные» показывали только то,
+        # что реально требует внимания.
+        _notes = self.deviations_notes_map
+        _phref = getattr(self, '_product_uuid_href', {})
+
+        def _dev_item(it, sev, normal):
+            # Словами, а не знаком: «+12%» читается как «подорожало», хотя означает
+            # «остаток на складе числится дороже, чем стоила последняя закупка».
+            side = 'склад дороже' if it['current_cost'] > it['last_supply_cost'] else 'склад дешевле'
+            msg = it.get('message')
+            head = (f"{msg} · " if (sev == 'critical' and msg)
+                    else f"{side} закупки на {it['deviation_pct']:.1f}% · ")
+            return {
+                'key': it.get('product_code') or '', 'ms_id': it.get('product_id') or '',
+                'ms_href': _phref.get(it.get('product_id')) or '',
+                'object': it['product_name'], 'severity': sev,
+                # deviation_pct нужен UI: запоминается в исключении при разборе,
+                # чтобы снова флагать позицию, когда отклонение вырастет
+                'deviation_pct': round(it.get('deviation_pct', 0), 1),
+                # Норма есть, но отклонение с тех пор выросло, UI предложит подтвердить заново
+                'stale': (_notes.get(it.get('product_code', ''), {}).get('status') == 'норма'
+                          and not normal),
+                'detail': head + f"{it['store_name']} · FIFO {money(it['current_cost'])} ↔ "
+                          f"приёмка {money(it['last_supply_cost'])} · запас {it.get('stock', 0):,.0f} ед",
+            }
+
+        # ms_type=None: ссылка на товар только через uuidHref (ms_href) — UI-id ≠ API-id,
+        # fallback #good/edit?id=<api id> всегда ведёт на «Объект не найден»
+        add('critical', 'Критичные: FIFO vs приёмка', 'deviations', None,
+            [_dev_item(it, 'critical', False) for it in self.stats['critical'] if not self._is_normal_deviation(it)])
+        add('important', 'Важные: отклонения FIFO vs приёмка', 'deviations', None,
+            [_dev_item(it, 'important', False) for it in self.stats['important'] if not self._is_normal_deviation(it)])
+        add('deviations_normal', 'Отклонения, разобранные как норма', 'deviations', None,
+            [_dev_item(it, 'ok', True) for it in (self.stats['critical'] + self.stats['important'])
+             if self._is_normal_deviation(it)])
+
+    def export_enter_prices(self, add):
+        add('enter_price_issues', 'Оприходования с неправильной ценой', None, None, [
+            {
+                'key': '', 'ms_id': '',
+                'object': it['product_name'],
+                'severity': 'critical' if it['enter_cost'] == 0 else 'important',
+                'detail': f"№{it['enter_doc']} {it['enter_date']}: {money(it['enter_cost'])} ↔ "
+                          f"приёмка {money(it['supply_cost'])} ({it['supply_date']}, {it['deviation_pct']:.1f}%)",
+            }
+            for it in self.stats['enter_price_issues']
+        ])

@@ -304,3 +304,129 @@ class FlowDocChecksMixin:
             print("  ✅ Незавершённых черновиков не найдено\n")
 
         print()
+
+    def report_moves(self):
+        moves = self.stats['suspect_moves']
+        if moves:
+            print(f"\n🚚 ПЕРЕМЕЩЕНИЯ С НАРУШЕНИЯМИ ({len(moves)})  — последние {self.doc_months} мес.:")
+            print(f"   ↳ Проверь: ячейки при отгрузке с Шатла, направление, крупные без описания")
+            print("-" * 70)
+            for item in moves:
+                flag_labels = []
+                if 'no_source_slot' in item['flags']:
+                    flag_labels.append('нет ячейки (адресный склад)')
+                if 'reverse_direction' in item['flags']:
+                    flag_labels.append('нетипичное направление')
+                if 'no_desc_large' in item['flags']:
+                    flag_labels.append(f'крупное без описания (>{self.move_threshold} руб)')
+                desc_display = item['description'] or '(без описания)'
+                print(f"  🔴 №{item['doc_name']:<26}  {item['moment']}  "
+                      f"{item['source_store']} → {item['target_store']}")
+                print(f"      📝 {desc_display[:100]}")
+                # Сначала позиции без ячейки, потом остальные
+                no_slot = [p for p in item['positions'] if not p['has_slot']]
+                with_slot = [p for p in item['positions'] if p['has_slot']]
+                show_positions = (no_slot or with_slot)[:1]
+                for p in show_positions:
+                    slot_warn = "" if p['has_slot'] else "  ⚠️ нет ячейки"
+                    extra = ""
+                    total_no_slot = len(no_slot)
+                    if not p['has_slot'] and total_no_slot > 1:
+                        extra = f" + ещё {total_no_slot - 1} без ячейки"
+                    print(f"      📦 {p['name'][:42]:<42}  x{p['qty']:.0f}{slot_warn}{extra}")
+                print(f"      ⚠️ {', '.join(flag_labels)}")
+                print()
+        else:
+            print(f"\n✅ Перемещений с нарушениями не найдено (последние {self.doc_months} мес.)")
+
+    def report_supplies(self):
+        supplies = self.stats['suspect_supplies']
+        if supplies:
+            print(f"\n🚚 ПРИЁМКИ С НАРУШЕНИЯМИ ({len(supplies)})  — последние {self.doc_months} мес.:")
+            print(f"   ↳ Проверь: цены, ячейки на Шатле, описание, правильный склад")
+            print("-" * 70)
+            for item in supplies:
+                flag_labels = []
+                if 'zero_price' in item['flags']:
+                    flag_labels.append('⛔ цена 0 — искажает себестоимость!')
+                if 'no_slot' in item['flags']:
+                    flag_labels.append('нет ячейки (Шатл — адресный склад)')
+                if 'no_desc' in item['flags']:
+                    flag_labels.append('нет описания')
+                if 'unexpected_store' in item['flags']:
+                    flag_labels.append('⚠️ склад производства — товар ранее шёл через Шатл')
+                if 'delivery_as_position' in item['flags']:
+                    flag_labels.append('⚠️ доставка позицией — нужно в Накладные расходы')
+                marker = "🚨" if 'zero_price' in item['flags'] or 'unexpected_store' in item['flags'] or 'delivery_as_position' in item['flags'] else "🔴"
+                desc_display = item['description'] or '(без описания)'
+                value_str = f"{item['total_value']:,.0f} руб" if item['total_value'] else ''
+                print(f"  {marker} №{item['doc_name']:<26}  {item['moment']}  {item['store']}  {value_str}")
+                print(f"      📝 {desc_display[:100]}")
+                zero_pos = [p for p in item['positions'] if p['price'] == 0]
+                # нет ячейки — только для адресных складов (Шатл)
+                no_slot_pos = [p for p in item['positions'] if not p['has_slot']] if item.get('is_slot_store') else []
+                show = (zero_pos or no_slot_pos or item['positions'])[:1]
+                for p in show:
+                    price_str = f"{p['price']:.2f} руб" if p['price'] > 0 else "⚠️ цена 0!"
+                    slot_warn = "" if (p['has_slot'] or not item.get('is_slot_store')) else "  ⚠️ нет ячейки"
+                    extra_no_slot = f" + ещё {len(no_slot_pos)-1} без ячейки" if len(no_slot_pos) > 1 and not p['has_slot'] else ""
+                    extra_zero = f" + ещё {len(zero_pos)-1} с ценой 0" if len(zero_pos) > 1 and p['price'] == 0 else ""
+                    total_pos = len(item['positions'])
+                    more = f" (всего {total_pos} поз.)" if total_pos > 1 else ""
+                    print(f"      📦 {p['name'][:42]:<42}  x{p['qty']:.0f}  {price_str}{slot_warn}{extra_no_slot}{extra_zero}{more}")
+                print(f"      ⚠️ {', '.join(flag_labels)}")
+                print()
+        else:
+            print(f"\n✅ Приёмок с нарушениями не найдено (последние {self.doc_months} мес.)")
+
+    def summary_moves(self):
+        print(f"  🚚 Перемещений с нарушениями: {len(self.stats['suspect_moves'])}")
+
+    def summary_supplies(self):
+        print(f"  🚚 Приёмок с нарушениями: {len(self.stats['suspect_supplies'])}")
+
+    def summary_stale_drafts(self):
+        stale_cnt = len(self.stats['stale_drafts'])
+        if stale_cnt:
+            print(f"  🕐 Незавершённых черновиков: {stale_cnt} — не проведены дольше порога")
+        else:
+            print(f"  ✅ Незавершённых черновиков не найдено")
+
+    def export_moves(self, add):
+        _move_flag = {'no_source_slot': 'нет ячейки', 'reverse_direction': 'нетипичное направление',
+                      'no_desc_large': 'крупное без описания'}
+        add('suspect_moves', 'Перемещения с нарушениями', 'moves', 'move', [
+            {
+                'key': it['doc_id'], 'ms_id': it['doc_id'],
+                'object': f"№{it['doc_name']}", 'severity': 'important',
+                'detail': f"{it['moment']} · {it['source_store']} → {it['target_store']} · "
+                          f"{', '.join(_move_flag.get(f, f) for f in it['flags'])}",
+            }
+            for it in self.stats['suspect_moves']
+        ])
+
+    def export_supplies(self, add):
+        _supply_flag = {'zero_price': '⛔ цена 0', 'no_slot': 'нет ячейки', 'no_desc': 'нет описания',
+                        'unexpected_store': 'неожиданный склад', 'delivery_as_position': 'доставка позицией'}
+        _supply_crit = {'zero_price', 'unexpected_store', 'delivery_as_position'}
+        add('suspect_supplies', 'Приёмки с нарушениями', 'supplies', 'supply', [
+            {
+                'key': it['doc_id'], 'ms_id': it['doc_id'],
+                'object': f"№{it['doc_name']}",
+                'severity': 'critical' if _supply_crit & set(it['flags']) else 'important',
+                'detail': f"{it['moment']} · {it['store']} · "
+                          f"{', '.join(_supply_flag.get(f, f) for f in it['flags'])}",
+            }
+            for it in self.stats['suspect_supplies']
+        ])
+
+    def export_stale_drafts(self, add):
+        # Ссылка собирается на каждый документ: типы разные, а документы открываются по API-id
+        add('stale_drafts', 'Незавершённые черновики', None, None, [
+            {'key': '', 'ms_id': it.get('doc_id', ''),
+             'ms_href': (f"https://online.moysklad.ru/app/#{it['ms_type']}/edit?id={it['doc_id']}"
+                         if it.get('ms_type') and it.get('doc_id') else ''),
+             'object': it.get('doc_name', '?'), 'severity': 'warning',
+             'detail': f"{it.get('type', '')} · {it.get('age_days', 0)} дн"}
+            for it in self.stats['stale_drafts']
+        ])

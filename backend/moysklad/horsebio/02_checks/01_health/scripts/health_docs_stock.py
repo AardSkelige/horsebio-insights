@@ -185,3 +185,159 @@ class StockDocChecksMixin:
                 print(f"  ❌ Ошибка при проверке {store_name}: {e}")
 
         print()
+
+    def report_negative_stock(self):
+        if self.stats['negative_stock']:
+            print(f"\n🔴 ОТРИЦАТЕЛЬНЫЕ ОСТАТКИ ({len(self.stats['negative_stock'])}):")
+            print("-" * 70)
+            for item in self.stats['negative_stock']:
+                print(f"  {item['name'][:45]:<45}  {item['store'][:25]:<25}  {item['qty']:>8.3f}")
+        else:
+            print("\n✅ Отрицательных остатков не найдено")
+
+    def report_enters(self):
+        all_enters = self.stats['suspect_enters']
+        if all_enters:
+            manual = [e for e in all_enters if not e['is_auto']]
+            auto   = [e for e in all_enters if e['is_auto']]
+
+            print(f"\n📋 ОПРИХОДОВАНИЯ НА ВНУТРЕННИХ СКЛАДАХ за {self.enter_months} мес."
+                  f"  (всего: {len(all_enters)}, ручных: {len(manual)}, авто: {len(auto)}):")
+            print(f"   ↳ Ручные: проверь нет ли тех, что должны быть перемещениями")
+            print("-" * 70)
+
+            def _get_verdict(desc):
+                """Авто-вердикт по описанию оприходования."""
+                if not desc:
+                    return "❓ Нет описания — стоит уточнить причину"
+                d = desc.lower()
+                if any(w in d for w in ['инвентар']):
+                    return "✅ Инвентаризация — ожидаемо"
+                if any(w in d for w in ['физическ', 'пересчит', 'взвесил', 'по факту', 'фактическ']):
+                    return "✅ Физический пересчёт — ожидаемо"
+                if any(w in d for w in ['ячейк', 'коррект', 'миграц']):
+                    return "🔄 Корректировка ячеек/данных — ОК если товар уже был на складе"
+                if any(w in d for w in ['минус', 'нулев', ' ноль', 'до нул', 'обнул']):
+                    return "🔄 Обнуление отрицательных остатков"
+                if any(w in d for w in ['задани', 'производств']):
+                    return "🔄 Связь с производственным заданием"
+                if any(w in d for w in ['авто:', 'auto:']):
+                    return "✅ Авто-скрипт — создан программно"
+                if any(w in d for w in ['перенос', 'перенести', 'переносил']):
+                    return "⚠️ Упоминается перенос — возможно нужно перемещение вместо оприходования"
+                if any(w in d for w in ['не хватает', 'недостача', 'нехватка']):
+                    return "⚠️ Нехватка — проверь откуда взялся товар"
+                return "ℹ️ Проверь: это точно оприходование, а не перемещение?"
+
+            def _print_enter(item, marker):
+                desc = item['description'] or ''
+                desc_display = desc[:100] if desc else '(без описания)'
+                positions = item['positions']
+                pos_count = len(positions)
+                verdict = _get_verdict(desc)
+
+                print(f"  {marker} №{item['doc_name']:<26}  {item['moment']}  {item['store']}")
+                print(f"      📝 {desc_display}")
+
+                if positions:
+                    p0 = positions[0]
+                    price_str = f"{p0['price']:.2f} руб" if p0['price'] > 0 else "⚠️ цена 0!"
+                    more = f" + ещё {pos_count - 1} поз." if pos_count > 1 else ""
+                    slot_warn = "  ⚠️ нет ячейки (Шатл — адресный склад)" if item.get('no_slot') else ""
+                    print(f"      📦 {p0['name'][:42]:<42}  x{p0['qty']:.0f}  {price_str}{more}{slot_warn}")
+
+                print(f"      💡 {verdict}")
+                print()
+
+            if manual:
+                print(f"  ⚠️  РУЧНЫЕ ({len(manual)}) — требуют проверки:")
+                for item in manual:
+                    _print_enter(item, '⚠️')
+            if auto:
+                print(f"  ℹ️  АВТО ({len(auto)}) — созданы скриптами:")
+                for item in auto:
+                    _print_enter(item, 'ℹ️')
+        else:
+            print(f"\n✅ Оприходований на внутренних складах не найдено"
+                  f" (последние {self.enter_months} мес.)")
+
+    def report_losses(self):
+        losses = self.stats['suspect_losses']
+        if losses:
+            print(f"\n🗑️  СПИСАНИЯ С НАРУШЕНИЯМИ ({len(losses)})  — последние {self.doc_months} мес.:")
+            print(f"   ↳ Проверь: нет ли потерь без причины или с нулевой ценой")
+            print("-" * 70)
+            for item in losses:
+                flag_labels = []
+                if 'no_desc' in item['flags']:
+                    flag_labels.append('нет описания')
+                if 'zero_price' in item['flags']:
+                    flag_labels.append('нулевая цена')
+                if 'no_slot' in item['flags']:
+                    flag_labels.append('нет ячейки (Шатл — адресный склад)')
+                desc_display = item['description'] or '(без описания)'
+                print(f"  🔴 №{item['doc_name']:<26}  {item['moment']}  {item['store']}")
+                print(f"      📝 {desc_display[:100]}")
+                if item['positions']:
+                    no_slot_pos = [p for p in item['positions'] if not p.get('has_slot')] if item.get('is_slot_store') else []
+                    show = (no_slot_pos or item['positions'])[:1]
+                    for p0 in show:
+                        price_str = f"{p0['price']:.2f} руб" if p0['price'] > 0 else "⚠️ цена 0!"
+                        more = f" + ещё {len(item['positions']) - 1} поз." if len(item['positions']) > 1 else ""
+                        slot_warn = "  ⚠️ нет ячейки" if (item.get('is_slot_store') and not p0.get('has_slot')) else ""
+                        print(f"      📦 {p0['name'][:42]:<42}  x{p0['qty']:.0f}  {price_str}{more}{slot_warn}")
+                print(f"      ⚠️ {', '.join(flag_labels)}")
+                print()
+        else:
+            print(f"\n✅ Списаний с нарушениями не найдено (последние {self.doc_months} мес.)")
+
+    def summary_negative_stock(self):
+        print(f"  🔴 Отрицательных остатков: {len(self.stats['negative_stock'])}")
+
+    def summary_enters(self):
+        manual_cnt = sum(1 for e in self.stats['suspect_enters'] if not e['is_auto'])
+        auto_cnt   = sum(1 for e in self.stats['suspect_enters'] if e['is_auto'])
+        print(f"  📋 Оприходований на внутренних складах: {len(self.stats['suspect_enters'])}"
+              f"  (ручных: {manual_cnt}, авто: {auto_cnt})")
+
+    def summary_losses(self):
+        print(f"  🗑️  Списаний с нарушениями: {len(self.stats['suspect_losses'])}")
+
+    def export_negative_stock(self, add):
+        add('negative_stock', 'Отрицательные остатки', None, None, [
+            {
+                'key': '', 'ms_id': '', 'object': it['name'], 'severity': 'important',
+                'detail': f"{it['store']} · {it['qty']:.3f}",
+            }
+            for it in self.stats['negative_stock']
+        ])
+
+    def export_enters(self, add):
+        def _enter_detail(it):
+            parts = [it['moment'], it['store']]
+            if it.get('no_slot'):
+                parts.append('нет ячейки')
+            if it.get('description'):
+                parts.append(it['description'][:60])
+            return ' · '.join(parts)
+        add('suspect_enters', 'Оприходования на внутренних складах', 'enters', 'enter', [
+            {
+                'key': it['doc_id'], 'ms_id': it['doc_id'],
+                'object': f"№{it['doc_name']}",
+                'severity': 'warning' if it.get('is_auto') else 'important',
+                'detail': _enter_detail(it),
+            }
+            for it in self.stats['suspect_enters']
+        ])
+
+    def export_losses(self, add):
+        _loss_flag = {'no_desc': 'нет описания', 'zero_price': 'нулевая цена', 'no_slot': 'нет ячейки'}
+        add('suspect_losses', 'Списания с нарушениями', 'losses', 'loss', [
+            {
+                'key': it['doc_id'], 'ms_id': it['doc_id'],
+                'object': f"№{it['doc_name']}", 'severity': 'important',
+                'detail': f"{it['moment']} · {it['store']} · "
+                          f"{', '.join(_loss_flag.get(f, f) for f in it['flags'])}",
+            }
+            for it in self.stats['suspect_losses']
+        ])

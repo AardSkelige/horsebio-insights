@@ -1,5 +1,7 @@
 from datetime import datetime, timedelta
 
+from health_format import money
+
 
 class InventoryChecksMixin:
     def check_suspect_inventories(self):
@@ -257,3 +259,102 @@ class InventoryChecksMixin:
                 if price > 0:
                     prices[pid] = price
         return prices
+
+    def report_inventory_prices(self):
+        inv_price_issues = self.stats['inventory_price_issues']
+        if inv_price_issues:
+            print(f"\n💰 ИНВЕНТАРИЗАЦИИ С ПРОБЛЕМАМИ ЦЕН ({len(inv_price_issues)})  — последние {self.doc_months} мес.:")
+            print(f"   ↳ zero_price: демон не отработал или товар без остатка. big_deviation: цена отличается от FIFO-себестоимости >30%")
+            print("-" * 70)
+            for item in inv_price_issues:
+                status = "непроведена" if not item['applicable'] else "проведена"
+                print(f"  🔴 №{item['doc_name']:<26}  {item['moment']}  {item['store']}  [{status}]")
+                if item['zero_positions']:
+                    names = ', '.join(p[:30] for p in item['zero_positions'][:5])
+                    more = f" + ещё {len(item['zero_positions']) - len(item['zero_positions'][:5])}" if len(item['zero_positions']) > 5 else ""
+                    print(f"      ⛔ Нулевая цена: {names}{more}")
+                for p in item['deviation_positions']:
+                    print(f"      ⚠️  {p['name'][:40]:<40}  {p['price_rub']:.2f} руб (FIFO: {p['avg_rub']:.2f}, откл. {p['deviation_pct']}%)")
+                print()
+        else:
+            print(f"\n✅ Цен с проблемами в инвентаризациях не найдено (последние {self.doc_months} мес.)")
+
+    def report_inventories(self):
+        inventories = self.stats['suspect_inventories']
+        if inventories:
+            print(f"\n📋 ИНВЕНТАРИЗАЦИИ С РАСХОЖДЕНИЯМИ ({len(inventories)})  — последние {self.doc_months} мес.:")
+            print(f"   ↳ Порог расхождения: {self.inv_threshold} ед. суммарно по документу")
+            print("-" * 70)
+            for item in inventories:
+                flag_labels = []
+                if 'no_correction_docs' in item['flags']:
+                    flag_labels.append(f"⛔ ОСТАТКИ НЕ ИСПРАВЛЕНЫ — нажать «Создать документы»!")
+                if 'no_desc' in item['flags']:
+                    flag_labels.append('нет описания')
+                if 'big_diff' in item['flags']:
+                    flag_labels.append(f"расхождение {item['total_diff']:.0f} ед.")
+                marker = "🚨" if 'no_correction_docs' in item['flags'] else "🔴"
+                desc_display = item['description'] or '(без описания)'
+                print(f"  {marker} №{item['doc_name']:<26}  {item['moment']}  {item['store']}")
+                print(f"      📝 {desc_display[:100]}")
+                if item['top_positions']:
+                    parts = [
+                        f"{p['name'][:22]} ({p['correction']:+.0f})"
+                        for p in item['top_positions']
+                    ]
+                    print(f"      ± {', '.join(parts)}")
+                for label in flag_labels:
+                    print(f"      ⚠️ {label}")
+                print()
+        else:
+            print(f"\n✅ Инвентаризаций с расхождениями не найдено (последние {self.doc_months} мес.)")
+
+    def summary_inventories(self):
+        print(f"  📋 Инвентаризаций с расхождениями: {len(self.stats['suspect_inventories'])}")
+
+    def summary_inventory_prices(self):
+        inv_price_issues = self.stats['inventory_price_issues']
+        if inv_price_issues:
+            zero_cnt = sum(1 for i in inv_price_issues if 'zero_price' in i['flags'])
+            dev_cnt = sum(1 for i in inv_price_issues if 'big_deviation' in i['flags'])
+            print(f"  💰 Инвентаризаций с проблемами цен: {len(inv_price_issues)} "
+                  f"(нулевые: {zero_cnt}, отклонение >30%: {dev_cnt})")
+        else:
+            print(f"  ✅ Цены в инвентаризациях — всё в порядке")
+
+    def export_inventories(self, add):
+        add('suspect_inventories', 'Инвентаризации с расхождениями', 'inventories', 'inventory', [
+            {
+                'key': it['doc_id'], 'ms_id': it['doc_id'],
+                'object': f"№{it['doc_name']}",
+                'severity': 'critical' if 'no_correction_docs' in it['flags'] else 'important',
+                'detail': f"{it['moment']} · {it['store']} · расхождение {it.get('total_diff', 0):.0f} ед"
+                          + (' · ⛔ остатки не исправлены' if 'no_correction_docs' in it['flags'] else ''),
+            }
+            for it in self.stats['suspect_inventories']
+        ])
+
+    def export_inventory_prices(self, add):
+        def _inv_price_detail(it):
+            parts = [it['moment'], it['store']]
+            zp = it.get('zero_positions') or []
+            if zp:
+                parts.append('цена 0: ' + ', '.join(n[:40] for n in zp[:2])
+                             + (f' и ещё {len(zp) - 2}' if len(zp) > 2 else ''))
+            dp = it.get('deviation_positions') or []
+            for d in dp[:2]:
+                parts.append(f"{d['name'][:40]}: в инв. {money(d['price_rub'])} ↔ "
+                             f"FIFO {money(d['avg_rub'])} ({d['deviation_pct']:.0f}%)")
+            if len(dp) > 2:
+                parts.append(f'и ещё {len(dp) - 2}')
+            return ' · '.join(parts)
+
+        add('inventory_price_issues', 'Инвентаризации: проблемы цен', 'inventories', 'inventory', [
+            {
+                'key': it['doc_id'], 'ms_id': it['doc_id'],
+                'object': f"№{it['doc_name']}",
+                'severity': 'critical' if 'zero_price' in it['flags'] else 'important',
+                'detail': _inv_price_detail(it),
+            }
+            for it in self.stats['inventory_price_issues']
+        ])

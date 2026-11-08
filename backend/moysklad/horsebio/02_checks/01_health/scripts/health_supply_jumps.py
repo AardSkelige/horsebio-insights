@@ -1,8 +1,8 @@
 import os
 from datetime import datetime
 from statistics import median
-
 from health_config import TARGET_GROUPS
+from health_format import money
 
 
 class SupplyJumpChecksMixin:
@@ -310,3 +310,79 @@ class SupplyJumpChecksMixin:
                 self.stats['supply_jumps'].append(result)
 
         print(f"  [{total}/{total}] Готово." + " " * 60)
+
+    def report_supply_jumps(self):
+        if self.stats['supply_jumps']:
+            print(f"\n📦 СКАЧКИ ЦЕН В ПРИЁМКАХ ({len(self.stats['supply_jumps'])}):")
+            print("-" * 70)
+            for item in sorted(self.stats['supply_jumps'], key=lambda x: x['jump_pct'], reverse=True):
+                if item.get('basis') == 'zero':
+                    print(f"  {item['name']}  цена 0, приёмка №{item['last_doc']} {item['last_date']}\n")
+                    continue
+                if item.get('basis') == 'sheet':
+                    print(f"  {item['name']}  цена {item['last_price']:.2f} не раскладывается на лист "
+                          f"{item['sheet_price']:.2f}, приёмка №{item['last_doc']} {item['last_date']}\n")
+                    continue
+                # Заголовок товара
+                direction = "▲" if item['last_price'] > item['avg_prev'] else "▼"
+                print(
+                    f"  {item['name']}  "
+                    f"{direction} {item['jump_pct']:>5.1f}%"
+                )
+                # История приёмок: последняя + предыдущие
+                history = item.get('history', [])
+                for i, h in enumerate(history):
+                    qty_str = f"{h['qty']:,.0f}" if h['qty'] >= 1 else f"{h['qty']:.3f}"
+                    marker = "→" if i == 0 else "  "
+                    print(
+                        f"    {marker} №{h['doc']:<8}  {h['date']}  "
+                        f"{h['price']:>10.2f} руб  x{qty_str:<9}  {h.get('agent', '')}"
+                    )
+                print()
+
+    def summary_supply_jumps(self):
+        new_jumps = len(self.stats['supply_jumps'])
+        explained = len(self.stats['supply_jumps_explained'])
+        if new_jumps:
+            print(f"  📦 Скачков цен в приёмках: {new_jumps}  ← требуют проверки")
+        elif explained:
+            print(f"  ✅ Скачков цен в приёмках: 0  ({explained} в игнор-листе — известные позиции)")
+        else:
+            print(f"  ✅ Скачков цен в приёмках: 0")
+
+    def export_supply_jumps(self, add):
+        # last_doc нужен странице для разового исключения по одной приёмке
+        def _jump_detail(it):
+            doc = f"приёмка №{it.get('last_doc', '?')} {it.get('last_date', '')}"
+            agent = it.get('last_agent') or ''
+            basis = it.get('basis')
+            if basis == 'zero':
+                return f"цена 0 · {doc} · {agent}"
+            if basis == 'sheet':
+                others = it.get('other_docs') or []
+                tail = f" · ещё в приёмках №{', '.join(others)}" if others else ''
+                return (f"цена {money(it['last_price'])} не раскладывается на лист "
+                        f"{money(it.get('sheet_price'))} · строк в приёмке "
+                        f"{it.get('lines_in_doc', 0)} · {doc} · {agent}{tail}")
+            side = 'дороже' if it['last_price'] > it['avg_prev'] else 'дешевле'
+            if basis == 'multiple':
+                hi, lo = sorted((it['last_price'], it['avg_prev']), reverse=True)
+                ratio = hi / lo if lo else 0
+                prev_who = ', '.join(it.get('prev_agents') or [])
+                return (f"в {ratio:.1f} раза {side} прошлых приёмок · "
+                        f"последняя {money(it['last_price'])} ({agent}) ↔ медиана "
+                        f"{money(it['avg_prev'])}{f' ({prev_who})' if prev_who else ''} · {doc}")
+            delta = abs(it['last_price'] - it['avg_prev']) * (it.get('last_qty') or 0)
+            return (f"у того же поставщика {side} на {it['jump_pct']:.0f}% · "
+                    f"{money(it['avg_prev'])} → {money(it['last_price'])} · "
+                    f"на приёмку {delta:,.0f} ₽ · {doc} · {agent}")
+
+        add('supply_jumps', 'Скачки цен в приёмках', 'supply_jumps', None, [
+            {
+                'key': it.get('code') or it['name'], 'ms_id': '',
+                'object': it['name'], 'severity': 'warning',
+                'last_doc': it.get('last_doc', ''),
+                'detail': _jump_detail(it),
+            }
+            for it in self.stats['supply_jumps']
+        ])
