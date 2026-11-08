@@ -1,3 +1,6 @@
+from health_registry import CHECKS, check_runs
+
+
 class ExportReportMixin:
     # ─── Стандартизированный JSON результатов (для страницы /checks) ──────────
     _SEVERITY_RANK = {'critical': 3, 'important': 2, 'warning': 1, 'info': 0}
@@ -24,46 +27,17 @@ class ExportReportMixin:
                 'severity': sev, 'count': len(items), 'items': items,
             })
 
-        self.export_fifo(add)
-        self.export_enter_prices(add)
-        self.export_negative_stock(add)
-        self.export_enters(add)
-        self.export_losses(add)
-        self.export_inventories(add)
-        self.export_inventory_prices(add)
-        self.export_moves(add)
-        self.export_supplies(add)
-        self.export_enter_zero(add)
-        self.export_supply_jumps(add)
-        self.export_codes(add)
-        self.export_stale_drafts(add)
-        self.export_stuck_production(add)
-
-        # Сетка статусов всех проверок, включая чистые (для деталки /checks).
-        # Одна плитка = одна проверка; cats — ключи категорий с её находками.
-        _CHECKS_GRID = [
-            ('deviations',        'Отклонения FIFO vs приёмка',   ['critical', 'important']),
-            ('negative_stock',    'Отрицательные остатки',        ['negative_stock']),
-            ('enters',            'Оприходования: внутр. склады', ['suspect_enters']),
-            ('enter_prices',      'Оприходования: цена ≠ приёмка', ['enter_price_issues']),
-            ('enter_zero',        'Оприходования: нулевые цены',  ['enter_zero_prices']),
-            ('losses',            'Списания',                     ['suspect_losses']),
-            ('inventories',       'Инвентаризации',               ['suspect_inventories', 'inventory_price_issues']),
-            ('moves',             'Перемещения',                  ['suspect_moves']),
-            ('supplies',          'Приёмки',                      ['suspect_supplies']),
-            ('supply_jumps',      'Скачки цен в приёмках',        ['supply_jumps']),
-            ('codes',             'Коды товаров',                 ['code_no_code', 'code_duplicates', 'code_suspect']),
-            ('stale_drafts',      'Незавершённые черновики',      ['stale_drafts']),
-            ('stuck_production',  'Зависшие производственные задания', ['stuck_production']),
-        ]
-        cat_by_key = {c['key']: c for c in categories}
         checks_grid = []
-        for check_id, title, cat_keys in _CHECKS_GRID:
-            if check_id == 'supply_jumps' and not getattr(self, 'full_mode', False):
+        for check in CHECKS:
+            check_id, title = check['id'], check['title']
+            if not check_runs(check, getattr(self, 'full_mode', False)):
                 checks_grid.append({'id': check_id, 'title': title, 'status': 'skipped',
                                     'count': 0, 'severity': None, 'cats': []})
                 continue
-            present = [cat_by_key[k] for k in cat_keys if k in cat_by_key]
+            start = len(categories)
+            for name in check['export']:
+                getattr(self, name)(add)
+            present = [c for c in categories[start:] if c['severity'] != 'ok']
             count = sum(c['count'] for c in present)
             sev = max((c['severity'] for c in present),
                       key=lambda s: self._SEVERITY_RANK.get(s, 0)) if present else None
