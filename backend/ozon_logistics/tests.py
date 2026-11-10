@@ -860,6 +860,24 @@ class QuoteTests(TestCase):
         self.assertFalse(quote.is_deliverable)
         self.assertEqual(quote.unavailable_reasons(), ['OUT_OF_STOCK'])
 
+    def test_partly_unavailable_cart_is_not_deliverable(self):
+        checkout = {'splits': [
+            _checkout_response()['splits'][0],
+            _checkout_response(available=False, sku=758174762, warehouse_id=0)['splits'][0],
+        ]}
+        quote = orders.create_quote(
+            phone='79161112233',
+            items=[{'sku': 758646053, 'quantity': 1}, {'sku': 758174762, 'quantity': 1}],
+            map_point_id=1, client=FakeOrderClient(checkout=checkout),
+        )
+
+        self.assertFalse(quote.is_deliverable)
+        self.assertEqual(quote.unavailable_reasons(), ['OUT_OF_STOCK'])
+        with self.assertRaises(orders.OzonOrderError):
+            orders.build_order_payload(
+                quote, buyer=BUYER, prices={758646053: 100, 758174762: 100},
+            )
+
 
 class OrderPayloadTests(TestCase):
     def _quote(self, **kwargs):
@@ -1918,6 +1936,45 @@ class PostingTrackingTests(TestCase):
         tracking.sync_postings(client=client)
         self.assertEqual(client.fbs_calls[0]['order_numbers'], ['34742020-0375'])
 
+    def test_late_fbo_posting_is_found_by_order_number(self):
+        window = {'postings': [
+            {'posting_number': '34742020-0375-3', 'order_number': '34742020-0375',
+             'status': 'delivering'},
+            {'posting_number': '99999999-0001-1', 'order_number': '99999999-0001',
+             'status': 'delivering'},
+        ], 'has_next': False}
+        client = self._client()
+        client.posting_fbo_list = lambda **kwargs: (
+            {'postings': [], 'has_next': False} if 'posting_numbers' in kwargs else window
+        )
+
+        tracking.sync_postings(client=client)
+
+        self.assertEqual(OzonPosting.objects.get(pk='34742020-0375-3').quote, self.quote)
+        self.assertFalse(OzonPosting.objects.filter(pk='99999999-0001-1').exists())
+
+    def test_found_fbo_posting_is_tracked_by_number_afterwards(self):
+        OzonPosting.objects.create(
+            posting_number='34742020-0375-3', order_number='34742020-0375',
+            quote=self.quote, schema=OzonPosting.SCHEMA_FBO, status='delivering',
+        )
+        client = self._client()
+
+        tracking.sync_postings(client=client)
+
+        self.assertEqual(
+            client.fbo_calls[0]['posting_numbers'], ['34742020-0375-1', '34742020-0375-3'],
+        )
+
+    def test_old_orders_are_not_searched_by_window(self):
+        old = timezone.now() - tracking.DISCOVERY_AGE - timezone.timedelta(days=1)
+        OzonDeliveryQuote.objects.filter(pk=self.quote.pk).update(created_at=old)
+        client = self._client()
+
+        tracking.sync_postings(client=client)
+
+        self.assertTrue(all('posting_numbers' in call for call in client.fbo_calls))
+
     def test_link_to_quote_survives_entry_without_order_number(self):
         """Пустой номер заказа в ответе не должен обнулять связь с расчётом."""
         OzonPosting.objects.create(
@@ -2868,14 +2925,14 @@ class PostingWindowTests(TestCase):
         stats = tracking.sync_postings(client=client)
 
         self.assertEqual(len(client.fbs_calls), 1)
-        self.assertEqual(len(stats['errors']), 1)
+        self.assertEqual(len(stats['errors']), 2)
         self.assertIn('403', stats['errors'][0])
 
     def test_broken_fbs_does_not_stop_fbo(self):
         client = self._client(fbs_error='HTTP 500')
         stats = tracking.sync_postings(client=client)
 
-        self.assertEqual(len(client.fbo_calls), 1)
+        self.assertEqual(len(client.fbo_calls), 2)
         self.assertEqual(len(stats['errors']), 1)
 
     def test_clean_run_reports_no_errors(self):

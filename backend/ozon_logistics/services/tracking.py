@@ -28,6 +28,8 @@ TRACK_DAYS = 90
 # Запас по краям окна дат для FBO: заказ мог быть создан минутой раньше, чем
 # записан у нас, а доставка — закончиться позже, чем мы спросили.
 WINDOW_MARGIN = timezone.timedelta(days=1)
+# Часть отправлений FBO Ozon при создании заказа не называет, свежие заказы ищем ещё и по окну дат
+DISCOVERY_AGE = timezone.timedelta(days=3)
 
 
 def _chunks(values, size=CHUNK_SIZE):
@@ -79,12 +81,14 @@ def _active_quotes():
     return active
 
 
-def _store(entry, *, schema, quote_by_order):
+def _store(entry, *, schema, quote_by_order, ours_only=False):
     posting_number = entry.get('posting_number')
     if not posting_number:
         return None
 
     order_number = entry.get('order_number') or ''
+    if ours_only and order_number not in quote_by_order:
+        return None
     status = entry.get('status') or ''
     cancellation = entry.get('cancellation') or {}
     cancel_reason = (cancellation.get('cancel_reason') or '')[:500]
@@ -111,7 +115,7 @@ def _store(entry, *, schema, quote_by_order):
     return posting
 
 
-def _collect(fetch, *, schema, quote_by_order, stats):
+def _collect(fetch, *, schema, quote_by_order, stats, ours_only=False):
     """Проходит постранично и сохраняет отправления."""
     cursor = None
     for _ in range(MAX_PAGES):
@@ -132,7 +136,8 @@ def _collect(fetch, *, schema, quote_by_order, stats):
         with transaction.atomic():
             stored = [
                 posting for posting in (
-                    _store(entry, schema=schema, quote_by_order=quote_by_order)
+                    _store(entry, schema=schema, quote_by_order=quote_by_order,
+                           ours_only=ours_only)
                     for entry in entries
                 )
                 if posting is not None
@@ -162,10 +167,14 @@ def sync_postings(*, client=None):
     client = client or OzonLogisticsClient()
     quote_by_order = {q.order_number: q for q in quotes}
     order_numbers = list(quote_by_order)
-    posting_numbers = [n for q in quotes for n in (q.postings or [])]
+    posting_numbers = sorted({
+        *(n for q in quotes for n in (q.postings or [])),
+        *(p.posting_number for q in quotes for p in q.postings_tracked.all()
+          if p.schema == OzonPosting.SCHEMA_FBO),
+    })
     since, to = _window(quotes)
 
-    def gather(batches, fetch, schema):
+    def gather(batches, fetch, schema, ours_only=False):
         """Схемы независимы: отказ в правах на одну не должен гасить другую.
 
         До 17.09.2026 исключение из FBO обрывало весь прогон, и статусы не
@@ -176,6 +185,7 @@ def sync_postings(*, client=None):
                 _collect(
                     lambda cursor, batch=batch: fetch(batch, cursor),
                     schema=schema, quote_by_order=quote_by_order, stats=stats,
+                    ours_only=ours_only,
                 )
             except OzonLogisticsError as exc:
                 stats['errors'].append(f'{schema}: {exc}')
@@ -199,6 +209,18 @@ def sync_postings(*, client=None):
         ),
         OzonPosting.SCHEMA_FBO,
     )
+
+    fresh = [q for q in quotes if q.created_at >= timezone.now() - DISCOVERY_AGE]
+    if fresh:
+        fresh_since, _ = _window(fresh)
+        gather(
+            [None],
+            lambda batch, cursor: client.posting_fbo_list(
+                since=fresh_since, to=to, limit=PAGE_SIZE, cursor=cursor
+            ),
+            OzonPosting.SCHEMA_FBO,
+            ours_only=True,
+        )
 
     logger.info(
         'Ozon Доставка: статусы обновлены — заказов %(quotes)s, отправлений %(seen)s, '

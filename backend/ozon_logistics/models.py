@@ -256,12 +256,13 @@ class OzonDeliveryQuote(models.Model):
 
     @property
     def is_deliverable(self):
-        """Есть ли хоть один доступный вариант доставки.
+        """Везёт ли Ozon всю корзину целиком.
 
-        Ozon помечает недоступный вариант через commissions = null и
-        объясняет причину в unavailable_reason.
+        Ozon помечает недоступную посылку через commissions = null и
+        объясняет причину в unavailable_reason. Одна такая посылка делает
+        недоступной всю доставку: иначе её товары молча выпадут из заказа.
         """
-        return any(split.get('commissions') for split in self.splits)
+        return bool(self.splits) and all(split.get('commissions') for split in self.splits)
 
     def unavailable_reasons(self):
         """Причины, по которым доставка невозможна — для показа покупателю."""

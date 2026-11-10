@@ -88,9 +88,6 @@ def build_order_payload(quote, *, buyer, recipient=None, prices):
 
     splits = []
     for split in quote.splits:
-        if not split.get('commissions'):
-            continue  # вариант недоступен — в заказ не идёт
-
         method = split.get('delivery_method') or {}
         timeslots = method.get('timeslots') or []
         if not timeslots:

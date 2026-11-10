@@ -421,7 +421,11 @@ class OrderCreator:
         обработку остальных."""
         live = self._find_existing_order_meta(order_id)
         if not live:
-            return False  # в МойСклад черновика нет — удалять нечего
+            if ms.get("customerorder_id") and not ms.get("cancelled_at") and not self.dry_run:
+                print(f"  Заказ {order_id}: черновик {ms.get('customerorder_name')} удалён в МойСклад вручную — помечаю отменённым")
+                ms["cancelled_at"] = datetime.now().isoformat()
+                ms["cancel_reason"] = "Черновик удалён в МойСклад вручную"
+            return False
 
         # Не трогаем оплаченный или уже проведённый заказ — это не «зависший черновик»
         if live.get("payedSum") or live.get("applicable"):
